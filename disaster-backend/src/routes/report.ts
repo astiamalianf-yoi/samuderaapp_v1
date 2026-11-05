@@ -18,7 +18,7 @@ import {
 	ACTIVE_WARNING_TTL_SECONDS,
 } from "../config";
 import { ALLOWED_BEACH_LOCATIONS } from "../types";
-import type { MlResult, PredictionInput } from "../types";
+import { likRiskLevel, type MlResult, type PredictionInput, type WarningStrategy } from "../types";
 
 export const BEACH_DISPLAY_NAMES: Record<string, string> = {
 	pantai_lampuuk: "Pantai Lampuuk",
@@ -52,6 +52,7 @@ function formatWhatsAppAlert(params: {
 	firstReportAt: number;
 	lastReportAt: number;
 	activeWarningTtlSeconds: number;
+	warningStrategy?: WarningStrategy | null;
 }): string {
 	const {
 		beachLocation,
@@ -64,6 +65,7 @@ function formatWhatsAppAlert(params: {
 		firstReportAt,
 		lastReportAt,
 		activeWarningTtlSeconds,
+		warningStrategy,
 	} = params;
 
 	const beachName = BEACH_DISPLAY_NAMES[beachLocation] ?? beachLocation;
@@ -98,7 +100,9 @@ function formatWhatsAppAlert(params: {
 		.filter((s) => s.trim().length > 0)
 		.map((s) => `- ${s.trim()}`);
 
-	const riskLabel = communityCharacteristics === "Actionable" ? "Risiko Tinggi" : "Risiko Rendah";
+	// Strategy label from the warning strategy matrix (paper Table 10); legacy label otherwise.
+	const riskLabel = warningStrategy?.label_id
+		?? (communityCharacteristics === "Actionable" ? "Risiko Tinggi" : "Risiko Rendah");
 
 	const lines = [
 		`⚠️ *Rekomendasi Aksi Prakiraan ${dangerLabel} di ${beachName}*`,
@@ -323,14 +327,14 @@ route.post("/report", async (c) => {
 			});
 			const savedPrediction = await persistShapPrediction({
 				reportId: savedReport.id,
-				riskLevel: result.community_characteristics ?? "Unknown",
+				riskLevel: result.lik_risk_level ?? result.community_characteristics ?? "Unknown",
 				communityCharacteristics: result.community_characteristics,
 				validatedSigns: result.triggered_lik_codes ?? triggeredCodes,
 				actions: result.action_recommendation ? [result.action_recommendation] : [],
 				rawResponse: result as unknown as Record<string, unknown>,
 			});
 			const reassured = await reassure(savedPrediction.id, savedReport.id, {
-				riskLevel: result.community_characteristics ?? "Unknown",
+				riskLevel: result.lik_risk_level ?? result.community_characteristics ?? "Unknown",
 				communityCharacteristics: result.community_characteristics,
 				validatedSigns: result.triggered_lik_codes ?? triggeredCodes,
 				actions: result.action_recommendation ? [result.action_recommendation] : [],
@@ -348,7 +352,7 @@ route.post("/report", async (c) => {
 		// downgrading to NORMAL (which would suppress the alert and the buzzer).
 		const reassuranceFinalLevel =
 			(reassuranceResult?.finalLevel as string) ??
-			(isActionable ? (isMultisign ? "SIAGA" : "WASPADA") : "NORMAL");
+			likRiskLevel(result, isMultisign);
 		const shouldDistribute = reassuranceFinalLevel !== "NORMAL";
 		const riskLevel = reassuranceFinalLevel.toLowerCase();
 
@@ -374,6 +378,7 @@ route.post("/report", async (c) => {
 			},
 			decision: {
 				community_characteristics: result.community_characteristics,
+				warning_strategy: result.warning_strategy?.code ?? null,
 				is_multisign: isMultisign,
 				is_actionable: isActionable,
 				final_risk_level: reassuranceFinalLevel,
@@ -431,6 +436,7 @@ route.post("/report", async (c) => {
 				firstReportAt: timeRange.firstReportAt,
 				lastReportAt: timeRange.lastReportAt,
 				activeWarningTtlSeconds: ACTIVE_WARNING_TTL_SECONDS,
+				warningStrategy: result.warning_strategy,
 			});
 			await sendOpenClawAlert(alertText);
 		}

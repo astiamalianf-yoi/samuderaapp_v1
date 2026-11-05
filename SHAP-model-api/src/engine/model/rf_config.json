@@ -1,0 +1,79 @@
+{
+  "model": "Random Forest",
+  "params": {
+    "n_estimators": 200,
+    "max_depth": null,
+    "max_features": "sqrt",
+    "min_samples_leaf": 1
+  },
+  "random_state": 42,
+  "features": [
+    "Age",
+    "Fishing Experience",
+    "Fishing Role",
+    "Experience as Head of Communities",
+    "Fishing Duration",
+    "Number of Experience with Disaster",
+    "Level of Interaction with Disaster",
+    "Number of LIK Combination",
+    "Usage Duration",
+    "Frequency of Usage (min) (in month)",
+    "Frequency of Usage (max) (in month)",
+    "Average Frequency of Usage (in month)",
+    "Wn-1",
+    "Wn-2",
+    "Wn-3",
+    "Wn-4",
+    "Wn-5",
+    "Wn-6",
+    "Wn-7",
+    "Wn-8",
+    "Wn-9",
+    "Wn-10",
+    "Wn-11",
+    "Wn-12",
+    "Wn-13",
+    "Wn-14",
+    "Wn-15",
+    "Wn-16",
+    "Wn-17"
+  ],
+  "fisherman_features": [
+    "Age",
+    "Fishing Experience",
+    "Fishing Role",
+    "Experience as Head of Communities",
+    "Fishing Duration",
+    "Number of Experience with Disaster",
+    "Level of Interaction with Disaster",
+    "Number of LIK Combination",
+    "Usage Duration",
+    "Frequency of Usage (min) (in month)",
+    "Frequency of Usage (max) (in month)",
+    "Average Frequency of Usage (in month)"
+  ],
+  "operating_threshold": 0.6,
+  "decision_rule": "P(Class 1) >= 0.6 -> 1 (Actionable); otherwise 0 (Inaction)",
+  "high_trust_tier_signs": [
+    "Wn-3",
+    "Wn-8",
+    "Wn-1",
+    "Wn-2",
+    "Wn-7"
+  ],
+  "low_trust_tier_signs": [
+    "Wn-13",
+    "Wn-4",
+    "Wn-9",
+    "Wn-6",
+    "Wn-5"
+  ],
+  "training_records": 607,
+  "training_fishermen": 245,
+  "software": {
+    "python": "3.13.18",
+    "scikit-learn": "1.6.1",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3"
+  }
+}
