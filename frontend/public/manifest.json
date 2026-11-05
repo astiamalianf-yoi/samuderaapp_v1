@@ -1,0 +1,22 @@
+{
+  "name": "CuacaPesisir",
+  "short_name": "CuacaPesisir",
+  "description": "Sistem peringatan cuaca pesisir untuk nelayan",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F6F0",
+  "theme_color": "#0A2540",
+  "lang": "id",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
