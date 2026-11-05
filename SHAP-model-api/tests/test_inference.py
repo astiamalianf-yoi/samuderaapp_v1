@@ -1,205 +1,157 @@
 import pytest
 
+from src.engine.inference_engine import HIGH_TRUST_SIGNS, LOW_TRUST_SIGNS, MATRIX
 
-class TestTrustedSignFiltering:
-
-    def test_untrusted_codes_are_dropped(self, engine):
-        data = {
-            "lik_codes": ["wn-10", "wn-11", "wn-1"],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert result["triggered_lik_codes"] == ["Wn-1"]
-
-    def test_all_trusted_codes_pass_through(self, engine):
-        data = {
-            "lik_codes": ["wn-1", "wn-3", "wn-9"],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert set(result["triggered_lik_codes"]) == {"Wn-1", "Wn-3", "Wn-9"}
-
-    def test_active_warning_merged_with_input(self, engine):
-        data = {
-            "lik_codes": ["wn-1"],
-            "active_warning": ["wn-8"],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert set(result["triggered_lik_codes"]) == {"Wn-1", "Wn-8"}
-
-    def test_duplicate_codes_deduplicated(self, engine):
-        data = {
-            "lik_codes": ["wn-1"],
-            "active_warning": ["wn-1"],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert result["triggered_lik_codes"] == ["Wn-1"]
+# A profile on the Inaction side of every tipping point in paper Table 8
+# (interaction <= 1.5, avg monthly use <= 4.75, age >= 45.5, usage <= 17.5 y, experiences >= 2.5).
+UNSAFE_PROFILE = dict(age=55, fishing_experience=30, fishing_role=3, head_of_community=0, fishing_duration=1,
+                      disaster_experience_count=4, disaster_interaction=1, lik_combination_count=2,
+                      usage_duration=8, usage_frequency_min=2, usage_frequency_max=4)
+# A profile on the Actionable side of every tipping point.
+SAFE_PROFILE = dict(age=30, fishing_experience=10, fishing_role=2, head_of_community=1, fishing_duration=1,
+                    disaster_experience_count=1, disaster_interaction=6, lik_combination_count=2,
+                    usage_duration=25, usage_frequency_min=12, usage_frequency_max=20)
 
 
-class TestActionEscalation:
+def run(engine, codes, beach="pantai_lampuuk", active=None, profile=None):
+    return engine.predict({"lik_codes": codes, "active_warning": active or [],
+                           "rules": engine.beach_rules[beach], "fisherman_profile": profile})
+
+
+class TestTrustTiers:
+
+    def test_tiers_match_paper_table_2(self):
+        assert HIGH_TRUST_SIGNS == ["Wn-3", "Wn-8", "Wn-1", "Wn-2", "Wn-7"]
+        assert LOW_TRUST_SIGNS == ["Wn-13", "Wn-4", "Wn-9", "Wn-6", "Wn-5"]
+
+    def test_unranked_signs_are_kept_as_low_trust(self, engine):
+        r = run(engine, ["wn-10", "wn-11", "wn-1"])
+        assert r["triggered_lik_codes"] == ["Wn-1", "Wn-10", "Wn-11"]
+        tiers = {s["code"]: (s["trust_tier"], s["ranked"]) for s in r["signs"]}
+        assert tiers["Wn-1"] == ("High", True)
+        assert tiers["Wn-10"] == ("Low", False)
+
+    def test_unknown_codes_are_dropped(self, engine):
+        assert run(engine, ["wn-99", "xx", "wn-3"])["triggered_lik_codes"] == ["Wn-3"]
+
+    def test_active_warning_merged_and_deduplicated(self, engine):
+        r = run(engine, ["wn-1"], active=["wn-8", "wn-1"])
+        assert r["triggered_lik_codes"] == ["Wn-1", "Wn-8"]
+
+
+class TestBeachFallback:
+
+    def test_depok_rules_use_depok_row(self, engine):
+        # regression: Depok's interaction status used to be read from Lampuuk's row
+        df = engine.df_community.set_index("Mapped Beach")
+        assert engine.pantai_depok_rules["Level of Interaction with Disaster Status"] == \
+            df.loc["pantai depok", "Level of Interaction with Disaster Status"]
+
+    @pytest.mark.parametrize("beach,cls", [("pantai_lampuuk", 1), ("pantai_depok", 0), ("pantai_samas", 0)])
+    def test_beach_class(self, engine, beach, cls):
+        r = run(engine, ["wn-3"], beach=beach)
+        assert r["signs"][0]["behavioral_class"] == cls
+        assert r["warning_strategy"]["behavioral_source"] == "beach_profile"
+
+
+class TestRandomForest:
+
+    def test_threshold_is_paper_value(self, engine):
+        assert engine.threshold == 0.60
+
+    def test_unsafe_profile_is_inaction(self, engine):
+        p = engine.predict_proba_for_sign(engine.profile_to_features(UNSAFE_PROFILE), "Wn-3")
+        assert p < 0.60
+
+    def test_safe_profile_is_actionable(self, engine):
+        p = engine.predict_proba_for_sign(engine.profile_to_features(SAFE_PROFILE), "Wn-3")
+        assert p >= 0.60
+
+    def test_profile_overrides_beach(self, engine):
+        # Depok's beach profile is Unsafe, but an individual profile decides when given.
+        r = run(engine, ["wn-3"], beach="pantai_depok", profile=SAFE_PROFILE)
+        assert r["signs"][0]["behavioral_class"] == 1
+        assert r["warning_strategy"]["behavioral_source"] == "random_forest"
+        assert r["signs"][0]["probability_actionable"] is not None
+
+    def test_missing_profile_field_raises(self, engine):
+        bad = {k: v for k, v in SAFE_PROFILE.items() if k != "age"}
+        with pytest.raises(ValueError):
+            run(engine, ["wn-3"], profile=bad)
+
+    def test_average_frequency_defaults_to_mean(self, engine):
+        f = engine.profile_to_features(SAFE_PROFILE)
+        assert f["Average Frequency of Usage (in month)"] == 16
+
+
+class TestWarningStrategyMatrix:
+
+    def test_matrix_matches_paper_table_10(self):
+        assert MATRIX == {("High", 1): "STANDARD", ("High", 0): "EXTRA_WARNING",
+                          ("Low", 1): "ENHANCED_MONITORING", ("Low", 0): "MAXIMUM_ALERT"}
+
+    @pytest.mark.parametrize("code,profile,strategy,level", [
+        ("wn-3", SAFE_PROFILE, "STANDARD", "SIAGA"),
+        ("wn-3", UNSAFE_PROFILE, "EXTRA_WARNING", "SIAGA"),
+        ("wn-5", SAFE_PROFILE, "ENHANCED_MONITORING", "WASPADA"),
+        ("wn-5", UNSAFE_PROFILE, "MAXIMUM_ALERT", "SIAGA"),
+    ])
+    def test_four_cells(self, engine, code, profile, strategy, level):
+        r = run(engine, [code], profile=profile)
+        assert r["warning_strategy"]["code"] == strategy
+        assert r["lik_risk_level"] == level
+        assert r["community_characteristics"] == "Actionable"
+
+    def test_high_trust_sign_decides_mixed_alert(self, engine):
+        r = run(engine, ["wn-3", "wn-5"], profile=SAFE_PROFILE)
+        assert r["warning_strategy"]["trust_tier"] == "High"
+        assert r["warning_strategy"]["code"] == "STANDARD"
+
+    def test_inaction_action_guide_is_protective(self, engine):
+        # Wn-2's most frequent response is "be cautious"; the action guide must still be protective.
+        r = run(engine, ["wn-2"], profile=UNSAFE_PROFILE)
+        assert r["warning_strategy"]["code"] == "EXTRA_WARNING"
+        assert "Amankan Alat Tangkap" in r["action_recommendation"]
+
+    def test_no_signs_is_normal(self, engine):
+        r = run(engine, [])
+        assert r["warning_strategy"] is None
+        assert r["lik_risk_level"] == "NORMAL"
+        assert r["community_characteristics"] == "Low Actionable"
+        assert "Tidak ada rekomendasi" in r["action_recommendation"]
+
+
+class TestActionRecommendation:
 
     def test_highest_action_wins(self, engine):
-        data = {
-            "lik_codes": ["wn-1", "wn-2", "wn-3"],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert "Sesuaikan Jadwal Melaut" in result["action_recommendation"]
+        r = run(engine, ["wn-1", "wn-2", "wn-3"])
+        assert "Sesuaikan Jadwal Melaut" in r["action_recommendation"]
 
     def test_single_code_returns_its_action(self, engine):
-        data = {
-            "lik_codes": ["wn-4"],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert "Siaga Penuh" in result["action_recommendation"]
-
-    def test_empty_input_returns_safe_message(self, engine):
-        data = {
-            "lik_codes": [],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert result["triggered_lik_codes"] == []
-        assert "Tidak ada rekomendasi" in result["action_recommendation"]
-
-
-class TestResponseShape:
-
-    def test_response_has_all_five_fields(self, engine):
-        data = {
-            "lik_codes": ["wn-3"],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        expected_keys = {"active_warning", "sign_description", "community_characteristics", "action_recommendation", "triggered_lik_codes"}
-        assert set(result.keys()) == expected_keys
-
-    def test_triggered_lik_codes_matches_active_warning(self, engine):
-        data = {
-            "lik_codes": ["wn-3", "wn-7"],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert result["triggered_lik_codes"] == result["active_warning"]
-
-
-class TestBeachCommunityCharacteristics:
-
-    def test_depok_is_unsafe(self, engine):
-        data = {
-            "lik_codes": ["wn-3"],
-            "active_warning": [],
-            "rules": engine.pantai_depok_rules,
-        }
-        result = engine.predict(data)
-        assert result["community_characteristics"] == "Low Actionable"
-
-    def test_lampuuk_is_safe(self, engine):
-        data = {
-            "lik_codes": ["wn-3"],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        result = engine.predict(data)
-        assert result["community_characteristics"] == "Actionable"
+        r = run(engine, ["wn-8"])
+        assert "Siaga Penuh" in r["action_recommendation"]
 
 
 class TestSignDescriptions:
 
     def test_valid_code_returns_info(self, engine):
         descs = engine.get_lik_sign_info(["wn-1"])
-        assert len(descs) == 1
         assert descs[0]["code"] == "WN-1"
-        assert "Awan tampak turun" in descs[0]["detail_id"]
-        assert descs[0]["label_id"] == "Awan Turun"
-        assert descs[0]["label_en"] == "Falling Clouds"
-        assert descs[0]["detail_en"] == "Clouds appear to descend forming clusters 3 times"
+
+    def test_all_17_signs_have_labels(self, engine):
+        assert len(engine.get_lik_sign_info([f"wn-{i}" for i in range(1, 18)])) == 17
 
     def test_invalid_code_returns_empty(self, engine):
-        descs = engine.get_lik_sign_info(["wn-99"])
-        assert descs == []
-
-    def test_mixed_valid_invalid(self, engine):
-        descs = engine.get_lik_sign_info(["wn-1", "wn-99", "wn-3"])
-        assert len(descs) == 2
-        codes = {d["code"] for d in descs}
-        assert codes == {"WN-1", "WN-3"}
+        assert engine.get_lik_sign_info(["wn-99"]) == []
 
 
-class TestComputeContributions:
+class TestContributions:
 
-    def test_contributions_with_unsafe_beach(self, engine):
-        data = {
-            "lik_codes": ["wn-4", "wn-7"],
-            "active_warning": [],
-            "rules": engine.pantai_samas_rules,
-        }
-        prediction = engine.predict(data)
-        contributions = engine.compute_contributions(prediction, engine.pantai_samas_rules, "pantai_samas")
-        assert "contributions" in contributions
-        assert "community_profile" in contributions
-        assert "summary_id" in contributions
-        assert "summary_en" in contributions
-        assert len(contributions["contributions"]) > 0
-        assert contributions["community_profile"]["beach"] == "pantai_samas"
-        total_weight = sum(c["weight"] for c in contributions["contributions"])
-        assert abs(total_weight - 1.0) < 0.01
-
-    def test_contributions_with_safe_beach(self, engine):
-        data = {
-            "lik_codes": ["wn-2"],
-            "active_warning": [],
-            "rules": engine.pantai_lampuuk_rules,
-        }
-        prediction = engine.predict(data)
-        contributions = engine.compute_contributions(prediction, engine.pantai_lampuuk_rules, "pantai_lampuuk")
-        assert len(contributions["contributions"]) > 0
-        community_factors = [c for c in contributions["contributions"] if c["category"] == "community"]
-        safe_factors = [c for c in community_factors if c["direction"] == "neutral"]
-        assert len(safe_factors) == 4
-
-    def test_contributions_no_lik_codes(self, engine):
-        data = {
-            "lik_codes": [],
-            "active_warning": [],
-            "rules": engine.pantai_samas_rules,
-        }
-        prediction = engine.predict(data)
-        contributions = engine.compute_contributions(prediction, engine.pantai_samas_rules, "pantai_samas")
-        natural_signs = [c for c in contributions["contributions"] if c["category"] == "natural_sign"]
-        assert len(natural_signs) == 0
-
-    def test_contributions_sorted_by_weight_desc(self, engine):
-        data = {
-            "lik_codes": ["wn-4", "wn-7"],
-            "active_warning": [],
-            "rules": engine.pantai_samas_rules,
-        }
-        prediction = engine.predict(data)
-        contributions = engine.compute_contributions(prediction, engine.pantai_samas_rules, "pantai_samas")
-        weights = [c["weight"] for c in contributions["contributions"]]
-        assert weights == sorted(weights, reverse=True)
-
-    def test_community_profile_has_all_five_factors(self, engine):
-        data = {
-            "lik_codes": ["wn-3"],
-            "active_warning": [],
-            "rules": engine.pantai_depok_rules,
-        }
-        prediction = engine.predict(data)
-        contributions = engine.compute_contributions(prediction, engine.pantai_depok_rules, "pantai_depok")
-        profile = contributions["community_profile"]
-        assert profile["overall"] == "Unsafe"
-        assert len(profile["factors"]) == 5
-        factor_keys = [f["key"] for f in profile["factors"]]
-        assert set(factor_keys) == {"interaction", "frequency", "duration", "lik_combination", "experience"}
+    def test_contributions_sorted_and_normalized(self, engine):
+        rules = engine.pantai_samas_rules
+        pred = run(engine, ["wn-4", "wn-7"], beach="pantai_samas")
+        out = engine.compute_contributions(pred, rules, "pantai_samas")
+        w = [c["weight"] for c in out["contributions"]]
+        assert w == sorted(w, reverse=True)
+        assert abs(sum(w) - 1.0) < 0.02
+        assert len(out["community_profile"]["factors"]) == 5

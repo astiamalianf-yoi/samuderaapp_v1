@@ -16,7 +16,7 @@ import {
 	ACTIVE_WARNING_TTL_SECONDS,
 } from "../config";
 import { ALLOWED_BEACH_LOCATIONS } from "../types";
-import type { MlResult } from "../types";
+import { likRiskLevel, type MlResult } from "../types";
 
 const route = new Hono();
 
@@ -131,14 +131,14 @@ route.get("/report/submit", async (c) => {
 		});
 		const savedPrediction = await persistShapPrediction({
 			reportId: savedReport.id,
-			riskLevel: result.community_characteristics ?? "Unknown",
+			riskLevel: result.lik_risk_level ?? result.community_characteristics ?? "Unknown",
 			communityCharacteristics: result.community_characteristics,
 			validatedSigns: result.triggered_lik_codes ?? triggeredCodes,
 			actions: result.action_recommendation ? [result.action_recommendation] : [],
 			rawResponse: result as unknown as Record<string, unknown>,
 		});
 		const reassured = await reassure(savedPrediction.id, savedReport.id, {
-			riskLevel: result.community_characteristics ?? "Unknown",
+			riskLevel: result.lik_risk_level ?? result.community_characteristics ?? "Unknown",
 			communityCharacteristics: result.community_characteristics,
 			validatedSigns: result.triggered_lik_codes ?? triggeredCodes,
 			actions: result.action_recommendation ? [result.action_recommendation] : [],
@@ -155,7 +155,7 @@ route.get("/report/submit", async (c) => {
 	// silently downgrading to NORMAL (which would suppress the alert and the buzzer).
 	const reassuranceFinalLevel =
 		(reassuranceResult?.finalLevel as string) ??
-		(isActionable ? (isMultisign ? "SIAGA" : "WASPADA") : "NORMAL");
+		likRiskLevel(result, isMultisign);
 	const riskLevel = reassuranceFinalLevel.toLowerCase();
 	const reporterCount = Object.values(codeCounts).reduce((sum, count) => sum + count, 0);
 	const timeRange = await getReportTimeRange(beachLocation, triggeredCodes);
@@ -178,6 +178,7 @@ route.get("/report/submit", async (c) => {
 		},
 		decision: {
 			community_characteristics: result.community_characteristics,
+			warning_strategy: result.warning_strategy?.code ?? null,
 			is_multisign: isMultisign,
 			is_actionable: isActionable,
 			final_risk_level: reassuranceFinalLevel,

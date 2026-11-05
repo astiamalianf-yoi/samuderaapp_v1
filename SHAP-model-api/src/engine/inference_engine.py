@@ -1,55 +1,139 @@
-import pandas as pd
+"""LIK inference engine: the two-stage warning decision of the JISEBI paper.
+
+Stage 1 - Trust Index tier of each reported sign (paper Table 2 / Eq. 3):
+    High: Wn-3, Wn-8, Wn-1, Wn-2, Wn-7
+    Low:  Wn-13, Wn-4, Wn-9, Wn-6, Wn-5
+    Unranked signs (Wn-10, 11, 12, 14-17; < 20 records) are never ignored, but are
+    treated as Low-trust until they can be ranked (paper Section III.D).
+
+Stage 2 - Behavioral class of the recipient (paper Eq. 4):
+    * If a fisherman profile (the 12 fisherman features of the codebook) is given,
+      the final Random Forest computes P(Actionable) for that fisherman together with
+      the observed sign; class 1 if P >= 0.60, otherwise class 0 (Inaction).
+    * Otherwise the beach-level community profile is used as a fallback
+      ("Overall Category" in community_rule_categorization.csv; Unsafe -> class 0).
+
+Coupling - Warning Strategy Matrix (paper Eq. 5 / Table 10):
+                 Actionable (1)                   Inaction (0)
+    High tier    Standard EWS Notification        Extra Warning + Action Guide
+    Low tier     Enhanced Sign Monitoring         Maximum Alert + Intervention
+"""
+import json
 from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+
+ENGINE_DIR = Path(__file__).parent
+MODEL_DIR = ENGINE_DIR / "model"
+
+HIGH_TRUST_SIGNS = ["Wn-3", "Wn-8", "Wn-1", "Wn-2", "Wn-7"]
+LOW_TRUST_SIGNS = ["Wn-13", "Wn-4", "Wn-9", "Wn-6", "Wn-5"]
+RANKED_SIGNS = HIGH_TRUST_SIGNS + LOW_TRUST_SIGNS
+ALL_SIGNS = [f"Wn-{i}" for i in range(1, 18)]
+
+BEACH_SLUGS = ["pantai_lampuuk", "pantai_lhoknga", "pantai_ulee_lheue", "pantai_depok", "pantai_samas"]
+
+# Strategy -> LIK hazard level passed to the backend fusion (max with BMKG).
+# Low-trust + Actionable is "Enhanced Sign Monitoring" rather than a direct alert (paper IV.D),
+# so it is the only strategy below SIAGA. No strategy suppresses the alert.
+STRATEGIES = {
+    "STANDARD": {
+        "label_id": "Peringatan Standar",
+        "label_en": "Standard EWS Notification",
+        "lik_risk_level": "SIAGA",
+        "message_id": "Tanda alam terpercaya terdeteksi. Ikuti rekomendasi tindakan di bawah.",
+    },
+    "EXTRA_WARNING": {
+        "label_id": "Peringatan Tambahan + Panduan Tindakan",
+        "label_en": "Extra Warning + Action Guide",
+        "lik_risk_level": "SIAGA",
+        "message_id": "Tanda alam terpercaya terdeteksi. Jangan hanya berhati-hati: lakukan langkah perlindungan di bawah. Langkah ini terbukti melindungi nelayan dan perahu.",
+    },
+    "ENHANCED_MONITORING": {
+        "label_id": "Pantau Tanda Alam Lebih Lanjut",
+        "label_en": "Enhanced Sign Monitoring",
+        "lik_risk_level": "WASPADA",
+        "message_id": "Tanda alam ini belum terbukti cukup akurat. Amati tanda alam lain dan periksa info BMKG sebelum melaut.",
+    },
+    "MAXIMUM_ALERT": {
+        "label_id": "Peringatan Maksimum + Intervensi",
+        "label_en": "Maximum Alert + Intervention",
+        "lik_risk_level": "SIAGA",
+        "message_id": "Tanda alam terdeteksi dan risiko tidak bertindak tinggi. Tunda melaut, amankan alat tangkap, dan hubungi Panglima Laot atau ketua kelompok sebelum berangkat.",
+    },
+}
+MATRIX = {
+    ("High", 1): "STANDARD",
+    ("High", 0): "EXTRA_WARNING",
+    ("Low", 1): "ENHANCED_MONITORING",
+    ("Low", 0): "MAXIMUM_ALERT",
+}
+# Protective action given in the action guide when the sign's most frequent response is not protective.
+PROTECTIVE_FALLBACK_ACTION = "Siaga Penuh / Amankan Alat Tangkap, dan Sesuaikan Jadwal Melaut"
+
+FISHERMAN_FEATURE_KEYS = {
+    # request key                    -> model feature name (codebook Table A)
+    "age": "Age",
+    "fishing_experience": "Fishing Experience",
+    "fishing_role": "Fishing Role",                                   # 1 owner, 2 skipper, 3 crew
+    "head_of_community": "Experience as Head of Communities",         # 0 no, 1 yes
+    "fishing_duration": "Fishing Duration",                           # 1 <1 day, 2 days, 3 weeks
+    "disaster_experience_count": "Number of Experience with Disaster",  # 1-5 hazard types
+    "disaster_interaction": "Level of Interaction with Disaster",     # 0-8 times
+    "lik_combination_count": "Number of LIK Combination",             # 1-4
+    "usage_duration": "Usage Duration",                               # years
+    "usage_frequency_min": "Frequency of Usage (min) (in month)",
+    "usage_frequency_max": "Frequency of Usage (max) (in month)",
+}
+
+
+def tier_of(code: str) -> str:
+    return "High" if code in HIGH_TRUST_SIGNS else "Low"
+
+
+def normalize_code(code) -> str:
+    s = str(code).strip()
+    return s.capitalize() if s.lower().startswith("wn-") else s
+
 
 class InferenceEngine:
 
+    _model = None
+    _config = None
+
     def __init__(self):
-        self.df_community = pd.read_csv(Path(__file__).parent / 'community_rule_categorization.csv')
+        self.df_community = pd.read_csv(ENGINE_DIR / 'community_rule_categorization.csv')
+        self.beach_rules = {}
+        for slug in BEACH_SLUGS:
+            row = self.df_community[self.df_community['Mapped Beach'] == slug.replace("_", " ")].iloc[0]
+            rules = {
+                'Overall Category': row['Overall Category'],
+                'Level of Interaction with Disaster Status': row['Level of Interaction with Disaster Status'],
+                'Frequency of Usage Status': row['Frequency of Usage Status'],
+                'Usage Duration Status': row['Usage Duration Status'],
+                'Number of Known LIK Status': row['Number of LIK Combination Status'],
+                'Number of Experience with Disaster Status': row['Number of Experience with Disaster Status'],
+            }
+            self.beach_rules[slug] = rules
+            setattr(self, f"{slug}_rules", rules)
+        self._load_model()
 
-        self.pantai_lampuuk_rules = {
-            'Overall Category': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lampuuk', 'Overall Category'].iloc[0],
-            'Level of Interaction with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lampuuk', 'Level of Interaction with Disaster Status'].iloc[0],
-            'Frequency of Usage Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lampuuk', 'Frequency of Usage Status'].iloc[0],
-            'Usage Duration Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lampuuk', 'Usage Duration Status'].iloc[0],
-            'Number of Known LIK Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lampuuk', 'Number of LIK Combination Status'].iloc[0],
-            'Number of Experience with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lampuuk', 'Number of Experience with Disaster Status'].iloc[0],
-        }    
+    @classmethod
+    def _load_model(cls):
+        if cls._model is None:
+            cls._model = joblib.load(MODEL_DIR / "rf_final.joblib")
+            cls._config = json.loads((MODEL_DIR / "rf_config.json").read_text())
+        return cls._model, cls._config
 
-        self.pantai_depok_rules = {
-            'Overall Category': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai depok', 'Overall Category'].iloc[0],
-            'Level of Interaction with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lampuuk', 'Level of Interaction with Disaster Status'].iloc[0],
-            'Frequency of Usage Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai depok', 'Frequency of Usage Status'].iloc[0],
-            'Usage Duration Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai depok', 'Usage Duration Status'].iloc[0],
-            'Number of Known LIK Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai depok', 'Number of LIK Combination Status'].iloc[0],
-            'Number of Experience with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai depok', 'Number of Experience with Disaster Status'].iloc[0],
-        }    
+    @property
+    def config(self) -> dict:
+        return self._config
 
-        self.pantai_lhoknga_rules = {
-            'Overall Category': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lhoknga', 'Overall Category'].iloc[0],
-            'Level of Interaction with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lhoknga', 'Level of Interaction with Disaster Status'].iloc[0],
-            'Frequency of Usage Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lhoknga', 'Frequency of Usage Status'].iloc[0],
-            'Usage Duration Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lhoknga', 'Usage Duration Status'].iloc[0],
-            'Number of Known LIK Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lhoknga', 'Number of LIK Combination Status'].iloc[0],
-            'Number of Experience with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai lhoknga', 'Number of Experience with Disaster Status'].iloc[0],
-        }    
-
-        self.pantai_ulee_lheue_rules = {
-            'Overall Category': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai ulee lheue', 'Overall Category'].iloc[0],
-            'Level of Interaction with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai ulee lheue', 'Level of Interaction with Disaster Status'].iloc[0],
-            'Frequency of Usage Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai ulee lheue', 'Frequency of Usage Status'].iloc[0],
-            'Usage Duration Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai ulee lheue', 'Usage Duration Status'].iloc[0],
-            'Number of Known LIK Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai ulee lheue', 'Number of LIK Combination Status'].iloc[0],
-            'Number of Experience with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai ulee lheue', 'Number of Experience with Disaster Status'].iloc[0],
-        }    
-
-        self.pantai_samas_rules = {
-            'Overall Category': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai samas', 'Overall Category'].iloc[0],
-            'Level of Interaction with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai samas', 'Level of Interaction with Disaster Status'].iloc[0],
-            'Frequency of Usage Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai samas', 'Frequency of Usage Status'].iloc[0],
-            'Usage Duration Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai samas', 'Usage Duration Status'].iloc[0],
-            'Number of Known LIK Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai samas', 'Number of LIK Combination Status'].iloc[0],
-            'Number of Experience with Disaster Status': self.df_community.loc[self.df_community['Mapped Beach'] == 'pantai samas', 'Number of Experience with Disaster Status'].iloc[0],
-        }                                                       
+    @property
+    def threshold(self) -> float:
+        return float(self._config["operating_threshold"])
 
     LIK_LABELS = {
         "wn-1": {"label_id": "Awan Turun", "label_en": "Falling Clouds", "detail_id": "Awan tampak turun ke bawah membentuk gumpalan 3 kali", "detail_en": "Clouds appear to descend forming clusters 3 times"},
@@ -59,9 +143,16 @@ class InferenceEngine:
         "wn-5": {"label_id": "Lumba-lumba Mendekat", "label_en": "Approaching Dolphins", "detail_id": "Lumba-lumba mendekati perahu, seolah menggiring perahu", "detail_en": "Dolphins approach the boat, seemingly herding it"},
         "wn-6": {"label_id": "Burung Camar", "label_en": "Seagulls", "detail_id": "Burung camar terbang tergesa sambil bersuara keras", "detail_en": "Seagulls fly hastily while calling loudly"},
         "wn-7": {"label_id": "Peralihan Angin", "label_en": "Wind Transition", "detail_id": "Pada masa peralihan angin barat ke angin timur", "detail_en": "During the transition from west wind to east wind"},
-        "wn-8": {"label_id": "Langit Merah", "label_en": "Red Sky", "detail_id": "Langit mendung namun tidak terlalu gelap", "detail_en": "Sky is overcast but not too dark"},
-        "wn-9": {"label_id": "Bintang Redup", "label_en": "Dim Stars", "detail_id": "Hujan atau langit tertutup awan tebal, saat angin timur", "detail_en": "Rain or sky covered by thick clouds during east wind"},
-        "wn-13": {"label_id": "Ikan Naik", "label_en": "Fish Surfacing", "detail_id": "Bintang tidak terlihat di malam hari, saat angin timur", "detail_en": "Stars not visible at night during east wind"},
+        "wn-8": {"label_id": "Langit Mendung", "label_en": "Overcast Sky", "detail_id": "Langit mendung namun tidak terlalu gelap", "detail_en": "Sky is overcast but not too dark"},
+        "wn-9": {"label_id": "Hujan dan Awan Tebal", "label_en": "Rain and Thick Clouds", "detail_id": "Hujan atau langit tertutup awan tebal, saat angin timur", "detail_en": "Rain or sky covered by thick clouds during east wind"},
+        "wn-10": {"label_id": "Cerah Tanpa Awan", "label_en": "Clear Cloudless Sky", "detail_id": "Cuaca cerah tanpa awan, saat angin barat", "detail_en": "Clear weather without clouds during west wind"},
+        "wn-11": {"label_id": "Suara Dentuman", "label_en": "Booming Sound", "detail_id": "Terdengar suara dentuman satu atau tujuh kali", "detail_en": "A booming sound is heard once or seven times"},
+        "wn-12": {"label_id": "Bintang Berkelip", "label_en": "Twinkling Stars", "detail_id": "Banyak bintang di malam hari berkelap kelip, saat angin barat", "detail_en": "Many stars twinkle at night during west wind"},
+        "wn-13": {"label_id": "Bintang Tak Terlihat", "label_en": "Stars Not Visible", "detail_id": "Bintang tidak terlihat di malam hari, saat angin timur", "detail_en": "Stars not visible at night during east wind"},
+        "wn-14": {"label_id": "Bintang Dekat Bulan", "label_en": "Star Near the Moon", "detail_id": "Bintang tampak dekat atau sejajar dengan bulan, bahkan di dalam lingkaran bulan", "detail_en": "Stars appear close to or aligned with the moon, even inside its halo"},
+        "wn-15": {"label_id": "Kecoak Beterbangan", "label_en": "Flying Cockroaches", "detail_id": "Kecoak beterbangan di dalam perahu", "detail_en": "Cockroaches fly around inside the boat"},
+        "wn-16": {"label_id": "Bulan di Bintang Kala", "label_en": "Moon in Scorpius", "detail_id": "Bulan tampak di antara capit bintang kala (rasi Scorpio)", "detail_en": "The moon appears between the claws of the Scorpius constellation"},
+        "wn-17": {"label_id": "Paus Muncul", "label_en": "Surfacing Whales", "detail_id": "Paus muncul ke permukaan dan mengibaskan ekornya", "detail_en": "Whales surface and flap their tails"},
     }
 
     def get_lik_sign_info(self, lik_codes: list) -> list:
@@ -71,98 +162,149 @@ class InferenceEngine:
             if code.lower() in self.LIK_LABELS
         ]
 
+    # ------------------------------------------------------------------
+    # Stage 2: behavioral class
+    # ------------------------------------------------------------------
+    @staticmethod
+    def profile_to_features(profile: dict) -> dict:
+        """Map a fisherman profile (request keys) to the 12 model features.
+
+        `usage_frequency_avg` is derived as the mean of min and max (codebook No. 25)
+        when it is not given.
+        """
+        feats = {}
+        for key, name in FISHERMAN_FEATURE_KEYS.items():
+            if profile.get(key) is None:
+                raise ValueError(f"fisherman_profile.{key} is required")
+            feats[name] = float(profile[key])
+        avg = profile.get("usage_frequency_avg")
+        feats["Average Frequency of Usage (in month)"] = (
+            float(avg) if avg is not None
+            else (feats["Frequency of Usage (min) (in month)"] + feats["Frequency of Usage (max) (in month)"]) / 2
+        )
+        return feats
+
+    def predict_proba_for_sign(self, fisherman_features: dict, sign: str) -> float:
+        """P(Class 1 = Actionable) of the final Random Forest for one fisherman + one sign."""
+        model, cfg = self._load_model()
+        row = {f: 0.0 for f in cfg["features"]}
+        row.update(fisherman_features)
+        if sign in ALL_SIGNS:
+            row[sign] = 1.0
+        X = pd.DataFrame([row], columns=cfg["features"])
+        return float(model.predict_proba(X)[0, list(model.classes_).index(1)])
+
+    def behavioral_class(self, sign: str, profile: dict | None, rules: dict) -> dict:
+        if profile:
+            p = self.predict_proba_for_sign(self.profile_to_features(profile), sign)
+            cls = 1 if p >= self.threshold else 0
+            return {"class": cls, "probability": round(p, 4), "threshold": self.threshold, "source": "random_forest"}
+        cls = 0 if rules.get('Overall Category') == "Unsafe" else 1
+        return {"class": cls, "probability": None, "threshold": None, "source": "beach_profile"}
+
+    # ------------------------------------------------------------------
+    # Full decision
+    # ------------------------------------------------------------------
     def predict(self, data: dict) -> dict:
-        csv_path = Path(__file__).parent / 'lik_filtered_action_taken.csv'
+        csv_path = ENGINE_DIR / 'lik_filtered_action_taken.csv'
         try:
             df_action = pd.read_csv(csv_path)
         except FileNotFoundError:
             df_action = pd.DataFrame(columns=['LIK', 'most_action_taken'])
+        dominant_action = dict(zip(df_action['LIK'], df_action['most_action_taken']))
 
-        # Extract data input
-        raw_lik_codes = data.get('lik_codes', [])
-        raw_active_warning = data.get('active_warning', [])
         rules = data.get('rules', {})
+        profile = data.get('fisherman_profile')
 
-        # Normalisasi format teks (misal: 'wn-2' atau 'WN-2' menjadi 'Wn-2')
-        input_lik_codes = [str(s).capitalize() for s in raw_lik_codes]
-        active_warnings = [str(s).capitalize() for s in raw_active_warning]
+        input_codes = [normalize_code(s) for s in data.get('lik_codes', [])]
+        active_codes = [normalize_code(s) for s in data.get('active_warning', [])]
+        # Every known Wn sign is kept: unranked signs are treated as Low-trust, never ignored.
+        combined_codes = sorted({c for c in input_codes + active_codes if c in ALL_SIGNS},
+                                key=lambda c: int(c.split('-')[1]))
 
-        # ---------------------------------------------------------
-        # Logic 1: Trusted signs filter
-        # ---------------------------------------------------------
-        trusted_signs = ['Wn-2', 'Wn-8', 'Wn-1', 'Wn-3', 'Wn-7', 'Wn-4', 'Wn-9', 'Wn-13', 'Wn-6', 'Wn-5']
-        
-        # Filter hanya LIK yang masuk dalam list trusted
-        trusted_input_codes = [code for code in input_lik_codes if code in trusted_signs]
-        trusted_active_warnings = [code for code in active_warnings if code in trusted_signs]
+        # ---- Per-sign decision: tier x behavioral class -> strategy
+        signs = []
+        for code in combined_codes:
+            beh = self.behavioral_class(code, profile, rules)
+            strategy = MATRIX[(tier_of(code), beh["class"])]
+            signs.append({
+                "code": code,
+                "trust_tier": tier_of(code),
+                "ranked": code in RANKED_SIGNS,
+                "behavioral_class": beh["class"],
+                "probability_actionable": beh["probability"],
+                "strategy": strategy,
+                "dominant_action": dominant_action.get(code),
+            })
 
-        # Gabungkan input nelayan dan active warning untuk dievaluasi aksinya (gunakan set agar unik)
-        combined_codes = list(set(trusted_input_codes + trusted_active_warnings))
+        # ---- Overall strategy for the beach alert.
+        # A High-trust sign is the reliable basis for a direct alert, so when any High-trust sign is
+        # present the decision is taken on the High-trust signs; otherwise on the Low-trust signs.
+        # Within the chosen tier, the more intensive strategy (Inaction class) wins.
+        if signs:
+            tier = "High" if any(s["trust_tier"] == "High" for s in signs) else "Low"
+            in_tier = [s for s in signs if s["trust_tier"] == tier]
+            cls = 0 if any(s["behavioral_class"] == 0 for s in in_tier) else 1
+            strategy_code = MATRIX[(tier, cls)]
+            basis = in_tier
+        else:
+            tier, cls, strategy_code, basis = None, None, None, []
 
-        # ---------------------------------------------------------
-        # Logic 2: Action recommendation (Mencari Level Tertinggi)
-        # ---------------------------------------------------------
+        # ---- Action recommendation (most severe dominant action among the basis signs)
         escalation_map = {
             'berhati-hati / tingkatkan kewaspadaan': 0,
             'siaga penuh / amankan alat tangkap': 1,
-            'sesuaikan jadwal melaut': 2
+            'sesuaikan jadwal melaut': 2,
         }
-        
-        highest_level = -1
-        best_action = "Tidak ada aksi"
-        trigger_code = None
+        best_action, trigger_code, best_level = None, None, -1
+        for s in basis:
+            a = s["dominant_action"]
+            lvl = escalation_map.get(str(a).lower(), -1) if a else -1
+            if lvl > best_level:
+                best_level, best_action, trigger_code = lvl, a, s["code"]
+        if strategy_code in ("EXTRA_WARNING", "MAXIMUM_ALERT") and best_level < 1:
+            # The action guide must state a protective action, not only "be cautious".
+            best_action = PROTECTIVE_FALLBACK_ACTION
+            trigger_code = trigger_code or (basis[0]["code"] if basis else None)
 
-        if combined_codes and not df_action.empty:
-            # Filter dataframe berdasarkan kombinasi LIK yang valid
-            df_selected = df_action[df_action['LIK'].isin(combined_codes)].copy()
-            
-            if not df_selected.empty:
-                # Map ke level eskalasi
-                df_selected['action_lower'] = df_selected['most_action_taken'].str.lower()
-                df_selected['level'] = df_selected['action_lower'].map(escalation_map).fillna(-1)
-                
-                # Ambil level paling tinggi
-                max_idx = df_selected['level'].idxmax()
-                highest_level = df_selected.loc[max_idx, 'level']
-                
-                if highest_level != -1:
-                    best_action = df_selected.loc[max_idx, 'most_action_taken']
-                    trigger_code = df_selected.loc[max_idx, 'LIK']
-
-        # Format output rekomendasi aksi
-        if highest_level != -1:
-            # Format sesuai instruksi: "LIK_code: action level: action response" atau kata-kata
-            action_recommendation = f"Berdasarkan indikasi: {self.get_lik_sign_info([trigger_code])[0]['detail_id']}, direkomendasikan tindakan: {best_action}."
-        else:
+        if strategy_code is None:
             action_recommendation = "Situasi aman. Tidak ada rekomendasi tindakan eskalasi tinggi saat ini."
+        elif strategy_code == "ENHANCED_MONITORING":
+            info = self.get_lik_sign_info([basis[0]["code"]])
+            sign_txt = info[0]['detail_id'] if info else basis[0]["code"]
+            action_recommendation = (f"Berdasarkan indikasi: {sign_txt}. {STRATEGIES[strategy_code]['message_id']}")
+        else:
+            info = self.get_lik_sign_info([trigger_code]) if trigger_code else []
+            sign_txt = info[0]['detail_id'] if info else trigger_code
+            action_recommendation = f"Berdasarkan indikasi: {sign_txt}, direkomendasikan tindakan: {best_action}."
+            if strategy_code != "STANDARD":
+                action_recommendation += f" {STRATEGIES[strategy_code]['message_id']}"
 
-        # ---------------------------------------------------------
-        # Logic 3: Get Sign Description
-        # ---------------------------------------------------------
         desc_list = self.get_lik_sign_info(combined_codes)
+        sign_description_str = " | ".join(f"{d['code']} - {d['detail_id']}" for d in desc_list) \
+            or "Tidak ada deskripsi tanda alam yang valid."
 
-        extracted_descriptions = []
-        if desc_list:
-            for item in desc_list:
-                extracted_descriptions.append(" - ".join([str(item["code"]), str(item["detail_id"])]))
+        lik_risk_level = STRATEGIES[strategy_code]["lik_risk_level"] if strategy_code else "NORMAL"
 
-        sign_description_str = " | ".join(extracted_descriptions) if extracted_descriptions else "Tidak ada deskripsi tanda alam yang valid."
-
-        # ---------------------------------------------------------
-        # Community risk categorization (Format: Boolean)
-        # ---------------------------------------------------------
-        # Return False jika 'Unsafe' (Low Actionable), True jika sebaliknya (Actionable)
-        is_actionable = "Low Actionable" if rules.get('Overall Category') == "Unsafe" else "Actionable"
-
-        # ---------------------------------------------------------
-        # Return Final Output JSON
-        # ---------------------------------------------------------
         return {
             "active_warning": combined_codes,
             "sign_description": sign_description_str,
-            "community_characteristics": is_actionable,
+            # Legacy field read by the backend and PWA: "Actionable" = the signs warrant an alert.
+            "community_characteristics": "Actionable" if strategy_code else "Low Actionable",
             "action_recommendation": action_recommendation,
             "triggered_lik_codes": combined_codes,
+            "lik_risk_level": lik_risk_level,
+            "warning_strategy": None if strategy_code is None else {
+                "code": strategy_code,
+                "label_id": STRATEGIES[strategy_code]["label_id"],
+                "label_en": STRATEGIES[strategy_code]["label_en"],
+                "message_id": STRATEGIES[strategy_code]["message_id"],
+                "trust_tier": tier,
+                "behavioral_class": cls,
+                "behavioral_label": None if cls is None else ("Actionable" if cls == 1 else "Inaction"),
+                "behavioral_source": "random_forest" if profile else "beach_profile",
+            },
+            "signs": signs,
         }
 
     ESCALATION_WEIGHTS = {

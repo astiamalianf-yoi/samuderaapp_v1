@@ -1,9 +1,11 @@
 fastapi
-pydantic
+pydantic>=2
 uvicorn
-pandas
+joblib>=1.3
+# Pinned to the versions the Random Forest was trained with (paper Section III.C);
+# a different scikit-learn version may fail to load rf_final.joblib.
+scikit-learn==1.6.1
+numpy==2.1.3
+pandas==2.2.3
 pytest>=8.0
 httpx>=0.27
-joblib>=1.3
-scikit-learn>=1.3
-numpy>=1.24
