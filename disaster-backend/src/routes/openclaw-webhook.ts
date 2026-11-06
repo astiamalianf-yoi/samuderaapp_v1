@@ -8,6 +8,8 @@ import {
 	getMissingSignsMessage,
 	formatAlertsResponse,
 	riskLabelFor,
+	signLabel,
+	BEACH_DISPLAY,
 } from "../lib/whatsapp-commands";
 
 const route = new Hono();
@@ -23,7 +25,16 @@ type OpenClawWebhookEvent = {
 
 const EXPERIMENT_ID_REGEX = /\[([A-Z0-9-]+)\]/;
 
-async function handleLapor(text: string, chatId: string): Promise<string> {
+/** A WhatsApp message id seen within this time is a re-delivery of the same message. */
+const MESSAGE_DEDUPE_TTL_SECONDS = 60 * 60;
+
+export async function isRepeatedMessage(messageId: string | undefined): Promise<boolean> {
+	if (!messageId) return false;
+	const fresh = await redis.set(`whatsapp:seen:${messageId}`, "1", { NX: true, EX: MESSAGE_DEDUPE_TTL_SECONDS });
+	return fresh !== "OK";
+}
+
+async function handleLapor(text: string, chatId: string, sender?: string): Promise<string> {
 	const result = parseLaporCommand(text);
 
 	if (!result.ok) {
@@ -31,11 +42,14 @@ async function handleLapor(text: string, chatId: string): Promise<string> {
 		return getMissingSignsMessage();
 	}
 
+	const beachName = BEACH_DISPLAY[result.beachLocation] ?? result.beachLocation;
+	const signText = result.likCodes.map((code) => `${signLabel(code)} (${code})`).join(", ");
 	const params = new URLSearchParams({
 		beach_location: result.beachLocation,
 		lik_codes: result.likCodes.join(","),
 		channel: "WA",
 	});
+	if (sender) params.set("reporter", sender);
 
 	try {
 		const res = await fetch(
@@ -54,16 +68,34 @@ async function handleLapor(text: string, chatId: string): Promise<string> {
 			return [
 				"✅ Laporan diterima, Bang!",
 				`⚠️ THRESHOLD TERLAMPAUI — ${riskLabel}`,
-				`Pantai: ${result.beachLocation}`,
+				`Pantai: ${beachName}`,
 				`Jumlah pelapor: ${alertEvent.reporterCount}`,
 				"Peringatan sedang dikirim ke semua nelayan.",
 			].join("\n");
 		}
 
+		const duplicates: string[] = Array.isArray(data.duplicateCodes) ? data.duplicateCodes : [];
+		const counts: Record<string, number> = data.reportCounts ?? {};
+		const threshold = Number(data.threshold) || 5;
+		const countedCodes = result.likCodes.filter((code) => !duplicates.includes(code));
+
+		if (countedCodes.length === 0) {
+			return [
+				"ℹ️ Laporan ini sudah tercatat, Bang.",
+				`Tanda: ${signText}`,
+				`Pantai: ${beachName}`,
+				"Laporan yang sama dari nomor yang sama dalam 5 menit dihitung satu kali.",
+			].join("\n");
+		}
+
 		return [
 			"✅ Laporan diterima, Bang!",
-			`Tanda: ${result.likCodes.join(", ")}`,
-			`Pantai: ${result.beachLocation}`,
+			`Tanda: ${signText}`,
+			`Pantai: ${beachName}`,
+			...countedCodes.map((code) => `Laporan ${code}: ${counts[code] ?? 1} dari ${threshold}`),
+			...(duplicates.length > 0
+				? [`(${duplicates.join(", ")} sudah Anda laporkan dalam 5 menit terakhir, tidak dihitung lagi)`]
+				: []),
 			"Menunggu laporan lain untuk mencapai threshold.",
 		].join("\n");
 	} catch (err) {
@@ -138,12 +170,17 @@ route.post("/openclaw/webhook", async (c) => {
 			const isCommand = lowerText.startsWith("!lapor") || lowerText.startsWith("!peringatan");
 			const replyTarget = to || from;
 
+			if (isCommand && (await isRepeatedMessage(messageId))) {
+				console.log("[openclaw-webhook] Same message delivered again, ignored:", messageId);
+				return c.json({ success: true, handled: false, duplicate: true });
+			}
+
 			if (isCommand) {
 				console.log(`[openclaw-webhook] Intercepted command: ${lowerText.substring(0, 50)}`);
 
 				let reply: string;
 				if (lowerText.startsWith("!lapor")) {
-					reply = await handleLapor(cleanText, replyTarget);
+					reply = await handleLapor(cleanText, replyTarget, from);
 				} else {
 					reply = await handlePeringatan(cleanText, replyTarget);
 				}

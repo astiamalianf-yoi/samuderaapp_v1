@@ -34,6 +34,8 @@ mock.module("../lib/crowdsource", () => ({
 	setActiveWarning: mockSetActiveWarning,
 	getReportTimeRange: mockGetReportTimeRange,
 	resetQueues: mockResetQueues,
+	reporterKeyFor: () => null,
+	countReporters: async () => 5,
 }));
 
 mock.module("../lib/rate-limit", () => ({

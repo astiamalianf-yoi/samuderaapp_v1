@@ -7,6 +7,7 @@ import { SIGNS, SIGN_GROUPS, type Sign } from "../constants/signs"
 import { getBeachMeta } from "../constants/observationData"
 import { useSelectedBeach } from "../hooks/useAppState"
 import { reportService } from "../services/reportService"
+import { getDeviceId } from "../lib/device"
 
 type Result = { kind: "sent" | "queued" | "offline"; count: number } | { kind: "error"; message: string }
 
@@ -33,7 +34,7 @@ export function ReportPage() {
   const send = async () => {
     if (selected.length === 0) return
     setSending(true)
-    const payload = { beach_location: beach, lik_codes: selected, clientReportId: newId(), createdAtClient: Date.now() }
+    const payload = { beach_location: beach, lik_codes: selected, clientReportId: newId(), createdAtClient: Date.now(), deviceId: getDeviceId() }
     try {
       await reportService.submitReport(payload)
       setResult({ kind: "sent", count: selected.length })

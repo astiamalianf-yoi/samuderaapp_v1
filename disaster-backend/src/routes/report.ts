@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { sendOpenClawAlert } from "../lib/openclaw";
-import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues } from "../lib/crowdsource";
+import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
 import { publishIotAlertForEvent } from "../lib/iot-mqtt";
@@ -13,6 +13,7 @@ import {
 	REPORT_DEDUPE_PREFIX,
 	REPORT_SYNC_STREAM,
 	REPORT_WINDOW_MS,
+	REPORT_REPEAT_WINDOW_MS,
 	REPORT_THRESHOLD,
 	BEACH_THRESHOLDS,
 	ACTIVE_WARNING_TTL_SECONDS,
@@ -260,11 +261,17 @@ route.post("/report", async (c) => {
 		const threshold = BEACH_THRESHOLDS[beachLocation] ?? REPORT_THRESHOLD;
 
 		// Crowdsource queue: accumulate reports per (beach, code) and check threshold
-		const { triggeredCodes, codeCounts } = await processReport(
+		const reporterKey = reporterKeyFor({
+			userId: reporterUserId,
+			deviceId: typeof input.deviceId === "string" ? input.deviceId : null,
+		});
+		const { triggeredCodes, codeCounts, duplicateCodes } = await processReport(
 			beachLocation,
 			input.lik_codes,
 			REPORT_WINDOW_MS,
 			threshold,
+			reporterKey,
+			REPORT_REPEAT_WINDOW_MS,
 		);
 
 		if (triggeredCodes.length === 0) {
@@ -277,7 +284,7 @@ route.post("/report", async (c) => {
 				beachLocation,
 				lik_codes: input.lik_codes,
 			});
-			return c.json({ ok: true, reportId, serverTimestamp, status: "queued", reportCounts: codeCounts });
+			return c.json({ ok: true, reportId, serverTimestamp, status: "queued", reportCounts: codeCounts, threshold, duplicateCodes });
 		}
 
 		// Threshold hit — proceed to ML
@@ -359,7 +366,7 @@ route.post("/report", async (c) => {
 		const shouldDistribute = reassuranceFinalLevel !== "NORMAL";
 		const riskLevel = reassuranceFinalLevel.toLowerCase();
 
-		const reporterCount = Object.values(codeCounts).reduce((sum, c) => sum + c, 0);
+		const reporterCount = await countReporters(beachLocation, triggeredCodes);
 
 		const timeRange = await getReportTimeRange(beachLocation, triggeredCodes);
 
@@ -433,7 +440,7 @@ route.post("/report", async (c) => {
 				communityCharacteristics: result.community_characteristics,
 				actionRecommendation: result.action_recommendation,
 				signDescription: result.sign_description,
-				reporterCount: Object.values(codeCounts).reduce((sum, c) => sum + c, 0),
+				reporterCount,
 				triggeredCodes,
 				serverTimestamp,
 				firstReportAt: timeRange.firstReportAt,

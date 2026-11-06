@@ -19,6 +19,8 @@ export interface PredictionInput {
   beach_location: BeachLocation;
   clientReportId?: string;
   createdAtClient?: number;
+  /** Anonymous phone id (see lib/device.ts). */
+  deviceId?: string;
 }
 
 export interface ReportResponse {

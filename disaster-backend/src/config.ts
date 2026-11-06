@@ -25,6 +25,8 @@ export const REPORT_SYNC_STREAM = process.env.REPORT_SYNC_STREAM ?? "reports:syn
 export const REPORT_DEDUPE_PREFIX = process.env.REPORT_DEDUPE_PREFIX ?? "reports:dedupe";
 export const REPORT_WINDOW_MS = Number(process.env.REPORT_WINDOW_MS ?? 24 * 60 * 60 * 1000);
 export const REPORT_THRESHOLD = Number(process.env.REPORT_THRESHOLD ?? 5);
+// Same reporter + same sign + same beach within this window counts as one report (app and WhatsApp alike).
+export const REPORT_REPEAT_WINDOW_MS = Number(process.env.REPORT_REPEAT_WINDOW_MS ?? 5 * 60 * 1000);
 
 export const BEACH_THRESHOLDS: Record<string, number> = {
 	pantai_lampuuk: 5,
