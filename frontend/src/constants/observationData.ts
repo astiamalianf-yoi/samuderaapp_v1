@@ -17,7 +17,7 @@ export const BEACH_LOCATIONS: BeachLocationMeta[] = [
   {
     value: 'pantai_lampuuk',
     label: 'Pantai Lampuuk',
-    adm4Code: '11.06.02.2024',
+    adm4Code: '11.06.02.2023', // Meunasah Mesjid Lampuuk, Lhoknga
   },
   {
     value: 'pantai_lhoknga',

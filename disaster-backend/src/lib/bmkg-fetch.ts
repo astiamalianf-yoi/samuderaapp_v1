@@ -24,12 +24,13 @@ const BMKG_WEATHER_UNSAFE_CODES = new Set([
 	95, 96, 99,
 ]);
 
+// BMKG village (adm4) per beach; keep equal to frontend/src/constants/observationData.ts.
 const BEACH_ADM4_CODES: Record<string, string> = {
-	pantai_lampuuk: "11.06.02.2003",
+	pantai_lampuuk: "11.06.02.2023", // Meunasah Mesjid Lampuuk, Lhoknga (was Weuraya)
 	pantai_lhoknga: "11.06.02.2001",
 	pantai_ulee_lheue: "11.71.03.2002",
 	pantai_depok: "34.02.03.2002",
-	pantai_samas: "34.02.03.2003",
+	pantai_samas: "34.02.02.2003", // Srigading, Sanden (was a village in Kretek)
 };
 
 const ALLOWED_BEACHES = Object.keys(BEACH_ADM4_CODES) as (keyof typeof BEACH_ADM4_CODES)[];
