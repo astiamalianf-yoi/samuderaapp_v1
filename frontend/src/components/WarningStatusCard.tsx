@@ -3,7 +3,9 @@ import { Link } from "react-router-dom"
 import { ChevronDown, RefreshCw, UserRound } from "lucide-react"
 import type { BeachLocation } from "../types/api"
 import { useActiveWarning, usePersonalWarning, useProfile } from "../hooks/useAppState"
-import { LEVELS, STRATEGY_HEADLINE, eventLevel, mainAction, toLevel } from "../lib/warning"
+import { LEVELS, STRATEGY_HEADLINE, assessBmkg, eventLevel, mainAction, maxLevel, toLevel } from "../lib/warning"
+import type { BmkgData } from "../services/reportService"
+import type { WeatherAlertProps } from "./WeatherAlertCard"
 import { getSign } from "../constants/signs"
 import { WhyPanel } from "./WhyPanel"
 
@@ -18,13 +20,18 @@ const timeAgo = (ts?: number | null) => {
 }
 
 /** The single most important thing on the home screen: is it safe to go to sea? */
-export function WarningStatusCard({ beach }: { beach: BeachLocation }) {
+export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
+  beach: BeachLocation
+  bmkg?: BmkgData | null
+  weatherAlerts?: WeatherAlertProps[]
+}) {
   const { data, loading, error, updatedAt, refresh } = useActiveWarning(beach)
   const profile = useProfile()
   const active = data?.active_warning
   const event = active?.alertEvent
   const distributed = event?.decision?.shouldDistribute ?? !!active
   const personal = usePersonalWarning(beach, profile, distributed ? active?.alertId : undefined)
+  const bmkgState = assessBmkg(bmkg, weatherAlerts)
   const [open, setOpen] = useState(false)
   const [acked, setAcked] = useState(false)
 
@@ -63,31 +70,58 @@ export function WarningStatusCard({ beach }: { beach: BeachLocation }) {
     )
   }
 
-  // ---- Safe
+  // ---- No community warning: the BMKG side alone decides (fusion = max of both).
   if (!active || !distributed) {
-    const s = LEVELS.NORMAL
     const counts = Object.entries(data?.counts ?? {})
+    const pending = counts.length > 0 && (
+      <p className="mt-3 text-base">
+        Laporan masuk: {counts.map(([c, v]) => `${getSign(c)?.short ?? c} (${v.count})`).join(", ")}.
+        {" "}Peringatan keluar jika {data?.threshold ?? 5} nelayan melaporkan tanda yang sama.
+      </p>
+    )
+
+    if (bmkgState.level === "NORMAL") {
+      const s = LEVELS.NORMAL
+      return (
+        <section className={`rounded-3xl border-2 p-5 ${s.card}`} aria-live="polite">
+          <p className="text-sm font-semibold uppercase tracking-wide opacity-80">Status laut hari ini</p>
+          <p className="text-4xl font-black mt-1">{s.emoji} {s.label}</p>
+          <p className="text-lg mt-1">Tidak ada peringatan dari nelayan maupun BMKG untuk pantai ini.</p>
+          {pending}
+          <Footer updatedAt={updatedAt} loading={loading} onRefresh={() => refresh()} />
+        </section>
+      )
+    }
+
+    const s = LEVELS[bmkgState.level]
+    const w = bmkgState.warnings[0]
     return (
-      <section className={`rounded-3xl border-2 p-5 ${s.card}`} aria-live="polite">
-        <p className="text-sm font-semibold uppercase tracking-wide opacity-80">Status laut hari ini</p>
-        <p className="text-4xl font-black mt-1">{s.emoji} {s.label}</p>
-        <p className="text-lg mt-1">Belum ada peringatan dari nelayan di pantai ini.</p>
-        {counts.length > 0 && (
-          <p className="mt-3 text-base">
-            Laporan masuk: {counts.map(([c, v]) => `${getSign(c)?.short ?? c} (${v.count})`).join(", ")}.
-            {" "}Peringatan keluar jika {data?.threshold ?? 5} nelayan melaporkan tanda yang sama.
-          </p>
-        )}
+      <section className={`rounded-3xl border-2 p-5 shadow-lg ${s.card}`} role="alert">
+        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">Peringatan dari BMKG</p>
+        <p className="text-5xl font-black mt-1 leading-none">{s.emoji} {s.label}</p>
+        <p className="text-lg font-semibold mt-2">{s.sub}</p>
+        <div className="mt-4 rounded-2xl bg-white text-gray-950 p-4 shadow">
+          <p className="text-xl font-extrabold">{w ? w.condition : "Cuaca kurang baik"}</p>
+          {bmkgState.level === "SIAGA"
+            ? <p className="text-lg mt-1">👉 <b>Tunda melaut{w ? ` sampai pukul ${w.end}` : ""}</b></p>
+            : <p className="text-lg mt-1">👉 <b>Hati-hati, cek cuaca lagi sebelum melaut</b></p>}
+          <ul className="mt-2 text-base list-disc pl-5">
+            {bmkgState.reasons.map((r) => <li key={r}>{r}</li>)}
+          </ul>
+        </div>
+        <p className="mt-3 text-base">Belum ada laporan tanda alam dari nelayan. Jika Anda melihat tanda alam, segera lapor.</p>
+        {pending}
         <Footer updatedAt={updatedAt} loading={loading} onRefresh={() => refresh()} />
       </section>
     )
   }
 
   // ---- Active warning
-  const level = personal?.lik_risk_level && event?.decision?.final_risk_level
-    ? (LEVEL_ORDER.indexOf(toLevel(personal.lik_risk_level)) > LEVEL_ORDER.indexOf(eventLevel(event))
-        ? toLevel(personal.lik_risk_level) : eventLevel(event))
-    : eventLevel(event)
+  const level = maxLevel(
+    eventLevel(event),
+    personal?.lik_risk_level ? toLevel(personal.lik_risk_level) : "NORMAL",
+    bmkgState.level,
+  )
   const s = LEVELS[level === "NORMAL" ? "WASPADA" : level]
   const strategy = personal?.warning_strategy ?? event?.ml?.warning_strategy ?? null
   const head = strategy ? STRATEGY_HEADLINE[strategy.code] : null
@@ -136,6 +170,12 @@ export function WarningStatusCard({ beach }: { beach: BeachLocation }) {
         {active.triggeredAt && <p className="mt-2 text-sm opacity-80">Dimulai {timeAgo(active.triggeredAt)}</p>}
       </div>
 
+      {bmkgState.warnings.length > 0 && (
+        <p className="mt-4 rounded-xl bg-white/80 text-gray-950 p-3 text-base border border-red-300">
+          ⚠️ BMKG juga mengeluarkan peringatan: <b>{bmkgState.warnings[0].condition}</b> sampai pukul {bmkgState.warnings[0].end}.
+        </p>
+      )}
+
       {!profile && (
         <Link to="/profil" className="mt-4 flex items-center gap-2 rounded-xl bg-white/80 text-sky-900 px-4 py-3 font-semibold border border-sky-200">
           <UserRound className="w-5 h-5" /> Isi profil singkat agar peringatan sesuai untuk Anda
@@ -163,8 +203,6 @@ export function WarningStatusCard({ beach }: { beach: BeachLocation }) {
     </section>
   )
 }
-
-const LEVEL_ORDER = ["NORMAL", "WASPADA", "SIAGA", "EKSTREM"]
 
 function Footer({ updatedAt, loading, onRefresh }: { updatedAt: number | null; loading: boolean; onRefresh: () => void }) {
   return (

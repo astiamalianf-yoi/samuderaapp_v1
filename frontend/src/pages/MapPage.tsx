@@ -109,7 +109,7 @@ export function MapPage() {
                     {w && (
                       <>
                         <p>{w.weather}</p>
-                        <p>Ombak {w.waveHeight} m · Angin {w.windSpeed} km/j {w.windDirection}</p>
+                        <p>Angin {w.windSpeed} km/j {w.windDirection} · {w.temperature}°C</p>
                       </>
                     )}
                   </div>

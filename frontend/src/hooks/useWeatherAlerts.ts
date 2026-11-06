@@ -9,6 +9,7 @@ import {
   extractLocation,
 } from "../utils/weatherUtils"
 import type { BeachLocation } from "../types/api"
+import { capAppliesToBeach } from "../utils/bmkgArea"
 
 const locationKeywords: Record<BeachLocation, string[]> = {
   pantai_lampuuk: ["Aceh Besar", "Aceh"],
@@ -18,12 +19,13 @@ const locationKeywords: Record<BeachLocation, string[]> = {
   pantai_samas: ["Bantul", "DI Yogyakarta", "Yogyakarta", "DIY"],
 }
 
-export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: boolean = false) {
+export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: boolean = false, enabled: boolean = true) {
   const [alerts, setAlerts] = useState<WeatherAlertProps[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!enabled) return
     const controller = new AbortController()
 
     async function fetchAlerts() {
@@ -81,6 +83,12 @@ export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: b
           const description =
             info?.getElementsByTagNameNS("*", "description")[0]?.textContent ?? ""
 
+          const polygons = Array.from(info?.getElementsByTagNameNS("*", "polygon") ?? []).map((n) => n.textContent ?? "")
+          const areaDescs = Array.from(info?.getElementsByTagNameNS("*", "areaDesc") ?? []).map((n) => n.textContent ?? "")
+          const expiresAt = expires ? Date.parse(expires) : NaN
+          const appliesToBeach = selectedBeach
+            ? capAppliesToBeach(selectedBeach, { polygons, areaDescs, description, headline })
+            : true
           const mappedAlert = {
             location: extractLocation(headline, title),
             date: formatDateToID(effective || pubDate),
@@ -89,6 +97,8 @@ export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: b
             condition: event || "Peringatan Cuaca",
             forecast: description || "Peringatan dini cuaca dari BMKG.",
             recommendation: buildRecommendation(event, description),
+            appliesToBeach,
+            expiresAt: Number.isFinite(expiresAt) ? expiresAt : undefined,
           }
           
           mappedAlerts.push(mappedAlert)
@@ -103,7 +113,7 @@ export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: b
             seen = []
           }
 
-          if (!seen.includes(alertId)) {
+          if (appliesToBeach && !seen.includes(alertId)) {
             seen.push(alertId)
             if (seen.length > 20) seen.shift()
             localStorage.setItem("notified_weather_alerts", JSON.stringify(seen))
@@ -123,6 +133,7 @@ export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: b
           }
         }
 
+        mappedAlerts.sort((a, b) => Number(!!b.appliesToBeach) - Number(!!a.appliesToBeach))
         setAlerts(mappedAlerts)
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") return
@@ -135,7 +146,7 @@ export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: b
 
     fetchAlerts()
     return () => controller.abort()
-  }, [selectedBeach, disableFilter])
+  }, [selectedBeach, disableFilter, enabled])
 
   return { alerts, loading, error }
 }

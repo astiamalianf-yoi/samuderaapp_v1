@@ -1,5 +1,7 @@
 import type { ActiveWarningEvent, RiskLevel, WarningStrategyCode } from "../types/api"
 import { getSign } from "../constants/signs"
+import type { BmkgData } from "../services/reportService"
+import type { WeatherAlertProps } from "../components/WeatherAlertCard"
 
 export interface LevelStyle {
   level: RiskLevel
@@ -62,4 +64,44 @@ export function mainAction(ev?: ActiveWarningEvent | null): string | null {
   const actions = codes.map((c) => getSign(c)?.action).filter((a): a is string => !!a)
   for (const a of order) if (actions.includes(a)) return a
   return null
+}
+
+export const LEVEL_ORDER: RiskLevel[] = ["NORMAL", "WASPADA", "SIAGA", "EKSTREM"]
+export const maxLevel = (...levels: RiskLevel[]): RiskLevel =>
+  levels.reduce((a, b) => (LEVEL_ORDER.indexOf(b) > LEVEL_ORDER.indexOf(a) ? b : a), "NORMAL" as RiskLevel)
+
+export interface BmkgAssessment {
+  level: RiskLevel
+  /** Active BMKG nowcast warnings that cover this beach. */
+  warnings: WeatherAlertProps[]
+  /** Short reasons in plain Bahasa. */
+  reasons: string[]
+}
+
+/**
+ * BMKG side of the fusion, same rule as the backend (determineBmkgRisk):
+ * a warning covering the beach or wind >= 46 km/h -> SIAGA; wind >= 30 km/h or
+ * bad-weather forecast -> WASPADA; otherwise NORMAL.
+ */
+export function assessBmkg(bmkg: BmkgData | null, alerts: WeatherAlertProps[], now = Date.now()): BmkgAssessment {
+  const warnings = alerts.filter((a) => a.appliesToBeach && (a.expiresAt === undefined || a.expiresAt > now))
+  const reasons: string[] = []
+  let level: RiskLevel = "NORMAL"
+  if (warnings.length) {
+    level = "SIAGA"
+    reasons.push(`BMKG: ${warnings[0].condition} sampai pukul ${warnings[0].end}`)
+  }
+  if (bmkg) {
+    if (bmkg.windSpeed >= 46) {
+      level = maxLevel(level, "SIAGA")
+      reasons.push(`Angin sangat kencang (${bmkg.windSpeed} km/jam)`)
+    } else if (bmkg.windSpeed >= 30) {
+      level = maxLevel(level, "WASPADA")
+      reasons.push(`Angin kencang (${bmkg.windSpeed} km/jam)`)
+    } else if (!bmkg.isSafe) {
+      level = maxLevel(level, "WASPADA")
+      reasons.push(`Prakiraan BMKG: ${bmkg.weather}`)
+    }
+  }
+  return { level, warnings, reasons }
 }

@@ -11,6 +11,10 @@ export interface WeatherAlertProps {
   recommendation: string
   loading?: boolean
   id?: number // Tambahkan id sebagai index
+  /** True when the CAP area covers the selected beach (polygon or district name). */
+  appliesToBeach?: boolean
+  /** Expiry time (ms since epoch), when known. */
+  expiresAt?: number
 }
 
 export function WeatherAlertCard({
@@ -23,6 +27,7 @@ export function WeatherAlertCard({
   recommendation,
   loading,
   id,
+  appliesToBeach,
 }: WeatherAlertProps) {
   if (loading) {
     return (
@@ -76,7 +81,7 @@ export function WeatherAlertCard({
   }
 
   return (
-    <article className="bg-white rounded-xl shadow-md p-4">
+    <article className={`bg-white rounded-xl shadow-md p-4 ${appliesToBeach ? "ring-2 ring-red-500" : ""}`}>
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0">
           <div className="w-9 h-9 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center">
@@ -87,6 +92,12 @@ export function WeatherAlertCard({
         <div className="flex-1">
           <h2 className="text-sm font-semibold">Peringatan Cuaca {location}</h2>
           <p className="text-xs text-gray-500">{date}</p>
+          {appliesToBeach === true && (
+            <p className="mt-1 inline-block rounded-full bg-red-600 text-white text-xs font-bold px-2 py-0.5">Berlaku untuk pantai Anda</p>
+          )}
+          {appliesToBeach === false && (
+            <p className="mt-1 inline-block rounded-full bg-gray-200 text-gray-700 text-xs font-bold px-2 py-0.5">Wilayah lain, bukan pantai Anda</p>
+          )}
 
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div>

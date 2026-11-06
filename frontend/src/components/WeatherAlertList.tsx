@@ -8,10 +8,13 @@ import type { BeachLocation } from "../types/api"
 interface WeatherAlertListProps {
   selectedBeach?: BeachLocation;
   disableFilter?: boolean;
+  /** Pass results from a parent's useWeatherAlerts to avoid fetching twice. */
+  state?: ReturnType<typeof useWeatherAlerts>;
 }
 
-export function WeatherAlertList({ selectedBeach, disableFilter = false }: WeatherAlertListProps) {
-  const { alerts, loading, error } = useWeatherAlerts(selectedBeach, disableFilter)
+export function WeatherAlertList({ selectedBeach, disableFilter = false, state }: WeatherAlertListProps) {
+  const own = useWeatherAlerts(selectedBeach, disableFilter, !state)
+  const { alerts, loading, error } = state ?? own
   const [activeIndex, setActiveIndex] = useState(0)
 
   useEffect(() => {

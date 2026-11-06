@@ -6,8 +6,8 @@ import { API_BASE_URL } from '../config';
 export interface BmkgData {
   beach: string;
   weather: string;
-  waveHeight: number;
   windSpeed: number;
+  humidity?: number;
   windDirection: string;
   temperature: number;
   isSafe: boolean;

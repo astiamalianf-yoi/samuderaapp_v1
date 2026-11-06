@@ -8,18 +8,21 @@ import { PushNotificationCard } from "../components/PushNotificationCard"
 import { TodayForecast } from "../components/TodayForecast"
 import { WeatherAlertList } from "../components/WeatherAlertList"
 import { getBeachMeta } from "../constants/observationData"
-import { useSelectedBeach } from "../hooks/useAppState"
+import { useBmkg, useSelectedBeach } from "../hooks/useAppState"
+import { useWeatherAlerts } from "../hooks/useWeatherAlerts"
 
 export function HomePage() {
   const [beach, setBeach] = useSelectedBeach()
   const meta = getBeachMeta(beach)
+  const weather = useWeatherAlerts(beach)
+  const bmkg = useBmkg(beach)
 
   return (
     <AppShell>
       <div className="space-y-5">
         <BeachPicker value={beach} onChange={setBeach} />
 
-        <WarningStatusCard beach={beach} />
+        <WarningStatusCard beach={beach} bmkg={bmkg} weatherAlerts={weather.alerts} />
 
         <Link to="/lapor"
           className="flex items-center gap-4 rounded-2xl bg-orange-600 text-white p-4 shadow-md active:scale-[0.99]">
@@ -37,11 +40,11 @@ export function HomePage() {
 
         <WhatsAppGroupCard />
 
-        <BmkgMarineCard beach={beach} />
+        <BmkgMarineCard data={bmkg} />
 
         <section className="space-y-3">
           <h2 className="text-xl font-extrabold">Peringatan cuaca BMKG</h2>
-          <WeatherAlertList selectedBeach={beach} disableFilter={false} />
+          <WeatherAlertList selectedBeach={beach} state={weather} />
         </section>
 
         <section className="space-y-3">
