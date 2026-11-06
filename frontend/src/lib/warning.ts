@@ -78,6 +78,12 @@ export interface BmkgAssessment {
   reasons: string[]
 }
 
+/** Wind limits of the BMKG situation table (km/h); same as the backend. ~16 and ~25 knots. */
+export const WIND_WASPADA_KMH = 30
+export const WIND_SIAGA_KMH = 46
+
+export const kmhToKnots = (kmh: number) => Math.round(kmh / 1.852)
+
 /**
  * BMKG side of the fusion, same rule as the backend (reassurance.ts, determineBmkgRisk):
  * an official BMKG warning covering the beach or wind >= 46 km/h -> SIAGA;
@@ -92,10 +98,10 @@ export function assessBmkg(bmkg: BmkgData | null, alerts: WeatherAlertProps[], n
     reasons.push(`BMKG: ${warnings[0].condition} sampai pukul ${warnings[0].end}`)
   }
   if (bmkg) {
-    if (bmkg.windSpeed >= 46) {
+    if (bmkg.windSpeed >= WIND_SIAGA_KMH) {
       level = maxLevel(level, "SIAGA")
       reasons.push(`Angin sangat kencang (${bmkg.windSpeed} km/jam)`)
-    } else if (bmkg.windSpeed >= 30) {
+    } else if (bmkg.windSpeed >= WIND_WASPADA_KMH) {
       level = maxLevel(level, "WASPADA")
       reasons.push(`Angin kencang (${bmkg.windSpeed} km/jam)`)
     } else if (!bmkg.isSafe) {
