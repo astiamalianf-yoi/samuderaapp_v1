@@ -14,6 +14,18 @@ const BEACH_ALIASES: Record<string, string> = {
 	"pantai samas": "pantai_samas",
 };
 
+/**
+ * WhatsApp label for a risk level. Alert events use two vocabularies (siaga/waspada/ekstrem
+ * from the fusion, unsafe-high/unsafe from the legacy feed); both must map, otherwise a real
+ * warning is shown as "Aman" in the group.
+ */
+export function riskLabelFor(level: unknown): string {
+	const v = String(level ?? "").toLowerCase();
+	if (v === "ekstrem" || v === "siaga" || v === "unsafe-high" || v === "high") return "🔴 BAHAYA";
+	if (v === "waspada" || v === "unsafe" || v === "medium") return "🟡 WASPADA";
+	return "✅ Aman";
+}
+
 const SIGN_KEYWORDS: [RegExp, string][] = [
 	[/ombak\s*(besar|tinggi|giang|deras)/i, "Wn-4"],
 	[/gelombang\s*(tinggi|besar)/i, "Wn-4"],
@@ -142,12 +154,7 @@ export function formatAlertsResponse(alerts: any[], beachFilter?: string | null)
 	}
 
 	const parts = filtered.map((alert: any) => {
-		const riskLabel =
-			alert.riskLevel === "unsafe-high"
-				? "🔴 BAHAYA"
-				: alert.riskLevel === "unsafe"
-					? "🟡 WASPADA"
-					: "✅ Aman";
+		const riskLabel = riskLabelFor(alert.riskLevel);
 
 		const beachName = BEACH_DISPLAY[alert.beachLocation] || alert.beachLocation;
 		const date = new Date(alert.serverTimestamp).toLocaleString("id-ID", {

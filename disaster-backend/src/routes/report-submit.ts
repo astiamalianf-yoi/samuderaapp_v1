@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { riskLabelFor } from "../lib/whatsapp-commands";
 import { redis } from "../lib/redis";
 import { sendOpenClawAlert } from "../lib/openclaw";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues } from "../lib/crowdsource";
@@ -217,12 +218,7 @@ route.get("/report/submit", async (c) => {
 	}
 
 	if (isWA) {
-		const riskLabel =
-			alertEvent.riskLevel === "siaga" || alertEvent.riskLevel === "ekstrem"
-				? "🔴 BAHAYA"
-				: alertEvent.riskLevel === "waspada"
-					? "🟡 WASPADA"
-					: "✅ Aman";
+		const riskLabel = riskLabelFor(alertEvent.riskLevel);
 		const alertText = [
 			`⚠️ PERINGATAN — ${riskLabel} di ${beachLocation.replace(/_/g, " ")}`,
 			`👥 Dilaporkan oleh ${alertEvent.reporterCount} nelayan`,

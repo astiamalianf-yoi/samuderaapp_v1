@@ -7,6 +7,7 @@ import {
 	getMissingLocationMessage,
 	getMissingSignsMessage,
 	formatAlertsResponse,
+	riskLabelFor,
 } from "../lib/whatsapp-commands";
 
 const route = new Hono();
@@ -48,12 +49,7 @@ async function handleLapor(text: string, chatId: string): Promise<string> {
 
 		if (data.status === "triggered") {
 			const alertEvent = data.alertEvent;
-			const riskLabel =
-				alertEvent.riskLevel === "unsafe-high"
-					? "🔴 BAHAYA"
-					: alertEvent.riskLevel === "unsafe"
-						? "🟡 WASPADA"
-						: "✅ Aman";
+			const riskLabel = riskLabelFor(alertEvent.riskLevel);
 
 			return [
 				"✅ Laporan diterima, Bang!",
