@@ -26,6 +26,9 @@ import authRoute from "./routes/auth";
 import openclawWebhookRoute from "./routes/openclaw-webhook";
 import reportsActiveRoute from "./routes/reports-active";
 import warningPersonalRoute from "./routes/warning-personal";
+import { startNowcastMonitor } from "./lib/bmkg-nowcast";
+import { sendOpenClawAlert } from "./lib/openclaw";
+import { publishIotAlertForEvent } from "./lib/iot-mqtt";
 import bmkgRoute from "./routes/bmkg";
 import alertsRoute from "./routes/alerts";
 import reportSubmitRoute from "./routes/report-submit";
@@ -57,6 +60,7 @@ app.onError((err, c) => {
 await initRedis();
 initDb();
 initWebPush();
+startNowcastMonitor({ sendWhatsApp: sendOpenClawAlert, publishIot: publishIotAlertForEvent });
 
 await sub.subscribe(ALERTS_CHANNEL, async (message) => {
 	console.log("[sub] received alert from Redis, SSE clients:", sseClients.size, "WS clients:", wsClients.size);

@@ -79,9 +79,9 @@ export interface BmkgAssessment {
 }
 
 /**
- * BMKG side of the fusion, same rule as the backend (determineBmkgRisk):
- * a warning covering the beach or wind >= 46 km/h -> SIAGA; wind >= 30 km/h or
- * bad-weather forecast -> WASPADA; otherwise NORMAL.
+ * BMKG side of the fusion, same rule as the backend (reassurance.ts, determineBmkgRisk):
+ * a BMKG warning covering the beach, a bad-weather forecast (rain/thunderstorm codes)
+ * or wind >= 46 km/h -> SIAGA; wind >= 30 km/h -> WASPADA; otherwise NORMAL.
  */
 export function assessBmkg(bmkg: BmkgData | null, alerts: WeatherAlertProps[], now = Date.now()): BmkgAssessment {
   const warnings = alerts.filter((a) => a.appliesToBeach && (a.expiresAt === undefined || a.expiresAt > now))
@@ -99,7 +99,7 @@ export function assessBmkg(bmkg: BmkgData | null, alerts: WeatherAlertProps[], n
       level = maxLevel(level, "WASPADA")
       reasons.push(`Angin kencang (${bmkg.windSpeed} km/jam)`)
     } else if (!bmkg.isSafe) {
-      level = maxLevel(level, "WASPADA")
+      level = maxLevel(level, "SIAGA")
       reasons.push(`Prakiraan BMKG: ${bmkg.weather}`)
     }
   }

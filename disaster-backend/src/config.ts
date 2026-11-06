@@ -118,3 +118,8 @@ if (JWT_AUTH_ENABLED && !JWT_SECRET) {
 if (!Number.isFinite(JWT_EXPIRES_SECONDS) || JWT_EXPIRES_SECONDS <= 0) {
 	throw new Error("JWT_EXPIRES_SECONDS must be a positive number");
 }
+
+// BMKG short-term warnings (peringatan dini cuaca, CAP via RSS)
+export const BMKG_NOWCAST_ENABLED = (process.env.BMKG_NOWCAST_ENABLED ?? "true") !== "false";
+export const BMKG_NOWCAST_INTERVAL_MINUTES = Number(process.env.BMKG_NOWCAST_INTERVAL_MINUTES ?? 10);
+export const BMKG_NOWCAST_RSS_URL = process.env.BMKG_NOWCAST_RSS_URL ?? "https://www.bmkg.go.id/alerts/nowcast/id";

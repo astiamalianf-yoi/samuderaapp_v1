@@ -1,4 +1,5 @@
 import { getDb } from "../db";
+import { getActiveNowcast } from "./bmkg-nowcast";
 import { schema } from "../db";
 import { fetchBmkgWeather, fetchBmkgWarning, saveSnapshot, getBeachBySlug } from "./bmkg";
 import type { BmkgWeatherData } from "./bmkg";
@@ -91,7 +92,11 @@ export async function reassure(
 	}
 
 	const weather: BmkgWeatherData | null = await fetchBmkgWeather(beachSlug).catch(() => null);
-	const warning: string | null = await fetchBmkgWarning(beachSlug).catch(() => null);
+	const forecastWarning: string | null = await fetchBmkgWarning(beachSlug).catch(() => null);
+	// BMKG short-term warnings (peringatan dini) that cover this beach also count as a warning.
+	const nowcast = await getActiveNowcast(beachSlug).catch(() => []);
+	const warning: string | null =
+		forecastWarning ?? (nowcast.length ? `${nowcast[0]!.event} (peringatan dini BMKG)` : null);
 
 	if (beachId && weather) {
 		await saveSnapshot(beachId, { weather, warning }).catch(() => {});
@@ -108,7 +113,7 @@ export async function reassure(
 		agreed,
 		finalLevel,
 		finalLevelNumeric,
-		details: { weather, warning },
+		details: { weather, warning, nowcast },
 	};
 
 	await db.insert(schema.reassuranceResults).values({
