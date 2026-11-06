@@ -3,6 +3,7 @@ import { redis } from "../lib/redis";
 import { ALERTS_STREAM } from "../config";
 import { sendOpenClawAlert } from "../lib/openclaw";
 import { BEACH_DISPLAY_NAMES } from "./report";
+import { riskLabelFor } from "../lib/whatsapp-commands";
 
 const route = new Hono();
 
@@ -49,36 +50,24 @@ type AlertData = {
 	communityCharacteristics: string;
 };
 
-function riskLabel(riskLevel: string): string {
-	const lower = riskLevel.toLowerCase();
-	if (lower.includes("unsafe-high")) return "BAHAYA";
-	if (lower.includes("unsafe")) return "WASPADA";
-	return "Aman";
-}
-
-function riskEmoji(riskLevel: string): string {
-	const lower = riskLevel.toLowerCase();
-	if (lower.includes("unsafe-high")) return "\u{1F534}";
-	if (lower.includes("unsafe")) return "\u{1F7E1}";
-	return "\u2705";
-}
-
 function formatAlert(alert: AlertData): string {
 	const beachName = BEACH_DISPLAY_NAMES[alert.beachLocation] ?? alert.beachLocation;
-	const emoji = riskEmoji(alert.riskLevel);
-	const label = riskLabel(alert.riskLevel);
+	const label = riskLabelFor(alert.riskLevel);
 
 	const dateStr = new Date(alert.serverTimestamp).toLocaleDateString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		day: "numeric",
 		month: "long",
 		year: "numeric",
 	});
 
 	const startTime = new Date(alert.firstReportAt).toLocaleTimeString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		hour: "2-digit",
 		minute: "2-digit",
 	});
 	const endTime = new Date(alert.lastReportAt).toLocaleTimeString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		hour: "2-digit",
 		minute: "2-digit",
 	});
@@ -89,7 +78,7 @@ function formatAlert(alert: AlertData): string {
 		.map((s) => `- ${s.trim()}`);
 
 	return [
-		`${emoji} PERINGATAN \u2014 ${label} di ${beachName}`,
+		`\u26A0\uFE0F PERINGATAN \u2014 ${label} di ${beachName}`,
 		dateStr,
 		"",
 		`\u{1F465} Dilaporkan oleh ${alert.reporterCount} nelayan`,

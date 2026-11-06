@@ -3,6 +3,7 @@ import { VAPID_PUBLIC_KEY } from "../config";
 import {
 	isPushConfigured,
 	isValidPushSubscription,
+	parsePushMetadata,
 	removePushSubscription,
 	savePushSubscription,
 } from "../lib/push";
@@ -34,7 +35,10 @@ route.post("/push/subscribe", async (c) => {
 		return c.json({ ok: false, error: "Invalid PushSubscription" }, 400);
 	}
 
-	await savePushSubscription(candidate);
+	// Optional { metadata: { beach_location, fisherman_profile } } (or a top-level beach_location).
+	const wrapper = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+	const metadata = parsePushMetadata(wrapper.metadata ?? (wrapper.beach_location ? { beach_location: wrapper.beach_location } : undefined));
+	await savePushSubscription(candidate, metadata);
 	return c.json({ ok: true, endpoint: candidate.endpoint });
 });
 

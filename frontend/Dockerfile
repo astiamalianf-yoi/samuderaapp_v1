@@ -1,29 +1,35 @@
-FROM node:22-alpine AS base
+# Stage 1: Build the React Application
+FROM node:20-alpine AS builder
+
 WORKDIR /app
 
-FROM base AS deps
-COPY package.json package-lock.json* ./
+# Copy package.json and package-lock.json
+COPY package*.json ./
+
+# Install dependencies
 RUN npm ci
 
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
+# Copy the rest of the application code
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
-ARG BACKEND_URL=http://backend:3000
-ENV BACKEND_URL=$BACKEND_URL
-RUN echo "self.BUILD_ID='$(date +%s)'" > /app/public/build-id.js
+
+# Backend URL baked into the build (see src/config.ts)
+ARG VITE_API_BASE_URL=https://api.samudraapp.com
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
+# Build the application
 RUN npm run build
 
-FROM base AS runner
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-USER nextjs
-EXPOSE 3001
-ENV PORT=3001
-ENV HOSTNAME="0.0.0.0"
-CMD ["node", "server.js"]
+# Stage 2: Serve the Application with Nginx
+FROM nginx:alpine
+
+# Copy the build output from Stage 1 to Nginx's web root
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy the custom Nginx configuration
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Expose port 80
+EXPOSE 80
+
+# Start Nginx
+CMD ["nginx", "-g", "daemon off;"]

@@ -25,6 +25,8 @@ export const REPORT_SYNC_STREAM = process.env.REPORT_SYNC_STREAM ?? "reports:syn
 export const REPORT_DEDUPE_PREFIX = process.env.REPORT_DEDUPE_PREFIX ?? "reports:dedupe";
 export const REPORT_WINDOW_MS = Number(process.env.REPORT_WINDOW_MS ?? 24 * 60 * 60 * 1000);
 export const REPORT_THRESHOLD = Number(process.env.REPORT_THRESHOLD ?? 5);
+// Same reporter + same sign + same beach within this window counts as one report (app and WhatsApp alike).
+export const REPORT_REPEAT_WINDOW_MS = Number(process.env.REPORT_REPEAT_WINDOW_MS ?? 5 * 60 * 1000);
 
 export const BEACH_THRESHOLDS: Record<string, number> = {
 	pantai_lampuuk: 5,
@@ -99,6 +101,7 @@ export const JWT_PUBLIC_PATHS = parseCsvEnv(process.env.JWT_PUBLIC_PATHS, [
 	"/api/reports/active",
 	"/api/bmkg",
 	"/api/openclaw/webhook",
+	"/api/warning/personal",
 ]);
 export const AUTH_USER_KEY_PREFIX = process.env.AUTH_USER_KEY_PREFIX ?? "auth:user";
 export const AUTH_USER_EMAIL_KEY_PREFIX =
@@ -117,3 +120,8 @@ if (JWT_AUTH_ENABLED && !JWT_SECRET) {
 if (!Number.isFinite(JWT_EXPIRES_SECONDS) || JWT_EXPIRES_SECONDS <= 0) {
 	throw new Error("JWT_EXPIRES_SECONDS must be a positive number");
 }
+
+// BMKG short-term warnings (peringatan dini cuaca, CAP via RSS)
+export const BMKG_NOWCAST_ENABLED = (process.env.BMKG_NOWCAST_ENABLED ?? "true") !== "false";
+export const BMKG_NOWCAST_INTERVAL_MINUTES = Number(process.env.BMKG_NOWCAST_INTERVAL_MINUTES ?? 10);
+export const BMKG_NOWCAST_RSS_URL = process.env.BMKG_NOWCAST_RSS_URL ?? "https://www.bmkg.go.id/alerts/nowcast/id";
