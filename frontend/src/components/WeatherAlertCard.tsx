@@ -85,7 +85,8 @@ export function WeatherAlertCard({
   }
 
   return (
-    <article className={`bg-white rounded-xl shadow-md p-4 ${appliesToBeach ? "ring-2 ring-red-500" : ""}`}>
+    <article className={`bg-white rounded-xl shadow-md p-4 ${
+      appliesToBeach === true ? "ring-2 ring-red-500" : appliesToBeach === false ? "ring-2 ring-emerald-500" : ""}`}>
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0">
           <div className="w-9 h-9 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center">
@@ -100,7 +101,7 @@ export function WeatherAlertCard({
             <p className="mt-1 inline-block rounded-full bg-red-600 text-white text-xs font-bold px-2 py-0.5">Berlaku untuk pantai Anda</p>
           )}
           {appliesToBeach === false && (
-            <p className="mt-1 inline-block rounded-full bg-gray-200 text-gray-700 text-xs font-bold px-2 py-0.5">Wilayah lain, bukan pantai Anda</p>
+            <p className="mt-1 inline-block rounded-full bg-emerald-600 text-white text-xs font-bold px-2 py-0.5">Wilayah lain, bukan pantai Anda</p>
           )}
 
           <div className="mt-3 grid grid-cols-2 gap-2">
