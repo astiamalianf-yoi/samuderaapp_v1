@@ -74,15 +74,13 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        BACKEND_URL: http://backend:3000
+        VITE_API_BASE_URL: http://localhost:3000
     container_name: peringatan-frontend
     restart: unless-stopped
-    environment:
-      BACKEND_URL: http://backend:3000
     depends_on:
       - backend
     ports:
-      - "3001:3001"
+      - "3001:80"
 
 volumes:
   redis_data:

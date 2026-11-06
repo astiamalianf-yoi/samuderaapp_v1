@@ -40,4 +40,4 @@ export const INTERACTION_LEVELS = [
   { value: 5, label: "Sangat Tinggi" },
 ] as const
 
-export const API_BASE_URL = 'https://api.samudraapp.com'
+export { API_BASE_URL } from '../config'

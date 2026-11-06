@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { pushService } from "../services/pushService"
 import type { BeachLocation } from "../types/api"
+import type { FishermanProfile } from "../lib/profile"
 
-export function usePushNotifications(selectedBeach?: BeachLocation) {
+export function usePushNotifications(selectedBeach?: BeachLocation, profile?: FishermanProfile | null) {
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification === "undefined" ? "default" : Notification.permission,
   )
@@ -51,6 +52,24 @@ export function usePushNotifications(selectedBeach?: BeachLocation) {
     syncBeachPreference()
   }, [isSupported, selectedBeach])
 
+  // Keep the server copy of beach + profile in step, so push alerts are filtered and personalised.
+  useEffect(() => {
+    if (!isSupported || !isSubscribed || !selectedBeach) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const registration = await navigator.serviceWorker.ready
+        const subscription = await registration.pushManager.getSubscription()
+        if (subscription && !cancelled) await pushService.subscribe(subscription, buildMetadata(selectedBeach, profile))
+      } catch {
+        // non-blocking
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isSupported, isSubscribed, selectedBeach, profile])
+
   const requestPermission = useCallback(async () => {
     if (typeof Notification === "undefined") {
       setPermission("default")
@@ -85,7 +104,7 @@ export function usePushNotifications(selectedBeach?: BeachLocation) {
         applicationServerKey: pushService.toUint8Array(publicKey),
       })
 
-      await pushService.subscribe(subscription)
+      await pushService.subscribe(subscription, buildMetadata(selectedBeach, profile))
       setIsSubscribed(true)
       setPermission("granted")
     } catch (err) {
@@ -93,7 +112,7 @@ export function usePushNotifications(selectedBeach?: BeachLocation) {
     } finally {
       setIsLoading(false)
     }
-  }, [isSupported, requestPermission, selectedBeach])
+  }, [isSupported, requestPermission, selectedBeach, profile])
 
   const unsubscribe = useCallback(async () => {
     setError(null)
@@ -130,5 +149,13 @@ export function usePushNotifications(selectedBeach?: BeachLocation) {
     error,
     subscribe,
     unsubscribe,
+  }
+}
+
+function buildMetadata(beach?: BeachLocation, profile?: FishermanProfile | null) {
+  if (!beach && !profile) return undefined
+  return {
+    ...(beach ? { beach_location: beach } : {}),
+    ...(profile ? { fisherman_profile: profile } : {}),
   }
 }

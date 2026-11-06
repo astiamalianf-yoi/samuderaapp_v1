@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "../constants/reportConstants"
 import type { BeachLocation } from "../types/api"
+import type { FishermanProfile } from "../lib/profile"
 
 export type VapidKeyResponse = {
   publicKey?: string
@@ -47,7 +48,7 @@ export const pushService = {
 
   async subscribe(
     subscription: PushSubscription,
-    metadata?: { beach_location?: BeachLocation },
+    metadata?: { beach_location?: BeachLocation; fisherman_profile?: FishermanProfile },
   ): Promise<void> {
     const payload = metadata ? { subscription, metadata } : subscription
     const response = await fetch(`${API_BASE_URL}/api/push/subscribe`, {

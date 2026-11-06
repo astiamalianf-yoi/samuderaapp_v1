@@ -2,6 +2,7 @@
 
 import { cleanupOutdatedCaches, precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching"
 import type { PrecacheEntry } from "workbox-precaching"
+import { API_BASE_URL, API_HOST } from "./config"
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: PrecacheEntry[]
@@ -44,7 +45,7 @@ const DB_NAME = "samudra-push"
 const STORE_NAME = "preferences"
 const BEACH_KEY = "selectedBeach"
 const LAST_SEEN_PREFIX = "lastSeen:"
-const HISTORY_URL = "https://api.samudraapp.com/api/history?distributed=true&limit=10"
+const HISTORY_URL = `${API_BASE_URL}/api/history?distributed=true&limit=10`
 
 const openDb = () =>
   new Promise<IDBDatabase>((resolve, reject) => {
@@ -168,7 +169,7 @@ registerRoute(
 
 // Cache Backend API (History, Alerts) - NetworkFirst
 registerRoute(
-  ({ url }) => url.href.includes('api.samudraapp.com/api') && !url.href.includes('/api/report'),
+  ({ url }) => url.host === API_HOST && url.pathname.startsWith('/api') && !url.pathname.startsWith('/api/report'),
   new NetworkFirst({
     cacheName: 'backend-api-cache',
     plugins: [
@@ -186,7 +187,7 @@ const bgSyncPlugin = new BackgroundSyncPlugin('report-queue', {
 });
 
 registerRoute(
-  ({ url }) => url.href.includes('api.samudraapp.com/api/report'),
+  ({ url }) => url.host === API_HOST && url.pathname.startsWith('/api/report'),
   new NetworkOnly({
     plugins: [bgSyncPlugin]
   }),

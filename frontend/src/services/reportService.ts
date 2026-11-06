@@ -1,6 +1,28 @@
-import type { PredictionInput, ReportResponse, HistoryResponse, AckInput, ActiveReportResponse } from '../types/api';
+import type { PredictionInput, ReportResponse, HistoryResponse, AckInput, ActiveReportResponse, PersonalWarningResponse, BeachLocation } from '../types/api';
+import type { FishermanProfile } from '../lib/profile';
 
-const API_BASE_URL = 'https://api.samudraapp.com';
+import { API_BASE_URL } from '../config';
+
+export interface BmkgData {
+  beach: string;
+  weather: string;
+  waveHeight: number;
+  windSpeed: number;
+  windDirection: string;
+  temperature: number;
+  isSafe: boolean;
+  fetchedAt: number;
+}
+
+export interface AlertFeedItem {
+  alertId: string;
+  beachLocation: string;
+  riskLevel: string;
+  reporterCount: number;
+  actionRecommendation: string;
+  triggeredCodes: string[];
+  serverTimestamp: number;
+}
 
 export class ApiError extends Error {
   statusCode?: number;
@@ -66,6 +88,33 @@ export const reportService = {
     });
 
     return handleResponse<ActiveReportResponse>(response);
+  },
+
+  async getPersonalWarning(beachLocation: BeachLocation, profile: FishermanProfile): Promise<PersonalWarningResponse> {
+    const response = await fetch(`${API_BASE_URL}/api/warning/personal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ beach_location: beachLocation, fisherman_profile: profile }),
+    });
+    return handleResponse<PersonalWarningResponse>(response);
+  },
+
+  async getBmkg(beachLocation: BeachLocation): Promise<BmkgData | null> {
+    const response = await fetch(`${API_BASE_URL}/api/bmkg/${encodeURIComponent(beachLocation)}`);
+    const body = await handleResponse<{ ok: boolean; data: BmkgData | null }>(response);
+    return body.data ?? null;
+  },
+
+  async getBmkgAll(): Promise<BmkgData[]> {
+    const response = await fetch(`${API_BASE_URL}/api/bmkg`);
+    const body = await handleResponse<{ ok: boolean; data: (BmkgData | null)[] }>(response);
+    return (body.data ?? []).filter((d): d is BmkgData => d != null);
+  },
+
+  async getAlerts(limit: number = 20): Promise<AlertFeedItem[]> {
+    const response = await fetch(`${API_BASE_URL}/api/alerts?limit=${limit}`);
+    const body = await handleResponse<{ ok: boolean; data: AlertFeedItem[] }>(response);
+    return body.data ?? [];
   },
 
   async sendAck(data: AckInput): Promise<void> {

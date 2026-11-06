@@ -1,25 +1,11 @@
 import type { ReactNode } from "react"
+import { AppShell } from "./AppShell"
 
 interface Props {
   children: ReactNode
 }
 
+/** Kept for older pages; everything now shares the AppShell (header + bottom menu). */
 export function MainLayout({ children }: Props) {
-  return (
-    <div 
-      className="min-h-screen flex flex-col bg-[#F9F9F9] text-black"
-      style={{
-        paddingTop: 'var(--safe-area-inset-top)'
-      }}
-    >
-      <main 
-        className="flex-1 overflow-y-auto p-4"
-        style={{
-          paddingBottom: 'calc(1rem + var(--safe-area-inset-bottom))'
-        }}
-      >
-        {children}
-      </main>
-    </div>
-  )
+  return <AppShell>{children}</AppShell>
 }

@@ -86,11 +86,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        BACKEND_URL: https://${API_DOMAIN:-api.samudraapp.com}
+        VITE_API_BASE_URL: https://${API_DOMAIN:-api.samudraapp.com}
     container_name: peringatan-frontend
     restart: unless-stopped
-    environment:
-      BACKEND_URL: https://${API_DOMAIN:-api.samudraapp.com}
     depends_on:
       - backend
     networks:
@@ -101,7 +99,7 @@ services:
       - "traefik.http.routers.peringatan-frontend.rule=Host(`${APP_DOMAIN:-www.samudraapp.com}`) || Host(`${APP_APEX_DOMAIN:-samudraapp.com}`)"
       - "traefik.http.routers.peringatan-frontend.entrypoints=websecure"
       - "traefik.http.routers.peringatan-frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.peringatan-frontend.loadbalancer.server.port=3001"
+      - "traefik.http.services.peringatan-frontend.loadbalancer.server.port=80"
       - "traefik.docker.network=traefik-public"
 
   openclaw-bridge:

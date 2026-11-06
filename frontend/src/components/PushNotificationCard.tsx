@@ -1,6 +1,6 @@
 import { Bell, BellOff } from "lucide-react"
-import { Card } from "./ui/Card"
 import { usePushNotifications } from "../hooks/usePushNotifications"
+import { useProfile } from "../hooks/useAppState"
 import type { BeachLocation } from "../types/api"
 import { BEACH_LOCATIONS } from "../constants/observationData"
 
@@ -9,75 +9,57 @@ interface PushNotificationCardProps {
 }
 
 export function PushNotificationCard({ selectedBeach }: PushNotificationCardProps) {
-  const {
-    permission,
-    isSupported,
-    isSubscribed,
-    isLoading,
-    error,
-    subscribe,
-    unsubscribe,
-  } = usePushNotifications(selectedBeach)
+  const profile = useProfile()
+  const { permission, isSupported, isSubscribed, isLoading, error, subscribe, unsubscribe } =
+    usePushNotifications(selectedBeach, profile)
 
-  const selectedBeachLabel =
-    BEACH_LOCATIONS.find((beach) => beach.value === selectedBeach)?.label ??
-    "Lokasi tidak diketahui"
+  const beachLabel = BEACH_LOCATIONS.find((b) => b.value === selectedBeach)?.label ?? "pantai ini"
 
   if (!isSupported) {
     return (
-      <Card>
-        <p className="text-sm text-gray-600">
-          Perangkat ini belum mendukung notifikasi push.
-        </p>
-      </Card>
+      <div className="rounded-2xl bg-white border border-gray-200 p-4 text-base text-gray-700">
+        HP ini belum bisa menerima notifikasi. Gabung grup WhatsApp agar tetap dapat peringatan.
+      </div>
     )
   }
 
-  const isDenied = permission === "denied"
-  const statusText = isSubscribed
-    ? "Notifikasi aktif"
-    : isDenied
-      ? "Notifikasi diblokir"
-      : "Notifikasi belum aktif"
-
-  return (
-    <Card>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
-            {isSubscribed ? <Bell className="w-5 h-5" aria-hidden /> : <BellOff className="w-5 h-5" aria-hidden />}
-          </div>
-          <div>
-            <p className="text-sm font-semibold">Notifikasi Peringatan</p>
-            <p className="text-xs text-gray-500">{statusText}</p>
-            <p className="text-xs text-gray-500">Pantai: {selectedBeachLabel}</p>
-          </div>
+  if (isSubscribed) {
+    return (
+      <div className="rounded-2xl bg-white border border-gray-200 p-4 flex items-center gap-3">
+        <span className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+          <Bell className="w-6 h-6" aria-hidden />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold">Notifikasi aktif</p>
+          <p className="text-sm text-gray-600">Peringatan untuk {beachLabel}{profile ? ", sesuai profil Anda" : ""}</p>
         </div>
-        <button
-          type="button"
-          onClick={isSubscribed ? unsubscribe : subscribe}
-          disabled={isLoading || isDenied}
-          className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
-            isSubscribed
-              ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              : "bg-blue-600 text-white hover:bg-blue-700"
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          {isSubscribed ? "Nonaktifkan" : "Aktifkan"}
+        <button type="button" onClick={unsubscribe} disabled={isLoading}
+          className="min-h-11 px-3 rounded-xl text-sm font-semibold text-gray-600 border border-gray-300 disabled:opacity-50">
+          Matikan
         </button>
       </div>
+    )
+  }
 
-      {isDenied && (
-        <p className="mt-3 text-xs text-orange-600">
-          Izin notifikasi diblokir di browser. Silakan aktifkan lewat pengaturan perangkat.
-        </p>
+  return (
+    <div className="rounded-2xl bg-sky-50 border-2 border-sky-300 p-4">
+      <div className="flex items-start gap-3">
+        <span className="w-11 h-11 rounded-full bg-sky-200 text-sky-900 flex items-center justify-center shrink-0">
+          <BellOff className="w-6 h-6" aria-hidden />
+        </span>
+        <div>
+          <p className="font-bold text-lg">Nyalakan notifikasi</p>
+          <p className="text-base text-gray-700">Agar HP berbunyi saat ada bahaya di {beachLabel}.</p>
+        </div>
+      </div>
+      <button type="button" onClick={subscribe} disabled={isLoading || permission === "denied"}
+        className="mt-3 w-full min-h-12 rounded-xl bg-sky-800 text-white text-lg font-bold disabled:opacity-50">
+        {isLoading ? "Memproses..." : "Nyalakan"}
+      </button>
+      {permission === "denied" && (
+        <p className="mt-2 text-sm text-orange-700">Notifikasi diblokir. Buka pengaturan browser untuk mengizinkan.</p>
       )}
-
-      {error && (
-        <p className="mt-3 text-xs text-red-600">{error}</p>
-      )}
-    </Card>
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+    </div>
   )
 }
-
-export default PushNotificationCard

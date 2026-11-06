@@ -66,22 +66,105 @@ export interface PushSubscription {
 }
 
 // Active Report Types
+export type RiskLevel = 'NORMAL' | 'WASPADA' | 'SIAGA' | 'EKSTREM';
+export type WarningStrategyCode = 'STANDARD' | 'EXTRA_WARNING' | 'ENHANCED_MONITORING' | 'MAXIMUM_ALERT';
+
+export interface WarningStrategy {
+  code: WarningStrategyCode;
+  label_id: string;
+  label_en: string;
+  message_id: string;
+  trust_tier: 'High' | 'Low';
+  behavioral_class: 0 | 1;
+  behavioral_label: 'Actionable' | 'Inaction';
+  behavioral_source: 'random_forest' | 'beach_profile';
+}
+
+export interface Contribution {
+  factor: string;
+  label_id: string;
+  category: 'natural_sign' | 'community';
+  weight: number;
+  direction: 'increases_risk' | 'neutral';
+  detail_id?: string;
+}
+
+export interface CommunityFactor {
+  key: string;
+  label_id: string;
+  value: number;
+  status: string;
+  detail_id?: string;
+}
+
+export interface Explanation {
+  summary_id?: string;
+  contributions: Contribution[];
+  community_profile?: {
+    beach: string;
+    overall: string;
+    factors: CommunityFactor[];
+  } | null;
+}
+
+export interface Reassurance {
+  shapRisk: string;
+  bmkgRisk: string;
+  agreed: boolean;
+  finalLevel: RiskLevel | string;
+  bmkgDetails?: { waveHeight: number; windSpeed: number; hasWarning: boolean } | null;
+  details?: {
+    weather?: { windSpeed?: number | null; waveHeight?: number | null; weather?: string | null } | null;
+    warning?: unknown;
+  };
+}
+
+export interface MlSignDecision {
+  code: string;
+  trust_tier: 'High' | 'Low';
+  ranked: boolean;
+  behavioral_class: 0 | 1;
+  probability_actionable: number | null;
+  strategy: WarningStrategyCode;
+  dominant_action: string | null;
+}
+
 export interface ActiveWarningEvent {
+  alertId?: string;
+  riskLevel?: string;
+  serverTimestamp?: number;
   decision: {
     is_actionable: boolean;
     community_characteristics?: string;
     shouldDistribute?: boolean;
+    final_risk_level?: RiskLevel | string;
+    warning_strategy?: WarningStrategyCode | null;
   };
   ml: {
     action_recommendation?: string;
     active_warning?: string[];
     sign_description?: string;
     escalation_level?: 1 | 2 | 3 | 4;
+    lik_risk_level?: RiskLevel;
+    warning_strategy?: WarningStrategy | null;
+    signs?: MlSignDecision[];
+    explanation?: Explanation;
   };
   input: {
     lik_codes: string[];
     beach_location: BeachLocation;
   };
+  reassurance?: Reassurance;
+}
+
+/** Personal warning computed from the fisherman's own profile (POST /api/warning/personal). */
+export interface PersonalWarningResponse {
+  ok: boolean;
+  active: boolean;
+  alertId?: string;
+  lik_risk_level?: RiskLevel;
+  warning_strategy?: WarningStrategy | null;
+  action_recommendation?: string;
 }
 
 export interface ActiveWarning {

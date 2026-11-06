@@ -20,8 +20,13 @@ html {
   background-color: #F9F9F9;
 }
 
+/* Readability for fishermen: 18 px base text, dark text on light background. */
+html {
+  font-size: 112.5%;
+}
+
 body {
-  @apply font-segoe bg-neutralBg text-white;
+  @apply font-segoe bg-slate-50 text-gray-950;
 }
 
 .font-segoe {
