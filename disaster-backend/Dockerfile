@@ -11,6 +11,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json bun.lock ./
 COPY src ./src
 COPY public ./public
+COPY scripts ./scripts
 
 EXPOSE 3000
 CMD ["bun", "src/index.ts"]
