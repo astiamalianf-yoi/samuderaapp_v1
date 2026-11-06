@@ -74,12 +74,14 @@ function formatWhatsAppAlert(params: {
 	const dangerLabel = dangerTypes.length > 0 ? dangerTypes.join(" & ") : "Bahaya";
 
 	const dateStr = new Date(serverTimestamp).toLocaleDateString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		day: "numeric",
 		month: "long",
 		year: "numeric",
 	});
 
 	const startStr = new Date(firstReportAt).toLocaleString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		day: "numeric",
 		month: "long",
 		year: "numeric",
@@ -88,6 +90,7 @@ function formatWhatsAppAlert(params: {
 	});
 
 	const endStr = new Date(lastReportAt).toLocaleString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		day: "numeric",
 		month: "long",
 		year: "numeric",
