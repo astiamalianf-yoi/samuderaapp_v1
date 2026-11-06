@@ -1,16 +1,27 @@
-import { useParams, useNavigate, Link } from "react-router-dom"
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom"
 import { MainLayout } from "../components/layout/MainLayout"
 import { ArrowLeft, AlertTriangle, CloudRain, Clock, Calendar, MapPin } from "lucide-react"
-import { useWeatherAlerts } from "../hooks/useWeatherAlerts"
+import { useCapAlert } from "../hooks/useWeatherAlerts"
+import type { WeatherAlertProps } from "../components/WeatherAlertCard"
 
 export function AlertDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { alerts, loading } = useWeatherAlerts()
+  const routeState = useLocation().state as { alert?: WeatherAlertProps } | null
 
-  // Konversi id ke index
-  const alertIndex = id ? parseInt(id, 10) : -1
-  const alert = alerts[alertIndex]
+  // The card passes the warning it shows; if the page is opened directly (e.g. after a reload),
+  // the warning is loaded again from its CAP link in the URL. A list position is never used, since
+  // the home list (filtered by beach) and a full list are in a different order.
+  const fromCard = routeState?.alert
+  let key = id ?? ""
+  try {
+    key = decodeURIComponent(key)
+  } catch {
+    // already decoded by the router
+  }
+  const capLink = !fromCard && /^https?:\/\//i.test(key) ? key : null
+  const { alert: loaded, loading } = useCapAlert(capLink)
+  const alert = fromCard ?? loaded
 
   if (loading) {
     return (

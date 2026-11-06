@@ -10,7 +10,9 @@ export interface WeatherAlertProps {
   forecast: string
   recommendation: string
   loading?: boolean
-  id?: number // Tambahkan id sebagai index
+  id?: number // position in the list (only used when alertKey is missing)
+  /** CAP link of the warning; the detail page opens exactly this warning. */
+  alertKey?: string
   /** True when the CAP area covers the selected beach (polygon or district name). */
   appliesToBeach?: boolean
   /** Expiry time (ms since epoch), when known. */
@@ -28,6 +30,8 @@ export function WeatherAlertCard({
   loading,
   id,
   appliesToBeach,
+  alertKey,
+  expiresAt,
 }: WeatherAlertProps) {
   if (loading) {
     return (
@@ -132,7 +136,10 @@ export function WeatherAlertCard({
 
       <div className="mt-3 text-right">
         <Link
-          to={`/alerts/${id ?? 0}`}
+          to={`/alerts/${alertKey ? encodeURIComponent(alertKey) : (id ?? 0)}`}
+          state={{
+            alert: { location, date, start, end, condition, forecast, recommendation, appliesToBeach, alertKey, expiresAt },
+          }}
           className="text-sm text-primary font-semibold inline-flex items-center gap-2 hover:text-primary/80 transition-colors"
         >
           Lihat Detail

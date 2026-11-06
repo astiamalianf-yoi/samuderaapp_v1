@@ -19,6 +19,76 @@ const locationKeywords: Record<BeachLocation, string[]> = {
   pantai_samas: ["Bantul", "DI Yogyakarta", "Yogyakarta", "DIY"],
 }
 
+/**
+ * One CAP document -> one alert. `alertKey` is the CAP link, so a detail page can always open the
+ * same warning (a list position is not stable: the home list is filtered by beach, the full list is not).
+ */
+export function mapCapToAlert(
+  capText: string,
+  item: { title: string; pubDate: string; link: string },
+  selectedBeach?: BeachLocation,
+): WeatherAlertProps {
+  const capXml = new DOMParser().parseFromString(capText, "application/xml")
+  const info = capXml.getElementsByTagNameNS("*", "info")[0]
+  const tag = (name: string) => info?.getElementsByTagNameNS("*", name)[0]?.textContent ?? ""
+  const event = tag("event")
+  const effective = tag("effective")
+  const expires = tag("expires")
+  const headline = tag("headline")
+  const description = tag("description")
+
+  const polygons = Array.from(info?.getElementsByTagNameNS("*", "polygon") ?? []).map((n) => n.textContent ?? "")
+  const areaDescs = Array.from(info?.getElementsByTagNameNS("*", "areaDesc") ?? []).map((n) => n.textContent ?? "")
+  const expiresAt = expires ? Date.parse(expires) : NaN
+  const appliesToBeach = selectedBeach
+    ? capAppliesToBeach(selectedBeach, { polygons, areaDescs, description, headline })
+    : true
+  return {
+    alertKey: item.link,
+    location: extractLocation(headline, item.title),
+    date: formatDateToID(effective || item.pubDate),
+    start: formatTimeWIB(effective),
+    end: formatTimeWIB(expires),
+    condition: event || "Peringatan Cuaca",
+    forecast: description || "Peringatan dini cuaca dari BMKG.",
+    recommendation: buildRecommendation(event, description),
+    appliesToBeach,
+    expiresAt: Number.isFinite(expiresAt) ? expiresAt : undefined,
+  }
+}
+
+/** Loads one BMKG warning by its CAP link (used by the detail page when opened directly). */
+export function useCapAlert(link: string | null) {
+  const [alert, setAlert] = useState<WeatherAlertProps | null>(null)
+  const [loading, setLoading] = useState(Boolean(link))
+
+  useEffect(() => {
+    if (!link) {
+      setLoading(false)
+      return
+    }
+    const controller = new AbortController()
+    setLoading(true)
+    fetch(proxifyBmkgUrl(link, PROXY_REPLACEMENTS), { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`CAP status ${res.status}`)
+        return res.text()
+      })
+      .then((text) => setAlert(mapCapToAlert(text, { title: "", pubDate: "", link })))
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return
+        console.error(err)
+        setAlert(null)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
+  }, [link])
+
+  return { alert, loading }
+}
+
 export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: boolean = false, enabled: boolean = true) {
   const [alerts, setAlerts] = useState<WeatherAlertProps[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,36 +140,8 @@ export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: b
           }
 
           const capText = await capRes.text()
-          const capXml = parser.parseFromString(capText, "application/xml")
-
-          const info = capXml.getElementsByTagNameNS("*", "info")[0]
-          const event = info?.getElementsByTagNameNS("*", "event")[0]?.textContent ?? ""
-          const effective =
-            info?.getElementsByTagNameNS("*", "effective")[0]?.textContent ?? ""
-          const expires =
-            info?.getElementsByTagNameNS("*", "expires")[0]?.textContent ?? ""
-          const headline =
-            info?.getElementsByTagNameNS("*", "headline")[0]?.textContent ?? ""
-          const description =
-            info?.getElementsByTagNameNS("*", "description")[0]?.textContent ?? ""
-
-          const polygons = Array.from(info?.getElementsByTagNameNS("*", "polygon") ?? []).map((n) => n.textContent ?? "")
-          const areaDescs = Array.from(info?.getElementsByTagNameNS("*", "areaDesc") ?? []).map((n) => n.textContent ?? "")
-          const expiresAt = expires ? Date.parse(expires) : NaN
-          const appliesToBeach = selectedBeach
-            ? capAppliesToBeach(selectedBeach, { polygons, areaDescs, description, headline })
-            : true
-          const mappedAlert = {
-            location: extractLocation(headline, title),
-            date: formatDateToID(effective || pubDate),
-            start: formatTimeWIB(effective),
-            end: formatTimeWIB(expires),
-            condition: event || "Peringatan Cuaca",
-            forecast: description || "Peringatan dini cuaca dari BMKG.",
-            recommendation: buildRecommendation(event, description),
-            appliesToBeach,
-            expiresAt: Number.isFinite(expiresAt) ? expiresAt : undefined,
-          }
+          const mappedAlert = mapCapToAlert(capText, { title, pubDate, link }, selectedBeach)
+          const appliesToBeach = mappedAlert.appliesToBeach
           
           mappedAlerts.push(mappedAlert)
 
