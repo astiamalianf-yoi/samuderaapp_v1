@@ -59,3 +59,30 @@ describe("BmkgMarineCard", () => {
     expect(screen.getByText("Perlu waspada")).toBeTruthy()
   })
 })
+
+describe("BmkgMarineCard agrees with the official BMKG warning card", () => {
+  const warning = {
+    location: "Hujan Lebat disertai Petir di Aceh", date: "06 November 2026", start: "16.45 WIB", end: "20.06 WIB",
+    condition: "Hujan Lebat dan Petir", forecast: "… LHOKNGA …", recommendation: "…",
+  }
+  const now = Date.now()
+
+  it("active warning for this beach: red badge and red Cuaca box, even if the forecast says Berawan", () => {
+    const { container } = render(<MemoryRouter><BmkgMarineCard data={base}
+      alerts={[{ ...warning, appliesToBeach: true, expiresAt: now + 3_600_000 }]} /></MemoryRouter>)
+    expect(screen.getByText(/Peringatan BMKG aktif/)).toBeTruthy()
+    expect(screen.queryByText("Cuaca normal")).toBeNull()
+    const red = container.querySelectorAll('[data-tone="siaga"]')
+    expect(red.length).toBe(1)
+    expect(red[0].textContent).toContain("Hujan Lebat dan Petir")
+    expect(red[0].textContent).toContain("Prakiraan: Berawan")
+  })
+
+  it("warning for another area or already expired: forecast stays normal", () => {
+    render(<MemoryRouter><BmkgMarineCard data={base} alerts={[
+      { ...warning, appliesToBeach: false, expiresAt: now + 3_600_000 },
+      { ...warning, appliesToBeach: true, expiresAt: now - 60_000 },
+    ]} /></MemoryRouter>)
+    expect(screen.getByText("Cuaca normal")).toBeTruthy()
+  })
+})

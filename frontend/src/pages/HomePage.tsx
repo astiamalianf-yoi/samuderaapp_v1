@@ -37,7 +37,7 @@ export function HomePage() {
 
         <WhatsAppGroupCard />
 
-        <BmkgMarineCard data={bmkg} />
+        <BmkgMarineCard data={bmkg} alerts={weather.alerts} />
 
         <section className="space-y-3">
           <h2 className="text-xl font-extrabold">Peringatan cuaca BMKG</h2>

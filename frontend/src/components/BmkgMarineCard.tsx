@@ -2,7 +2,8 @@ import { Link } from "react-router-dom"
 import { ArrowRight, Droplets, Thermometer, Wind } from "lucide-react"
 import type { BmkgData } from "../services/reportService"
 import { translateWindDirection } from "../utils/weatherUtils"
-import { kmhToKnots } from "../lib/warning"
+import { assessBmkg, kmhToKnots } from "../lib/warning"
+import type { WeatherAlertProps } from "./WeatherAlertCard"
 import { weatherIcon, weatherTone, windTone, type Tone } from "../lib/weatherTone"
 
 const TONE_BOX: Record<Tone, string> = {
@@ -30,7 +31,11 @@ function PerJamLink() {
  * orange (WASPADA) or red (SIAGA) when its value crosses a limit of the BMKG situation table.
  * "Per jam" opens the following time slots of the same forecast.
  */
-export function BmkgMarineCard({ data }: { data: BmkgData | null }) {
+export function BmkgMarineCard({ data, alerts = [] }: { data: BmkgData | null; alerts?: WeatherAlertProps[] }) {
+  // An official BMKG warning (peringatan dini) covering this beach and not yet expired is SIAGA in
+  // the situation table, whatever the ordinary forecast for this time slot says. Same check as the
+  // status card (assessBmkg), so the two cards always agree.
+  const official = assessBmkg(data, alerts).warnings[0]
   // BMKG's public forecast API has no wave height, so it is not shown.
   if (!data) {
     return (
@@ -39,30 +44,43 @@ export function BmkgMarineCard({ data }: { data: BmkgData | null }) {
           <p className="font-bold text-lg">Prakiraan cuaca BMKG</p>
           <PerJamLink />
         </div>
+        {official && <OfficialBadge />}
         <p className="mt-1 text-base text-gray-600">Data BMKG sedang dimuat atau belum tersedia.</p>
       </section>
     )
   }
 
-  const wTone = weatherTone(data)
+  const wTone = official ? "siaga" : weatherTone(data)
   const aTone = windTone(data.windSpeed)
+  const siaga = wTone === "siaga" || aTone === "siaga"
   const unusual = wTone !== "normal" || aTone !== "normal"
   const knots = kmhToKnots(data.windSpeed)
   const direction = data.windDirection ? translateWindDirection(data.windDirection) : ""
 
   return (
-    <section className={`rounded-2xl border-2 p-4 ${unusual ? "bg-white border-orange-400" : "bg-white border-gray-200"}`}>
+    <section className={`rounded-2xl border-2 p-4 bg-white ${siaga ? "border-red-500" : unusual ? "border-orange-400" : "border-gray-200"}`}>
       <div className="flex items-center justify-between gap-2">
         <p className="font-bold text-lg">Prakiraan cuaca BMKG</p>
         <PerJamLink />
       </div>
-      <span className={`inline-block text-sm font-bold rounded-full px-3 py-1 ${unusual ? "bg-orange-500 text-black" : "bg-emerald-600 text-white"}`}>
-        {unusual ? "Perlu waspada" : "Cuaca normal"}
-      </span>
+      {official ? (
+        <OfficialBadge />
+      ) : (
+        <span className={`inline-block text-sm font-bold rounded-full px-3 py-1 ${
+          siaga ? "bg-red-600 text-white" : unusual ? "bg-orange-500 text-black" : "bg-emerald-600 text-white"}`}>
+          {siaga ? "Bahaya" : unusual ? "Perlu waspada" : "Cuaca normal"}
+        </span>
+      )}
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <Stat Icon={weatherIcon(data.weather)} label="Cuaca" value={data.weather || "-"} tone={wTone}
-          note={wTone !== "normal" ? "Cuaca buruk" : undefined} />
+        {official ? (
+          <Stat Icon={weatherIcon(official.condition)} label="Cuaca" value={official.condition} tone="siaga"
+            sub={data.weather ? `Prakiraan: ${data.weather}` : undefined}
+            note={`Berlaku s.d. ${official.end}`} />
+        ) : (
+          <Stat Icon={weatherIcon(data.weather)} label="Cuaca" value={data.weather || "-"} tone={wTone}
+            note={wTone !== "normal" ? "Cuaca buruk" : undefined} />
+        )}
         <Stat Icon={Wind} label="Angin" value={`${data.windSpeed} km/jam`} tone={aTone}
           sub={`${knots} knot${direction ? ` · Arah: ${direction}` : ""}`}
           note={aTone === "siaga" ? "Sangat kencang" : aTone === "waspada" ? "Kencang" : undefined} />
@@ -70,6 +88,14 @@ export function BmkgMarineCard({ data }: { data: BmkgData | null }) {
         <Stat Icon={Droplets} label="Lembap" value={data.humidity != null ? `${data.humidity}%` : "-"} tone="normal" />
       </div>
     </section>
+  )
+}
+
+function OfficialBadge() {
+  return (
+    <span className="inline-block text-sm font-bold rounded-full px-3 py-1 bg-red-600 text-white">
+      Peringatan BMKG aktif
+    </span>
   )
 }
 
