@@ -5,15 +5,12 @@ import { BeachPicker } from "../components/BeachPicker"
 import { WarningStatusCard } from "../components/WarningStatusCard"
 import { BmkgMarineCard } from "../components/BmkgMarineCard"
 import { PushNotificationCard } from "../components/PushNotificationCard"
-import { TodayForecast } from "../components/TodayForecast"
 import { WeatherAlertList } from "../components/WeatherAlertList"
-import { getBeachMeta } from "../constants/observationData"
 import { useBmkg, useSelectedBeach } from "../hooks/useAppState"
 import { useWeatherAlerts } from "../hooks/useWeatherAlerts"
 
 export function HomePage() {
   const [beach, setBeach] = useSelectedBeach()
-  const meta = getBeachMeta(beach)
   const weather = useWeatherAlerts(beach)
   const bmkg = useBmkg(beach)
 
@@ -47,15 +44,6 @@ export function HomePage() {
           <WeatherAlertList selectedBeach={beach} state={weather} />
         </section>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-extrabold">Prakiraan cuaca</h2>
-            <Link to="/forecast" className="min-h-11 flex items-center gap-1 text-base font-semibold text-sky-800">
-              Per jam <ArrowRight className="w-4 h-4" aria-hidden />
-            </Link>
-          </div>
-          <TodayForecast adm4Code={meta?.adm4Code} />
-        </section>
       </div>
     </AppShell>
   )

@@ -1,13 +1,15 @@
-import { useState, useMemo } from "react"
+import { useMemo } from "react"
 import { MainLayout } from "../components/layout/MainLayout"
 import { ArrowLeft, CloudSun, Droplets, MapPin, Thermometer, Wind } from "lucide-react"
 import { BEACH_LOCATIONS, getBeachMeta } from "../constants/observationData"
 import type { BeachLocation } from "../types/api"
 import { useAllWeatherForecasts, type BmkgForecastItem } from "../hooks/useWeatherForecast"
 import { translateWindDirection } from "../utils/weatherUtils"
+import { useSelectedBeach } from "../hooks/useAppState"
 
 export function ForecastPage() {
-  const [selectedBeach, setSelectedBeach] = useState<BeachLocation>("pantai_depok")
+  // Same beach as the home screen (shared selection).
+  const [selectedBeach, setSelectedBeach] = useSelectedBeach()
   const selectedBeachLabel =
     BEACH_LOCATIONS.find((beach) => beach.value === selectedBeach)?.label ?? "Pilih Pantai"
   const selectedBeachMeta = getBeachMeta(selectedBeach)
