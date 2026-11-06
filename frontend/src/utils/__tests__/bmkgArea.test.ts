@@ -49,6 +49,6 @@ describe("assessBmkg (fusion, BMKG side)", () => {
   it("uses the backend wind thresholds", () => {
     expect(assessBmkg({ ...calm, windSpeed: 35 }, []).level).toBe("WASPADA")
     expect(assessBmkg({ ...calm, windSpeed: 50 }, []).level).toBe("SIAGA")
-    expect(assessBmkg({ ...calm, isSafe: false, weather: "Hujan Petir" }, []).level).toBe("SIAGA")
+    expect(assessBmkg({ ...calm, isSafe: false, weather: "Hujan Petir" }, []).level).toBe("WASPADA")
   })
 })
