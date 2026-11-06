@@ -4,6 +4,11 @@ export interface BeachLocationMeta {
   value: BeachLocation;
   label: string;
   adm4Code: string;
+  /** Region shown under the beach name. */
+  region: string;
+  /** Beach front (approx.), used to pick the nearest beach from GPS. */
+  lat: number;
+  lon: number;
 }
 
 export interface Category {
@@ -18,26 +23,64 @@ export const BEACH_LOCATIONS: BeachLocationMeta[] = [
     value: 'pantai_lampuuk',
     label: 'Pantai Lampuuk',
     adm4Code: '11.06.02.2023', // Meunasah Mesjid Lampuuk, Lhoknga
+    region: 'Aceh',
+    lat: 5.4833,
+    lon: 95.2333,
   },
   {
     value: 'pantai_lhoknga',
     label: 'Pantai Lhoknga',
     adm4Code: '11.06.02.2001',
+    region: 'Aceh',
+    lat: 5.4667,
+    lon: 95.2333,
   },
   {
     value: 'pantai_ulee_lheue',
     label: 'Pantai Ulee Lheue',
     adm4Code: '11.71.03.2002',
+    region: 'Aceh',
+    lat: 5.5583,
+    lon: 95.3083,
   },
   {
     value: 'pantai_depok',
     label: 'Pantai Depok',
     adm4Code: '34.02.03.2002',
+    region: 'Yogyakarta',
+    lat: -8.0167,
+    lon: 110.3167,
   },
   {
     value: 'pantai_samas',
     label: 'Pantai Samas',
     adm4Code: '34.02.02.2003',
+    region: 'Yogyakarta',
+    lat: -8.025,
+    lon: 110.3,
+  },  {
+    value: 'pantai_pangandaran',
+    label: 'Pantai Pangandaran',
+    adm4Code: '32.18.09.2004', // Desa Pangandaran, Kec. Pangandaran
+    region: 'Jawa Barat',
+    lat: -7.6955,
+    lon: 108.653,
+  },
+  {
+    value: 'pantai_batu_karas',
+    label: 'Pantai Batu Karas',
+    adm4Code: '32.18.02.2001', // Desa Batukaras, Kec. Cijulang
+    region: 'Jawa Barat',
+    lat: -7.7486,
+    lon: 108.4966,
+  },
+  {
+    value: 'pantai_bojongsalawe',
+    label: 'Pantai Bojongsalawe',
+    adm4Code: '32.18.01.2007', // Desa Karangjaladri, Kec. Parigi
+    region: 'Jawa Barat',
+    lat: -7.7033,
+    lon: 108.5275,
   },
 ];
 

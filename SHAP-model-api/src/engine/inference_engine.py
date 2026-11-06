@@ -33,7 +33,14 @@ LOW_TRUST_SIGNS = ["Wn-13", "Wn-4", "Wn-9", "Wn-6", "Wn-5"]
 RANKED_SIGNS = HIGH_TRUST_SIGNS + LOW_TRUST_SIGNS
 ALL_SIGNS = [f"Wn-{i}" for i in range(1, 18)]
 
-BEACH_SLUGS = ["pantai_lampuuk", "pantai_lhoknga", "pantai_ulee_lheue", "pantai_depok", "pantai_samas"]
+# Beaches with a community profile (community_rule_categorization.csv) for the model in this service.
+PROFILED_BEACHES = ["pantai_lampuuk", "pantai_lhoknga", "pantai_ulee_lheue", "pantai_depok", "pantai_samas"]
+# West Java (Pangandaran) beaches: no location model loaded yet. Paper 3 shows the Aceh model is
+# repeatable but not transportable, so the Aceh Random Forest is NOT applied here; until the
+# Pangandaran export is loaded, every recipient is treated as Inaction (0), the cautious side of
+# the matrix (Extra Warning / Maximum Alert). Results carry source="no_location_model".
+NO_MODEL_BEACHES = ["pantai_pangandaran", "pantai_batu_karas", "pantai_bojongsalawe"]
+BEACH_SLUGS = PROFILED_BEACHES + NO_MODEL_BEACHES
 
 # Strategy -> LIK hazard level passed to the backend fusion (max with BMKG).
 # Low-trust + Actionable is "Enhanced Sign Monitoring" rather than a direct alert (paper IV.D),
@@ -106,7 +113,17 @@ class InferenceEngine:
     def __init__(self):
         self.df_community = pd.read_csv(ENGINE_DIR / 'community_rule_categorization.csv')
         self.beach_rules = {}
-        for slug in BEACH_SLUGS:
+        for slug in NO_MODEL_BEACHES:
+            self.beach_rules[slug] = {
+                'Overall Category': "Unknown",
+                'Level of Interaction with Disaster Status': "Unknown",
+                'Frequency of Usage Status': "Unknown",
+                'Usage Duration Status': "Unknown",
+                'Number of Known LIK Status': "Unknown",
+                'Number of Experience with Disaster Status': "Unknown",
+                'location_model': False,
+            }
+        for slug in PROFILED_BEACHES:
             row = self.df_community[self.df_community['Mapped Beach'] == slug.replace("_", " ")].iloc[0]
             rules = {
                 'Overall Category': row['Overall Category'],
@@ -195,6 +212,8 @@ class InferenceEngine:
         return float(model.predict_proba(X)[0, list(model.classes_).index(1)])
 
     def behavioral_class(self, sign: str, profile: dict | None, rules: dict) -> dict:
+        if rules.get('location_model') is False:
+            return {"class": 0, "probability": None, "threshold": None, "source": "no_location_model"}
         if profile:
             p = self.predict_proba_for_sign(self.profile_to_features(profile), sign)
             cls = 1 if p >= self.threshold else 0

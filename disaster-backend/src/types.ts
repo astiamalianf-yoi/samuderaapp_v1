@@ -4,6 +4,9 @@ export const ALLOWED_BEACH_LOCATIONS = [
 	"pantai_ulee_lheue",
 	"pantai_depok",
 	"pantai_samas",
+	"pantai_pangandaran",
+	"pantai_batu_karas",
+	"pantai_bojongsalawe",
 ] as const;
 
 export type BeachLocation = (typeof ALLOWED_BEACH_LOCATIONS)[number];

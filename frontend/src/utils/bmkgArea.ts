@@ -6,12 +6,17 @@ import type { BeachLocation } from "../types/api"
  * its text names the beach's kecamatan or kabupaten/kota. A warning that only names the
  * province (e.g. "Aceh") does not count: BMKG lists the affected districts explicitly.
  */
-export const BEACH_AREA: Record<BeachLocation, { lat: number; lon: number; names: string[] }> = {
+// `province`: a name match also needs the province in the warning text (Parigi also exists in
+// Central Sulawesi). Same table as the backend (bmkg-nowcast.ts).
+export const BEACH_AREA: Record<BeachLocation, { lat: number; lon: number; names: string[]; province?: string }> = {
   pantai_lampuuk: { lat: 5.4833, lon: 95.2333, names: ["Lhoknga", "Aceh Besar"] },
   pantai_lhoknga: { lat: 5.4667, lon: 95.2333, names: ["Lhoknga", "Aceh Besar"] },
   pantai_ulee_lheue: { lat: 5.5583, lon: 95.3083, names: ["Meuraxa", "Banda Aceh"] },
   pantai_depok: { lat: -8.0167, lon: 110.3167, names: ["Kretek", "Bantul"] },
   pantai_samas: { lat: -8.025, lon: 110.3, names: ["Sanden", "Bantul"] },
+  pantai_pangandaran: { lat: -7.6955, lon: 108.653, names: ["Pangandaran"], province: "Jawa Barat" },
+  pantai_batu_karas: { lat: -7.7486, lon: 108.4966, names: ["Cijulang", "Pangandaran"], province: "Jawa Barat" },
+  pantai_bojongsalawe: { lat: -7.7033, lon: 108.5275, names: ["Parigi", "Pangandaran"], province: "Jawa Barat" },
 }
 
 /** CAP polygon text: "lat,lon lat,lon ..." */
@@ -47,6 +52,7 @@ export function capAppliesToBeach(
     if (poly.length >= 3 && pointInPolygon(area.lat, area.lon, poly)) return true
   }
   const text = normalise([...cap.areaDescs, cap.description, cap.headline].join(" "))
+  if (area.province && !text.includes(normalise(area.province))) return false
   return area.names.some((n) => {
     const name = normalise(n)
     // "Banda Aceh" must not match inside "Aceh Besar" text and vice versa — whole-phrase match.

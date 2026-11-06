@@ -33,6 +33,9 @@ export const BEACH_THRESHOLDS: Record<string, number> = {
 	pantai_ulee_lheue: 5,
 	pantai_depok: 5,
 	pantai_samas: 5,
+	pantai_pangandaran: 5,
+	pantai_batu_karas: 5,
+	pantai_bojongsalawe: 5,
 	pantai_lhoknga: 5,
 };
 export const ACTIVE_WARNING_TTL_SECONDS = Number(process.env.ACTIVE_WARNING_TTL_SECONDS ?? 12 * 60 * 60); // 12 hours

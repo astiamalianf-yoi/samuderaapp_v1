@@ -31,6 +31,9 @@ const BEACH_ADM4_CODES: Record<string, string> = {
 	pantai_ulee_lheue: "11.71.03.2002",
 	pantai_depok: "34.02.03.2002",
 	pantai_samas: "34.02.02.2003", // Srigading, Sanden (was a village in Kretek)
+	pantai_pangandaran: "32.18.09.2004", // Desa Pangandaran, Kec. Pangandaran
+	pantai_batu_karas: "32.18.02.2001", // Desa Batukaras, Kec. Cijulang
+	pantai_bojongsalawe: "32.18.01.2007", // Desa Karangjaladri, Kec. Parigi
 };
 
 const ALLOWED_BEACHES = Object.keys(BEACH_ADM4_CODES) as (keyof typeof BEACH_ADM4_CODES)[];

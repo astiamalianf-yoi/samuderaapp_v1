@@ -13,6 +13,9 @@ const BEACH_COORDS = [
 	{ slug: "pantai_ulee_lheue", name: "Pantai Ulee Lheue", lat: 5.5547, lon: 95.3172 },
 	{ slug: "pantai_depok", name: "Pantai Depok", lat: -7.8856, lon: 110.3319 },
 	{ slug: "pantai_samas", name: "Pantai Samas", lat: -8.0283, lon: 110.3275 },
+	{ slug: "pantai_pangandaran", name: "Pantai Pangandaran", lat: -7.6955, lon: 108.653 },
+	{ slug: "pantai_batu_karas", name: "Pantai Batu Karas", lat: -7.7486, lon: 108.4966 },
+	{ slug: "pantai_bojongsalawe", name: "Pantai Bojongsalawe", lat: -7.7033, lon: 108.5275 },
 ];
 
 const WMO_WEATHER: Record<number, string> = {

@@ -28,16 +28,24 @@ export type NowcastWarning = {
 };
 
 /** Beach location and the district names BMKG would use for it. */
-export const BEACH_AREA: Record<string, { lat: number; lon: number; names: string[]; label: string }> = {
+/**
+ * `province`: when set, a name match also needs the province in the warning text, for kecamatan
+ * names that exist elsewhere too (e.g. Parigi is also in Parigi Moutong, Central Sulawesi).
+ * Coordinates of the West Java beaches are approximate (beach front, ±1 km).
+ */
+export const BEACH_AREA: Record<string, { lat: number; lon: number; names: string[]; label: string; province?: string }> = {
 	pantai_lampuuk: { lat: 5.4833, lon: 95.2333, names: ["Lhoknga", "Aceh Besar"], label: "Pantai Lampuuk" },
 	pantai_lhoknga: { lat: 5.4667, lon: 95.2333, names: ["Lhoknga", "Aceh Besar"], label: "Pantai Lhoknga" },
 	pantai_ulee_lheue: { lat: 5.5583, lon: 95.3083, names: ["Meuraxa", "Banda Aceh"], label: "Pantai Ulee Lheue" },
 	pantai_depok: { lat: -8.0167, lon: 110.3167, names: ["Kretek", "Bantul"], label: "Pantai Depok" },
 	pantai_samas: { lat: -8.025, lon: 110.3, names: ["Sanden", "Bantul"], label: "Pantai Samas" },
+	pantai_pangandaran: { lat: -7.6955, lon: 108.653, names: ["Pangandaran"], label: "Pantai Pangandaran", province: "Jawa Barat" },
+	pantai_batu_karas: { lat: -7.7486, lon: 108.4966, names: ["Cijulang", "Pangandaran"], label: "Pantai Batu Karas", province: "Jawa Barat" },
+	pantai_bojongsalawe: { lat: -7.7033, lon: 108.5275, names: ["Parigi", "Pangandaran"], label: "Pantai Bojongsalawe", province: "Jawa Barat" },
 };
 
 /** RSS titles name the province; only CAP files for our two provinces are downloaded. */
-const PROVINCE_KEYWORDS = ["aceh", "yogyakarta", "diy"];
+const PROVINCE_KEYWORDS = ["aceh", "yogyakarta", "diy", "jawa barat"];
 
 const ACTIVE_KEY = (beach: string) => `bmkg:nowcast:active:${beach}`;
 const SENT_KEY = (id: string, beach: string) => `bmkg:nowcast:sent:${id}:${beach}`;
@@ -122,6 +130,7 @@ export function capAppliesToBeach(beach: string, cap: Pick<CapInfo, "polygons" |
 		if (poly.length >= 3 && pointInPolygon(area.lat, area.lon, poly)) return true;
 	}
 	const text = [...cap.areaDescs, cap.description, cap.headline].join(" ").toLowerCase().replace(/\s+/g, " ");
+	if (area.province && !text.includes(area.province.toLowerCase())) return false;
 	return area.names.some((n) => new RegExp(`(^|[^a-z])${escapeRe(n.toLowerCase())}([^a-z]|$)`).test(text));
 }
 

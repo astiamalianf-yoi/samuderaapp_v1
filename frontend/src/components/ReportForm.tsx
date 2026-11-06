@@ -14,6 +14,9 @@ const BEACH_LOCATIONS: { value: BeachLocation; label: string }[] = [
   { value: 'pantai_lhoknga', label: 'Pantai Lhoknga' },
   { value: 'pantai_ulee_lheue', label: 'Pantai Ulee Lheue' },
   { value: 'pantai_samas', label: 'Pantai Samas' },
+  { value: 'pantai_pangandaran', label: 'Pantai Pangandaran' },
+  { value: 'pantai_batu_karas', label: 'Pantai Batu Karas' },
+  { value: 'pantai_bojongsalawe', label: 'Pantai Bojongsalawe' },
 ];
 
 const OBSERVATION_OPTIONS = [

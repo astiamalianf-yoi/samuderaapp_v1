@@ -16,11 +16,15 @@ const BEACH_COORDS: Record<BeachLocation, [number, number]> = {
   pantai_ulee_lheue: [5.55, 95.3167],
   pantai_depok: [-8.0225, 110.33],
   pantai_samas: [-8.04, 110.31],
+  pantai_pangandaran: [-7.6955, 108.653],
+  pantai_batu_karas: [-7.7486, 108.4966],
+  pantai_bojongsalawe: [-7.7033, 108.5275],
 }
 
 const REGIONS = [
   { label: "Yogyakarta", center: [-8.03, 110.32] as [number, number], zoom: 12 },
   { label: "Aceh", center: [5.5, 95.2] as [number, number], zoom: 11 },
+  { label: "Jawa Barat", center: [-7.72, 108.57] as [number, number], zoom: 11 },
 ]
 
 const COLOR: Record<RiskLevel, string> = { NORMAL: "#059669", WASPADA: "#f59e0b", SIAGA: "#ea580c", EKSTREM: "#b91c1c" }

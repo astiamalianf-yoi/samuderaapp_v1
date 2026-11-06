@@ -6,18 +6,19 @@ import { WarningStatusCard } from "../components/WarningStatusCard"
 import { BmkgMarineCard } from "../components/BmkgMarineCard"
 import { PushNotificationCard } from "../components/PushNotificationCard"
 import { WeatherAlertList } from "../components/WeatherAlertList"
-import { useBmkg, useSelectedBeach } from "../hooks/useAppState"
+import { useBmkg, useHomeBeach, useSelectedBeach } from "../hooks/useAppState"
 import { useWeatherAlerts } from "../hooks/useWeatherAlerts"
 
 export function HomePage() {
   const [beach, setBeach] = useSelectedBeach()
+  const [homeBeach] = useHomeBeach()
   const weather = useWeatherAlerts(beach)
   const bmkg = useBmkg(beach)
 
   return (
     <AppShell>
       <div className="space-y-5">
-        <BeachPicker value={beach} onChange={setBeach} />
+        <BeachPicker value={beach} onChange={setBeach} homeBeach={homeBeach} />
 
         <WarningStatusCard beach={beach} bmkg={bmkg} weatherAlerts={weather.alerts} />
 
@@ -33,7 +34,8 @@ export function HomePage() {
           <ArrowRight className="w-6 h-6" aria-hidden />
         </Link>
 
-        <PushNotificationCard selectedBeach={beach} />
+        {/* Alerts follow the home beach, not the beach being looked at. */}
+        <PushNotificationCard selectedBeach={homeBeach ?? beach} />
 
         <WhatsAppGroupCard />
 

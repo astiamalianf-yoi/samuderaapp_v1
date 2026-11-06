@@ -12,7 +12,10 @@ export type BeachLocation =
   | 'pantai_lhoknga'
   | 'pantai_ulee_lheue'
   | 'pantai_depok'
-  | 'pantai_samas';
+  | 'pantai_samas'
+  | 'pantai_pangandaran'
+  | 'pantai_batu_karas'
+  | 'pantai_bojongsalawe';
 
 export interface PredictionInput {
   lik_codes: string[];

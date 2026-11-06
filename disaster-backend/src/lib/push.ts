@@ -99,6 +99,9 @@ const BEACH_LABEL: Record<string, string> = {
 	pantai_ulee_lheue: "Pantai Ulee Lheue",
 	pantai_depok: "Pantai Depok",
 	pantai_samas: "Pantai Samas",
+	pantai_pangandaran: "Pantai Pangandaran",
+	pantai_batu_karas: "Pantai Batu Karas",
+	pantai_bojongsalawe: "Pantai Bojongsalawe",
 };
 
 const LEVEL_WORD: Record<string, string> = { waspada: "WASPADA", siaga: "SIAGA", ekstrem: "BAHAYA", normal: "INFO" };

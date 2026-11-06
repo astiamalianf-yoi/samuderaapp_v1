@@ -1,7 +1,9 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
-import { Minus, Plus, ShieldCheck } from "lucide-react"
+import { Home, Minus, Plus, ShieldCheck } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
+import { BEACH_LOCATIONS } from "../constants/observationData"
+import { useHomeBeach } from "../hooks/useAppState"
 import { clearProfile, loadProfile, PROFILE_LIMITS, saveProfile, validateProfile, type FishermanProfile } from "../lib/profile"
 
 const HAZARDS = ["Angin kencang", "Gelombang tinggi", "Badai / hujan lebat", "Tsunami", "Gempa", "Banjir rob"]
@@ -61,6 +63,8 @@ export function ProfilePage() {
             🔒 Tidak ada nama atau nomor HP yang diminta. Jawaban disimpan di HP ini dan dikirim ke server Samudra hanya untuk menghitung peringatan.
           </p>
         </div>
+
+        <HomeBeachChooser />
 
         <Stepper id="age" label="1. Berapa umur Anda?" unit="tahun" value={p.age} onChange={(v) => set("age", v)} error={err("age")} />
         <Stepper id="fishing_experience" label="2. Sudah berapa tahun menjadi nelayan?" unit="tahun"
@@ -160,6 +164,43 @@ function Choice({ id, label, value, options, onChange, error }: {
           </button>
         ))}
       </div>
+    </fieldset>
+  )
+}
+
+/**
+ * Pantai asal: the beach the app opens on and the beach push alerts are sent for.
+ * Saved as soon as it is tapped (separate from the 10 questions, which feed the model).
+ */
+function HomeBeachChooser() {
+  const [home, setHome] = useHomeBeach()
+  return (
+    <fieldset className="space-y-2 rounded-2xl bg-white border-2 border-sky-200 p-4">
+      <legend className="flex items-center gap-2 text-lg font-bold px-1">
+        <Home className="w-5 h-5 text-sky-800" aria-hidden /> Pantai asal Anda
+      </legend>
+      <p className="text-base text-gray-700">
+        Aplikasi akan selalu dibuka di pantai ini, dan notifikasi dikirim untuk pantai ini. Anda tetap bisa melihat pantai lain.
+      </p>
+      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Pantai asal">
+        {BEACH_LOCATIONS.map((b) => {
+          const on = home === b.value
+          return (
+            <button key={b.value} type="button" role="radio" aria-checked={on} onClick={() => setHome(b.value)}
+              className={`min-h-14 rounded-xl border-2 px-3 text-left ${on ? "bg-sky-900 border-sky-900 text-white" : "bg-white border-gray-300"}`}>
+              <span className="block text-base font-bold leading-tight">{b.label.replace("Pantai ", "")}</span>
+              <span className={`block text-xs ${on ? "text-sky-100" : "text-gray-500"}`}>{b.region}</span>
+            </button>
+          )
+        })}
+      </div>
+      {home ? (
+        <button type="button" onClick={() => setHome(null)} className="min-h-11 text-base font-semibold text-sky-800">
+          Hapus pantai asal (pakai lokasi GPS)
+        </button>
+      ) : (
+        <p className="text-sm text-gray-600">Belum dipilih: aplikasi memakai lokasi GPS untuk memilih pantai terdekat.</p>
+      )}
     </fieldset>
   )
 }

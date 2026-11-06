@@ -12,6 +12,15 @@ const BEACH_ALIASES: Record<string, string> = {
 	"pantai depok": "pantai_depok",
 	samas: "pantai_samas",
 	"pantai samas": "pantai_samas",
+	// West Java: the specific beaches come before "pangandaran" (also the regency name),
+	// so "batu karas pangandaran" is read as Batu Karas.
+	"batu karas": "pantai_batu_karas",
+	batukaras: "pantai_batu_karas",
+	"bojong salawe": "pantai_bojongsalawe",
+	bojongsalawe: "pantai_bojongsalawe",
+	"bojong salawi": "pantai_bojongsalawe",
+	pangandaran: "pantai_pangandaran",
+	pananjung: "pantai_pangandaran",
 };
 
 /**
@@ -127,6 +136,9 @@ export const BEACH_DISPLAY: Record<string, string> = {
 	pantai_ulee_lheue: "Pantai Ulee Lheue",
 	pantai_depok: "Pantai Depok",
 	pantai_samas: "Pantai Samas",
+	pantai_pangandaran: "Pantai Pangandaran",
+	pantai_batu_karas: "Pantai Batu Karas",
+	pantai_bojongsalawe: "Pantai Bojongsalawe",
 };
 
 /** Short sign names, as on the app's sign tiles (codebook). */
@@ -210,7 +222,7 @@ export function parsePeringatanCommand(text: string): string | null {
 }
 
 export function getMissingLocationMessage(): string {
-	return "Di pantai mana, Bang? Lampuuk, Lhoknga, Ulee Lheue, Depok, atau Samas?";
+	return "Di pantai mana, Bang? Lampuuk, Lhoknga, Ulee Lheue, Depok, Samas, Pangandaran, Batu Karas, atau Bojongsalawe?";
 }
 
 export function getMissingSignsMessage(): string {

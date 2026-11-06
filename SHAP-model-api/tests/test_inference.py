@@ -155,3 +155,21 @@ class TestContributions:
         assert w == sorted(w, reverse=True)
         assert abs(sum(w) - 1.0) < 0.02
         assert len(out["community_profile"]["factors"]) == 5
+
+
+# --- West Java beaches without a location model (cautious fallback) -------------------------
+
+def test_new_west_java_beaches_are_supported_and_cautious():
+    from src.engine.inference_engine import InferenceEngine, NO_MODEL_BEACHES
+    eng = InferenceEngine()
+    for slug in NO_MODEL_BEACHES:
+        rules = eng.beach_rules[slug]
+        # even an "actionable" profile does not use the Aceh Random Forest here
+        beh = eng.behavioral_class("Wn-3", {"age": 40}, rules)
+        assert beh == {"class": 0, "probability": None, "threshold": None, "source": "no_location_model"}
+        out = eng.predict({"lik_codes": ["Wn-3"], "beach_location": slug, "rules": rules})
+        assert out["warning_strategy"]["code"] == "EXTRA_WARNING"
+        out = eng.predict({"lik_codes": ["Wn-4"], "beach_location": slug, "rules": rules})
+        assert out["warning_strategy"]["code"] == "MAXIMUM_ALERT"
+        expl = eng.compute_contributions(out, rules, slug)
+        assert expl["community_profile"]["overall"] == "Unknown"

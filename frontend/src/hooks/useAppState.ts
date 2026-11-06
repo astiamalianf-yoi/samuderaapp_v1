@@ -3,43 +3,99 @@ import { reportService } from "../services/reportService"
 import type { BmkgData } from "../services/reportService"
 import type { ActiveReportResponse, BeachLocation, PersonalWarningResponse } from "../types/api"
 import { BEACH_KEY, loadProfile, type FishermanProfile } from "../lib/profile"
-import { BEACH_LOCATIONS } from "../constants/observationData"
+import {
+  choseThisVisit, gpsTriedThisVisit, initialBeach, isBeach, loadHomeBeach, markChosenThisVisit, markGpsTried,
+  nearestBeach, saveHomeBeach,
+} from "../lib/beachDefault"
 
-const isBeach = (v: string | null): v is BeachLocation =>
-  !!v && BEACH_LOCATIONS.some((b) => b.value === v)
+const writeLastViewed = (b: BeachLocation) => {
+  try {
+    localStorage.setItem(BEACH_KEY, b)
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new Event("samudra-beach-changed"))
+}
 
-/** Selected beach, shared between pages and with the service worker (push filtering). */
+const readLastViewed = () => {
+  try {
+    return localStorage.getItem(BEACH_KEY)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Beach shown in the app, shared between pages. Opens on the home beach (Profil), else the nearest
+ * beach from GPS, else the last beach viewed (see lib/beachDefault.ts). A beach picked by hand is
+ * kept for this visit only.
+ */
 export function useSelectedBeach(): [BeachLocation, (b: BeachLocation) => void] {
-  const [beach, setBeachState] = useState<BeachLocation>(() => {
-    try {
-      const saved = localStorage.getItem(BEACH_KEY)
-      return isBeach(saved) ? saved : "pantai_depok"
-    } catch {
-      return "pantai_depok"
-    }
-  })
+  const [beach, setBeachState] = useState<BeachLocation>(() => initialBeach(readLastViewed()))
 
   const setBeach = useCallback((b: BeachLocation) => {
+    markChosenThisVisit()
     setBeachState(b)
-    try {
-      localStorage.setItem(BEACH_KEY, b)
-    } catch {
-      // ignore
-    }
-    navigator.serviceWorker?.controller?.postMessage({ type: "SET_BEACH_PREFERENCE", value: b })
-    window.dispatchEvent(new Event("samudra-beach-changed"))
+    writeLastViewed(b)
   }, [])
 
   useEffect(() => {
     const onChange = () => {
-      const saved = localStorage.getItem(BEACH_KEY)
+      const saved = readLastViewed()
       if (isBeach(saved)) setBeachState(saved)
     }
+    // Setting a new home beach on the Profil page also shows it.
+    const onHome = () => {
+      const home = loadHomeBeach()
+      if (home) writeLastViewed(home)
+    }
     window.addEventListener("samudra-beach-changed", onChange)
-    return () => window.removeEventListener("samudra-beach-changed", onChange)
+    window.addEventListener("samudra-home-beach-changed", onHome)
+    return () => {
+      window.removeEventListener("samudra-beach-changed", onChange)
+      window.removeEventListener("samudra-home-beach-changed", onHome)
+    }
+  }, [])
+
+  // Default for this visit: home beach, else nearest beach by GPS (asked once per visit).
+  useEffect(() => {
+    if (choseThisVisit()) return
+    const home = loadHomeBeach()
+    if (home) {
+      if (readLastViewed() !== home) writeLastViewed(home)
+      return
+    }
+    if (gpsTriedThisVisit() || typeof navigator === "undefined" || !navigator.geolocation) return
+    markGpsTried()
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (choseThisVisit() || loadHomeBeach()) return
+        const near = nearestBeach(pos.coords.latitude, pos.coords.longitude)
+        if (near) writeLastViewed(near)
+      },
+      () => {
+        // permission refused or no fix: keep the last beach viewed
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 10 * 60_000 },
+    )
   }, [])
 
   return [beach, setBeach]
+}
+
+/** Home beach from the Profil page (null when not set). */
+export function useHomeBeach(): [BeachLocation | null, (b: BeachLocation | null) => void] {
+  const [home, setHome] = useState<BeachLocation | null>(() => loadHomeBeach())
+  useEffect(() => {
+    const onChange = () => setHome(loadHomeBeach())
+    window.addEventListener("samudra-home-beach-changed", onChange)
+    window.addEventListener("storage", onChange)
+    return () => {
+      window.removeEventListener("samudra-home-beach-changed", onChange)
+      window.removeEventListener("storage", onChange)
+    }
+  }, [])
+  return [home, saveHomeBeach]
 }
 
 export function useProfile(): FishermanProfile | null {

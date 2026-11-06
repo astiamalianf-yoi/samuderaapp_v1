@@ -17,6 +17,9 @@ const locationKeywords: Record<BeachLocation, string[]> = {
   pantai_ulee_lheue: ["Banda Aceh", "Aceh"],
   pantai_depok: ["Bantul", "DI Yogyakarta", "Yogyakarta", "DIY"],
   pantai_samas: ["Bantul", "DI Yogyakarta", "Yogyakarta", "DIY"],
+  pantai_pangandaran: ["Pangandaran", "Jawa Barat"],
+  pantai_batu_karas: ["Pangandaran", "Jawa Barat"],
+  pantai_bojongsalawe: ["Pangandaran", "Jawa Barat"],
 }
 
 /**
