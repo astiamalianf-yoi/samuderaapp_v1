@@ -42,7 +42,8 @@ services:
       REDIS_URL: redis://redis:6379
       ML_BASE_URL: http://ml:8000
       DATABASE_URL: sqlite:///app/data/disaster.db
-      BASE_URL: ${BASE_URL:-https://api.samudraapp.id}
+      BASE_URL: ${BASE_URL:-https://${API_DOMAIN:-api.samudraapp.com}}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://${APP_DOMAIN:-www.samudraapp.com},https://${APP_APEX_DOMAIN:-samudraapp.com}}
       JWT_AUTH_ENABLED: ${JWT_AUTH_ENABLED:-false}
       JWT_SECRET: ${JWT_SECRET:-}
       OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}
@@ -74,7 +75,7 @@ services:
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.peringatan-backend.rule=Host(`api.samudraapp.id`)"
+      - "traefik.http.routers.peringatan-backend.rule=Host(`${API_DOMAIN:-api.samudraapp.com}`)"
       - "traefik.http.routers.peringatan-backend.entrypoints=websecure"
       - "traefik.http.routers.peringatan-backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.peringatan-backend.loadbalancer.server.port=3000"
@@ -85,11 +86,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        BACKEND_URL: https://api.samudraapp.id
+        BACKEND_URL: https://${API_DOMAIN:-api.samudraapp.com}
     container_name: peringatan-frontend
     restart: unless-stopped
     environment:
-      BACKEND_URL: https://api.samudraapp.id
+      BACKEND_URL: https://${API_DOMAIN:-api.samudraapp.com}
     depends_on:
       - backend
     networks:
@@ -97,7 +98,7 @@ services:
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.peringatan-frontend.rule=Host(`samudraapp.id`) || Host(`www.samudraapp.id`)"
+      - "traefik.http.routers.peringatan-frontend.rule=Host(`${APP_DOMAIN:-www.samudraapp.com}`) || Host(`${APP_APEX_DOMAIN:-samudraapp.com}`)"
       - "traefik.http.routers.peringatan-frontend.entrypoints=websecure"
       - "traefik.http.routers.peringatan-frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.peringatan-frontend.loadbalancer.server.port=3001"

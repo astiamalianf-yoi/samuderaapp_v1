@@ -76,8 +76,8 @@ function parseCsvEnv(value: string | undefined, fallback: string[]) {
 // to the frontend origins blocks cross-origin browser abuse without affecting users.
 // Use "*" (single entry) to allow any origin.
 export const CORS_ALLOWED_ORIGINS = parseCsvEnv(process.env.CORS_ALLOWED_ORIGINS, [
-	"https://samudraapp.id",
-	"https://www.samudraapp.id",
+	"https://www.samudraapp.com",
+	"https://samudraapp.com",
 	"http://localhost:3000",
 	"http://localhost:3001",
 ]);

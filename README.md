@@ -63,8 +63,8 @@ Komunitas nelayan di desa pesisir (Aceh dan Yogyakarta)
 ### 1. Clone & Setup Submodule
 
 ```bash
-git clone --recurse-submodules https://github.com/keepurspiritbruv/peringatancuacav3.git
-cd peringatancuacav3
+git clone https://github.com/astiamalianf-yoi/samuderaapp_v1.git
+cd samuderaapp_v1
 ```
 
 Jika sudah clone tanpa `--recurse-submodules`:
@@ -231,6 +231,19 @@ Pastikan Redis jalan di `localhost:6379`.
 
 ---
 
+## Domain Produksi
+
+Default: PWA di `https://www.samudraapp.com` (juga `samudraapp.com`), API di `https://api.samudraapp.com`.
+Ganti lewat `.env` di server bila perlu:
+
+```bash
+APP_DOMAIN=www.samudraapp.com
+APP_APEX_DOMAIN=samudraapp.com
+API_DOMAIN=api.samudraapp.com
+```
+
+DNS: arahkan record A untuk `samudraapp.com`, `www` dan `api` ke IP server sebelum `docker compose up`, agar Let's Encrypt dapat menerbitkan sertifikat.
+
 ## Deployment ke VPS
 
 ### 1. Install Docker di VPS
@@ -243,8 +256,8 @@ sudo usermod -aG docker $USER
 ### 2. Clone & Jalankan
 
 ```bash
-git clone --recurse-submodules https://github.com/keepurspiritbruv/peringatancuacav3.git
-cd peringatancuacav3
+git clone https://github.com/astiamalianf-yoi/samuderaapp_v1.git
+cd samuderaapp_v1
 docker compose up -d --build
 ```
 
