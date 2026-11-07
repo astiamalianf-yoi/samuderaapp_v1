@@ -51,7 +51,7 @@ describe("Daftar (Profil page)", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it("registers and keeps only the token and last 4 digits on the phone", async () => {
+  it("registers with year answers; the full number stays on this phone only (for help requests)", async () => {
     localStorage.setItem(HOME_BEACH_KEY, "pantai_lampuuk")
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       ok: true, token: "t".repeat(43), created: true,
@@ -70,10 +70,11 @@ describe("Daftar (Profil page)", () => {
     expect(String(url)).toContain("/api/fishermen/register")
     const sent = JSON.parse(String((init as RequestInit).body))
     expect(sent).toMatchObject({ phone: "0812 3456 7890", homeBeach: "pantai_lampuuk", consent: true })
-    expect(Object.keys(sent.profile)).toContain("age")
+    expect(sent.profile).toMatchObject({ birth_year: expect.any(Number), fishing_start_year: expect.any(Number), lik_start_year: expect.any(Number) })
+    expect(sent.profile.age).toBeUndefined()
 
     const reg = loadRegistration()!
     expect(reg.phoneLast4).toBe("7890")
-    expect(JSON.stringify(localStorage)).not.toContain("81234567890")
+    expect(reg.phone).toBe("6281234567890")
   })
 })

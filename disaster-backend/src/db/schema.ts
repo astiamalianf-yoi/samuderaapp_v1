@@ -62,9 +62,54 @@ export const fishermen = sqliteTable("fishermen", {
 	phoneHash: text("phone_hash").notNull().unique(),
 	phoneLast4: text("phone_last4").notNull(),
 	homeBeach: text("home_beach").notNull(),
-	profile: text("profile", { mode: "json" }).$type<Record<string, number>>(),
+	/** Registration answers (years, hazards list, counts): see lib/adaptive-profile.ts. */
+	profile: text("profile", { mode: "json" }).$type<Record<string, unknown>>(),
 	tokenHash: text("token_hash").notNull(),
 	consentAt: text("consent_at").notNull(),
 	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 	updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/**
+ * Every sign report by a registered fisherman (app or WhatsApp), counted or not. Used for his
+ * activity (reports per month, signs used) and as the per-fisherman log of the field study.
+ * (The reports table only holds reports that triggered a warning.)
+ */
+export const fishermanReports = sqliteTable("fisherman_reports", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	fishermanId: text("fisherman_id").notNull().references(() => fishermen.id),
+	beach: text("beach").notNull(),
+	signs: text("signs", { mode: "json" }).$type<string[]>().notNull(),
+	channel: text("channel").notNull(),
+	counted: integer("counted", { mode: "boolean" }).notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/** "Lapor kejadian": a fisherman met dangerous weather at sea, optionally asking for help. */
+export const incidents = sqliteTable("incidents", {
+	id: text("id").$defaultFn(() => crypto.randomUUID()).primaryKey(),
+	fishermanId: text("fisherman_id").notNull().references(() => fishermen.id),
+	beach: text("beach").notNull(),
+	type: text("type").notNull(),
+	needHelp: integer("need_help", { mode: "boolean" }).notNull().default(false),
+	latitude: real("latitude"),
+	longitude: real("longitude"),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/**
+ * Researcher log: the fisherman's effective profile and the Random Forest output each time it is
+ * recomputed (registration, report, incident). Not shown to the fisherman.
+ */
+export const fishermanClassHistory = sqliteTable("fisherman_class_history", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	fishermanId: text("fisherman_id").notNull().references(() => fishermen.id),
+	reason: text("reason").notNull(),
+	effectiveProfile: text("effective_profile", { mode: "json" }).$type<Record<string, number>>().notNull(),
+	activity: text("activity", { mode: "json" }).$type<Record<string, unknown>>(),
+	meanProbability: real("mean_probability"),
+	behaviouralClass: integer("behavioural_class"),
+	perSign: text("per_sign", { mode: "json" }).$type<Record<string, number | null>>(),
+	source: text("source"),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 });

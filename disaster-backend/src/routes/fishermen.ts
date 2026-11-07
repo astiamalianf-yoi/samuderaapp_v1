@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { findFishermanByToken, registerFisherman, toPublic, updateFisherman } from "../lib/fishermen";
+import { loadActivity } from "../lib/adaptive-profile";
+import { recordClass } from "../lib/class-history";
 
 const route = new Hono();
 
@@ -24,6 +26,8 @@ route.post("/fishermen/register", async (c) => {
 	if (!body) return c.json({ ok: false, error: "Invalid JSON" }, 400);
 	const res = await registerFisherman(body);
 	if (!res.ok) return c.json({ ok: false, error: res.error, message: ERRORS[res.error] }, 422);
+	const row = findFishermanByToken(res.token);
+	if (row) void recordClass(row, res.created ? "registration" : "re-registration");
 	return c.json({ ok: true, fisherman: res.fisherman, token: res.token, created: res.created }, res.created ? 201 : 200);
 });
 
@@ -31,7 +35,8 @@ route.post("/fishermen/register", async (c) => {
 route.get("/fishermen/me", (c) => {
 	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
 	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
-	return c.json({ ok: true, fisherman: toPublic(f) });
+	// His own activity is shown to him; the model category is not (researchers only).
+	return c.json({ ok: true, fisherman: toPublic(f), activity: loadActivity(f.id) });
 });
 
 /** PUT /api/fishermen/me { homeBeach?, profile? } (X-Fisherman-Token) */
@@ -42,6 +47,8 @@ route.put("/fishermen/me", async (c) => {
 	if (!body) return c.json({ ok: false, error: "Invalid JSON" }, 400);
 	const res = updateFisherman(f, body);
 	if (!res.ok) return c.json({ ok: false, error: res.error, message: ERRORS[res.error] }, 422);
+	const row = findFishermanByToken(c.req.header("X-Fisherman-Token"));
+	if (row) void recordClass(row, "profile-update");
 	return c.json({ ok: true, fisherman: res.fisherman });
 });
 

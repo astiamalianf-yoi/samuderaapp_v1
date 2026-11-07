@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { sendOpenClawAlert } from "../lib/openclaw";
 import { findFishermanByToken, fishermanReporterKey } from "../lib/fishermen";
+import { logFishermanReport } from "../lib/adaptive-profile";
+import { recordClass } from "../lib/class-history";
 import { tokenFrom } from "./fishermen";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
@@ -295,6 +297,11 @@ route.post("/report", async (c) => {
 			reporterKey,
 			REPORT_REPEAT_WINDOW_MS,
 		);
+		if (fisherman) {
+			// His activity raises his profile (reports per month, signs used); see adaptive-profile.ts.
+			logFishermanReport(fisherman.id, beachLocation, input.lik_codes, "PWA", (duplicateCodes ?? []).length < input.lik_codes.length);
+			void recordClass(fisherman, "report");
+		}
 
 		if (triggeredCodes.length === 0) {
 			await logReportSyncEvent({

@@ -7,6 +7,7 @@ import { MapPage } from "./pages/MapPage"
 import { KnowledgePage } from "./pages/KnowledgePage"
 import { ProfilePage } from "./pages/ProfilePage"
 import { OnboardingPage } from "./pages/OnboardingPage"
+import { IncidentPage } from "./pages/IncidentPage"
 import { PWABadge } from "./components/PWABadge"
 import { needsOnboarding } from "./lib/onboarding"
 
@@ -21,6 +22,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/mulai" element={<OnboardingPage />} />
+        <Route path="/kejadian" element={<IncidentPage />} />
         <Route path="/lapor" element={<ReportPage />} />
         <Route path="/report" element={<Navigate to="/lapor" replace />} />
         <Route path="/peta" element={<MapPage />} />

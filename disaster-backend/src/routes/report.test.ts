@@ -46,6 +46,8 @@ mock.module("../lib/rate-limit", () => ({
 // Registered fisherman by default; a test sets this to null to check the 401.
 let registeredFisherman: { id: string } | null = { id: "fisher-1" };
 const mockFindFishermanByToken = mock((token: string | null) => (token ? registeredFisherman : null));
+mock.module("../lib/adaptive-profile", () => ({ logFishermanReport: () => {} }));
+mock.module("../lib/class-history", () => ({ recordClass: async () => {} }));
 mock.module("../lib/fishermen", () => ({
 	findFishermanByToken: mockFindFishermanByToken,
 	fishermanReporterKey: (f: { id: string }) => `fisher:${f.id}`,

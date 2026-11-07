@@ -1,13 +1,22 @@
 import { API_BASE_URL } from "../config"
-import type { FishermanProfile } from "../lib/profile"
+import type { ProfileAnswers } from "../lib/profile"
 import type { BeachLocation } from "../types/api"
 
 export interface PublicFisherman {
   id: string
   phoneLast4: string
   homeBeach: BeachLocation
-  profile: FishermanProfile | null
+  profile: ProfileAnswers | null
 }
+
+export interface Activity {
+  reports_30d: number
+  signs_12m: string[]
+  incidents_total: number
+  incident_hazards: string[]
+}
+
+export type IncidentType = "angin_kencang" | "gelombang_tinggi" | "badai" | "perahu_rusak"
 
 export class RegistrationError extends Error {
   code: string
@@ -24,7 +33,7 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export const fishermenService = {
-  async register(input: { phone: string; homeBeach: BeachLocation; profile: FishermanProfile; consent: true }) {
+  async register(input: { phone: string; homeBeach: BeachLocation; profile: ProfileAnswers; consent: true }) {
     const res = await fetch(`${API_BASE_URL}/api/fishermen/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -33,12 +42,28 @@ export const fishermenService = {
     return json<{ ok: true; fisherman: PublicFisherman; token: string; created: boolean }>(res)
   },
 
-  async update(token: string, patch: { homeBeach?: BeachLocation; profile?: FishermanProfile }) {
+  async update(token: string, patch: { homeBeach?: BeachLocation; profile?: ProfileAnswers }) {
     const res = await fetch(`${API_BASE_URL}/api/fishermen/me`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-Fisherman-Token": token },
       body: JSON.stringify(patch),
     })
     return json<{ ok: true; fisherman: PublicFisherman }>(res)
+  },
+
+  async me(token: string) {
+    const res = await fetch(`${API_BASE_URL}/api/fishermen/me`, { headers: { "X-Fisherman-Token": token } })
+    return json<{ ok: true; fisherman: PublicFisherman; activity: Activity }>(res)
+  },
+
+  async reportIncident(token: string, body: {
+    beach: BeachLocation; type: IncidentType; needHelp: boolean; lat?: number; lon?: number; contactPhone?: string
+  }) {
+    const res = await fetch(`${API_BASE_URL}/api/incidents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Fisherman-Token": token },
+      body: JSON.stringify(body),
+    })
+    return json<{ ok: true; incidentId: string; helpSent: boolean; helpReason: string | null }>(res)
   },
 }

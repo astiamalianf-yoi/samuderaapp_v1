@@ -3,6 +3,8 @@ import { riskLabelFor } from "../lib/whatsapp-commands";
 import { redis } from "../lib/redis";
 import { sendOpenClawAlert } from "../lib/openclaw";
 import { findFishermanByPhone, fishermanReporterKey } from "../lib/fishermen";
+import { logFishermanReport } from "../lib/adaptive-profile";
+import { recordClass } from "../lib/class-history";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
@@ -83,6 +85,10 @@ route.get("/report/submit", async (c) => {
 		reporterKey,
 		REPORT_REPEAT_WINDOW_MS,
 	);
+	if (registered) {
+		logFishermanReport(registered.id, beachLocation, lik_codes, isWA ? "WHATSAPP" : channel, (duplicateCodes ?? []).length < lik_codes.length);
+		void recordClass(registered, "report");
+	}
 
 	await redis.xAdd(REPORT_SYNC_STREAM, "*", {
 		json: JSON.stringify({

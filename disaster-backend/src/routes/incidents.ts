@@ -1,0 +1,95 @@
+import { Hono } from "hono";
+import { initDb as getDb } from "../db";
+import { incidents } from "../db/schema";
+import { findFishermanByToken, normalizePhone } from "../lib/fishermen";
+import { INCIDENT_TYPES, type IncidentType } from "../lib/adaptive-profile";
+import { recordClass } from "../lib/class-history";
+import { sendOpenClawAlert } from "../lib/openclaw";
+import { redis } from "../lib/redis";
+import { BEACH_DISPLAY_NAMES } from "./report";
+import { ALLOWED_BEACH_LOCATIONS } from "../types";
+import { tokenFrom } from "./fishermen";
+
+const route = new Hono();
+
+export const INCIDENT_LABEL: Record<IncidentType, string> = {
+	angin_kencang: "Angin kencang di laut",
+	gelombang_tinggi: "Gelombang tinggi",
+	badai: "Badai / hujan lebat",
+	perahu_rusak: "Perahu rusak / terbalik",
+};
+
+/** One help message per fisherman per 10 minutes (taps repeated in panic are sent once). */
+const HELP_COOLDOWN_SECONDS = 10 * 60;
+
+const wib = (d = new Date()) =>
+	new Intl.DateTimeFormat("id-ID", {
+		timeZone: "Asia/Jakarta", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+	}).format(d) + " WIB";
+
+const showPhone = (digits: string) => `0${digits.slice(2, 5)}-${digits.slice(5, 9)}-${digits.slice(9)}`;
+
+/** WhatsApp group text for a help request. The number is used for this message only, never stored. */
+export function formatHelpMessage(o: { beach: string; type: IncidentType; lat?: number | null; lon?: number | null; phone?: string | null; at?: Date }) {
+	const lines = [
+		"🆘 *NELAYAN BUTUH BANTUAN*",
+		`📍 ${BEACH_DISPLAY_NAMES[o.beach] ?? o.beach}`,
+		`⚠️ ${INCIDENT_LABEL[o.type]}`,
+		`🕐 ${wib(o.at)}`,
+		o.lat != null && o.lon != null
+			? `🗺️ Lokasi: https://maps.google.com/?q=${o.lat.toFixed(5)},${o.lon.toFixed(5)}`
+			: "🗺️ Lokasi tidak dibagikan",
+		o.phone ? `📞 Hubungi: ${showPhone(o.phone)} (WhatsApp)` : "📞 Nomor tidak dibagikan",
+		"",
+		"Yang terdekat mohon segera bantu. Darurat: Basarnas *115* atau *112*.",
+	];
+	return lines.join("\n");
+}
+
+const coord = (v: unknown, lim: number) => (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= lim ? v : null);
+
+/**
+ * POST /api/incidents { beach, type, needHelp, lat?, lon?, contactPhone? } (X-Fisherman-Token)
+ * "Lapor kejadian": raises his level of interaction with disaster; with needHelp, a help message
+ * goes to the WhatsApp group(s).
+ */
+route.post("/incidents", async (c) => {
+	const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+	if (!body) return c.json({ ok: false, error: "Invalid JSON" }, 400);
+	const fisherman = findFishermanByToken(tokenFrom(c.req.header("X-Fisherman-Token"), body));
+	if (!fisherman) return c.json({ ok: false, error: "registration_required" }, 401);
+
+	const beach = typeof body.beach === "string" ? body.beach : "";
+	if (!(ALLOWED_BEACH_LOCATIONS as readonly string[]).includes(beach)) return c.json({ ok: false, error: "invalid_beach" }, 400);
+	const type = body.type as IncidentType;
+	if (!INCIDENT_TYPES.includes(type)) return c.json({ ok: false, error: "invalid_type" }, 400);
+	const needHelp = body.needHelp === true;
+	const lat = coord(body.lat, 90);
+	const lon = coord(body.lon, 180);
+
+	const row = getDb()
+		.insert(incidents)
+		.values({ fishermanId: fisherman.id, beach, type, needHelp, latitude: lat, longitude: lon })
+		.returning()
+		.get();
+
+	let helpSent = false;
+	let helpReason: string | null = null;
+	if (needHelp) {
+		const fresh = await redis
+			.set(`incident:help:${fisherman.id}`, row.id, { NX: true, EX: HELP_COOLDOWN_SECONDS })
+			.catch(() => "OK");
+		if (fresh === "OK") {
+			const phone = normalizePhone(typeof body.contactPhone === "string" ? body.contactPhone : null);
+			await sendOpenClawAlert(formatHelpMessage({ beach, type, lat, lon, phone }))
+				.then(() => { helpSent = true; })
+				.catch(() => { helpReason = "whatsapp_unavailable"; });
+		} else {
+			helpReason = "already_sent";
+		}
+	}
+	void recordClass(fisherman, "incident");
+	return c.json({ ok: true, incidentId: row.id, helpSent, helpReason }, 201);
+});
+
+export default route;

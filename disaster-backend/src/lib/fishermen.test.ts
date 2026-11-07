@@ -16,9 +16,9 @@ mock.module("../db", () => ({ initDb: () => db, getDb: () => db, schema }));
 const F = (await import("./fishermen.ts?real-fishermen")) as typeof import("./fishermen");
 
 const profile = {
-	age: 45, fishing_experience: 20, fishing_role: 1, head_of_community: 0, fishing_duration: 1,
-	disaster_experience_count: 2, disaster_interaction: 3, lik_combination_count: 4, usage_duration: 10,
-	usage_frequency_min: 2, usage_frequency_max: 4,
+	birth_year: 1981, fishing_start_year: 2001, lik_start_year: 2010, fishing_role: 1, head_of_community: 0,
+	fishing_duration: 1, hazards: ["angin_kencang", "gelombang_tinggi"], disaster_interaction: 3,
+	lik_combination_count: 4, usage_frequency_min: 2, usage_frequency_max: 4,
 };
 
 describe("normalizePhone", () => {
@@ -59,6 +59,7 @@ describe("registration", () => {
 		expect(await F.registerFisherman({ ...base, phone: "123" })).toEqual({ ok: false, error: "invalid_phone" });
 		expect(await F.registerFisherman({ ...base, homeBeach: "pantai_kuta" })).toEqual({ ok: false, error: "invalid_beach" });
 		expect(await F.registerFisherman({ ...base, profile: { age: 45 } })).toEqual({ ok: false, error: "invalid_profile" });
+		expect(await F.registerFisherman({ ...base, profile: { ...profile, fishing_start_year: 1970 } })).toEqual({ ok: false, error: "invalid_profile" });
 	});
 
 	test("the app token and the WhatsApp number find the same fisherman (one reporter key)", () => {

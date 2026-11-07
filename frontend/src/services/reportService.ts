@@ -96,9 +96,11 @@ export const reportService = {
   },
 
   async getPersonalWarning(beachLocation: BeachLocation, profile: FishermanProfile): Promise<PersonalWarningResponse> {
+    // Registered: the server uses his adaptive profile (answers raised by his activity).
+    const token = loadRegistration()?.token;
     const response = await fetch(`${API_BASE_URL}/api/warning/personal`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Fisherman-Token': token } : {}) },
       body: JSON.stringify({ beach_location: beachLocation, fisherman_profile: profile }),
     });
     return handleResponse<PersonalWarningResponse>(response);

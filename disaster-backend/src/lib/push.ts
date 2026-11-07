@@ -1,3 +1,5 @@
+import { findFishermanById } from "./fishermen";
+import { currentEffectiveProfile } from "./adaptive-profile";
 import {
 	sendNotification,
 	setVapidDetails,
@@ -16,6 +18,8 @@ import { computePersonalWarning, parseFishermanProfile, type FishermanProfile } 
 export type PushMetadata = {
 	beach_location?: string;
 	fisherman_profile?: FishermanProfile;
+	/** Set by the server from the fisherman token at subscribe; his adaptive profile is used at send time. */
+	fisherman_id?: string;
 };
 
 type StoredSubscription = PushSubscription & { metadata?: PushMetadata };
@@ -43,6 +47,20 @@ export function initWebPush() {
 
 export function isPushConfigured() {
 	return pushConfigured;
+}
+
+/** Registered fisherman: his adaptive profile now (it changes with his activity); else the phone's copy. */
+function profileForSubscriber(metadata?: PushMetadata): FishermanProfile | null {
+	if (metadata?.fisherman_id) {
+		try {
+			const f = findFishermanById(metadata.fisherman_id);
+			const p = f && currentEffectiveProfile(f);
+			if (p) return p;
+		} catch {
+			// database unavailable: fall back to the phone's copy
+		}
+	}
+	return metadata?.fisherman_profile ?? null;
 }
 
 export function parsePushMetadata(input: unknown): PushMetadata | undefined {
@@ -165,8 +183,9 @@ export async function sendPushAlertToAll(alertJson: string) {
 		}
 
 		let payload = genericPayload;
-		if (metadata?.fisherman_profile && alertEvent.alertId && codes.length) {
-			const personal = await computePersonalWarning(beach, codes, metadata.fisherman_profile, alertEvent.alertId).catch(() => null);
+		const profile = profileForSubscriber(metadata);
+		if (profile && alertEvent.alertId && codes.length) {
+			const personal = await computePersonalWarning(beach, codes, profile, alertEvent.alertId).catch(() => null);
 			if (personal?.warning_strategy) {
 				payload = JSON.stringify(buildPushPayload(alertEvent, personal));
 				personalised += 1;

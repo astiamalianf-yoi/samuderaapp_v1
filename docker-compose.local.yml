@@ -50,6 +50,8 @@ services:
       DATABASE_URL: sqlite:///app/data/disaster.db
       BASE_URL: http://localhost:3000
       JWT_AUTH_ENABLED: "false"
+      # Local testing only: researcher endpoints with a simple key.
+      RESEARCH_API_KEY: ${RESEARCH_API_KEY:-local-research-key}
       ENABLE_IOT_MQTT_DELIVERY: "true"
       MQTT_BROKER_URL: mqtt://mosquitto:1883
       MQTT_TOPIC_PREFIX: alert

@@ -46,6 +46,10 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://${APP_DOMAIN:-www.samudraapp.com},https://${APP_APEX_DOMAIN:-samudraapp.com}}
       JWT_AUTH_ENABLED: ${JWT_AUTH_ENABLED:-false}
       JWT_SECRET: ${JWT_SECRET:-}
+      # Keyed hash of fishermen's WhatsApp numbers: set a long random value and keep it private.
+      FISHERMAN_HASH_SECRET: ${FISHERMAN_HASH_SECRET:-}
+      # Researcher endpoints (/api/research/*) are off unless this is set.
+      RESEARCH_API_KEY: ${RESEARCH_API_KEY:-}
       OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}
       OPENCLAW_HOOK_TOKEN: ${OPENCLAW_HOOK_TOKEN:-}
       OPENCLAW_BROADCAST_GROUPS: ${OPENCLAW_BROADCAST_GROUPS:-}

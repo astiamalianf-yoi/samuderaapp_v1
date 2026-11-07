@@ -108,6 +108,8 @@ export const JWT_PUBLIC_PATHS = parseCsvEnv(process.env.JWT_PUBLIC_PATHS, [
 	"/api/openclaw/webhook",
 	"/api/warning/personal",
 	"/api/fishermen",
+	"/api/incidents",
+	"/api/research",
 ]);
 export const AUTH_USER_KEY_PREFIX = process.env.AUTH_USER_KEY_PREFIX ?? "auth:user";
 export const AUTH_USER_EMAIL_KEY_PREFIX =

@@ -4,7 +4,7 @@ import { initDb as getDb } from "../db";
 // initDb() returns the open database (and opens it on first use, e.g. in tests).
 import { fishermen } from "../db/schema";
 import { ALLOWED_BEACH_LOCATIONS } from "../types";
-import { parseFishermanProfile } from "./personal-warning";
+import { parseAnswers, type ProfileAnswers } from "./adaptive-profile";
 
 /**
  * Fisherman registration (decided with the researcher, 7 Nov 2026):
@@ -42,7 +42,8 @@ export type RegisterResult =
 	| { ok: true; fisherman: PublicFisherman; token: string; created: boolean }
 	| { ok: false; error: "invalid_phone" | "invalid_beach" | "invalid_profile" | "consent_required" };
 
-export type PublicFisherman = { id: string; phoneLast4: string; homeBeach: string; profile: Record<string, number> | null };
+/** `profile` = his registration answers (years, hazards, counts), never the model category. */
+export type PublicFisherman = { id: string; phoneLast4: string; homeBeach: string; profile: Record<string, unknown> | null };
 
 export const toPublic = (f: Fisherman): PublicFisherman => ({
 	id: f.id,
@@ -62,7 +63,7 @@ export async function registerFisherman(input: RegisterInput): Promise<RegisterR
 	const digits = normalizePhone(typeof input.phone === "string" ? input.phone : null);
 	if (!digits) return { ok: false, error: "invalid_phone" };
 	if (!isBeach(input.homeBeach)) return { ok: false, error: "invalid_beach" };
-	const profile = parseFishermanProfile(input.profile);
+	const profile: ProfileAnswers | null = parseAnswers(input.profile);
 	if (!profile) return { ok: false, error: "invalid_profile" };
 
 	const db = getDb();
@@ -116,7 +117,7 @@ export function updateFisherman(
 		set.homeBeach = patch.homeBeach;
 	}
 	if (patch.profile !== undefined) {
-		const profile = parseFishermanProfile(patch.profile);
+		const profile = parseAnswers(patch.profile);
 		if (!profile) return { ok: false, error: "invalid_profile" };
 		set.profile = profile;
 	}
@@ -126,3 +127,8 @@ export function updateFisherman(
 
 /** One reporter key for both channels: a registered fisherman is "fisher:<id>" in the app and in WhatsApp. */
 export const fishermanReporterKey = (f: Fisherman) => `fisher:${f.id}`;
+
+export function findFishermanById(id: string | null | undefined): Fisherman | null {
+	if (!id) return null;
+	return getDb().select().from(fishermen).where(eq(fishermen.id, id)).get() ?? null;
+}

@@ -8,6 +8,8 @@ export interface Registration {
   fishermanId: string
   phoneLast4: string
   homeBeach: string
+  /** Full WhatsApp number, kept on this phone only (the server keeps a hash), for help requests. */
+  phone?: string
 }
 
 export const REGISTRATION_KEY = "samudra.registration"

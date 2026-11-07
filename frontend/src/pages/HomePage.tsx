@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { ArrowRight, Megaphone } from "lucide-react"
+import { ArrowRight, Megaphone, Siren } from "lucide-react"
 import { AppShell, WhatsAppGroupCard } from "../components/layout/AppShell"
 import { BeachPicker } from "../components/BeachPicker"
 import { WarningStatusCard } from "../components/WarningStatusCard"
@@ -33,6 +33,18 @@ export function HomePage() {
             <span className="block text-base">
               {registration ? "Lapor sekarang, cukup 2 sentuhan" : "Daftar sekali dulu, lalu lapor dengan 2 sentuhan"}
             </span>
+          </span>
+          <ArrowRight className="w-6 h-6" aria-hidden />
+        </Link>
+
+        <Link to="/kejadian"
+          className="flex items-center gap-4 rounded-2xl border-2 border-red-500 bg-white text-red-700 p-4 active:scale-[0.99]">
+          <span className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+            <Siren className="w-7 h-7" aria-hidden />
+          </span>
+          <span className="flex-1">
+            <span className="block text-lg font-extrabold">Bahaya di laut?</span>
+            <span className="block text-base text-gray-700">Lapor kejadian atau minta bantuan</span>
           </span>
           <ArrowRight className="w-6 h-6" aria-hidden />
         </Link>

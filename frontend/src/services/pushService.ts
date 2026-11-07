@@ -1,6 +1,7 @@
 import { API_BASE_URL } from "../constants/reportConstants"
 import type { BeachLocation } from "../types/api"
 import type { FishermanProfile } from "../lib/profile"
+import { loadRegistration } from "../lib/registration"
 
 export type VapidKeyResponse = {
   publicKey?: string
@@ -51,10 +52,13 @@ export const pushService = {
     metadata?: { beach_location?: BeachLocation; fisherman_profile?: FishermanProfile },
   ): Promise<void> {
     const payload = metadata ? { subscription, metadata } : subscription
+    // Registered: the server links the subscription to him, so pushes use his adaptive profile.
+    const token = loadRegistration()?.token
     const response = await fetch(`${API_BASE_URL}/api/push/subscribe`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { "X-Fisherman-Token": token } : {}),
       },
       body: JSON.stringify(payload),
     })

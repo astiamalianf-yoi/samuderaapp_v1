@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { getActiveWarning } from "../lib/crowdsource";
 import { computePersonalWarning, parseFishermanProfile } from "../lib/personal-warning";
 import { ALLOWED_BEACH_LOCATIONS } from "../types";
+import { findFishermanByToken } from "../lib/fishermen";
+import { currentEffectiveProfile } from "../lib/adaptive-profile";
 
 const route = new Hono();
 
@@ -18,7 +20,10 @@ route.post("/warning/personal", async (c) => {
 		return c.json({ ok: false, error: `beach_location must be one of: ${ALLOWED_BEACH_LOCATIONS.join(", ")}` }, 400);
 	}
 
-	const profile = parseFishermanProfile(input.fisherman_profile);
+	// A registered fisherman gets his adaptive profile (answers raised by his activity, age for
+	// this year); otherwise the profile sent by the phone is used.
+	const fisherman = findFishermanByToken(c.req.header("X-Fisherman-Token"));
+	const profile = (fisherman && currentEffectiveProfile(fisherman)) || parseFishermanProfile(input.fisherman_profile);
 	if (!profile) return c.json({ ok: false, error: "fisherman_profile is missing or out of range" }, 422);
 
 	const active = await getActiveWarning(beach);
