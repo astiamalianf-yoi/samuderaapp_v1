@@ -43,6 +43,14 @@ mock.module("../lib/rate-limit", () => ({
 	getClientIp: (h: string | undefined | null) => h ?? "unknown",
 }));
 
+// Registered fisherman by default; a test sets this to null to check the 401.
+let registeredFisherman: { id: string } | null = { id: "fisher-1" };
+const mockFindFishermanByToken = mock((token: string | null) => (token ? registeredFisherman : null));
+mock.module("../lib/fishermen", () => ({
+	findFishermanByToken: mockFindFishermanByToken,
+	fishermanReporterKey: (f: { id: string }) => `fisher:${f.id}`,
+}));
+
 mock.module("../lib/bmkg", () => ({
 	persistReport: mockPersistReport,
 	persistShapPrediction: mockPersistShapPrediction,
@@ -72,6 +80,8 @@ mock.module("../config", () => ({
 	ACTIVE_WARNING_TTL_SECONDS: 43200,
 	REPORT_RATE_LIMIT_MAX: 15,
 	REPORT_RATE_LIMIT_WINDOW_SECONDS: 60,
+	REPORT_REPEAT_WINDOW_MS: 300000,
+	REPORT_REQUIRE_REGISTRATION: true,
 }));
 
 import reportRoute from "./report";
@@ -109,7 +119,7 @@ describe("POST /api/report", () => {
 					community_characteristics: community,
 					action_recommendation: "Segera evakuasi",
 					triggered_lik_codes: ["Wn-1"],
-				}), { status: 200, headers: { "content-type": "application/json" } });
+				}), { status: 200, headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" } });
 			}
 			return new Response("not found", { status: 404 });
 		}) as unknown as typeof fetch;
@@ -132,7 +142,7 @@ describe("POST /api/report", () => {
 		mockCheckRateLimit.mockResolvedValue({ allowed: false, count: 16, limit: 15 });
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json", "x-forwarded-for": "9.9.9.9" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json", "x-forwarded-for": "9.9.9.9" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 		expect(res.status).toBe(429);
@@ -144,7 +154,7 @@ describe("POST /api/report", () => {
 		const restore = mockTriggeredFetch();
 		await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 		restore();
@@ -157,7 +167,7 @@ describe("POST /api/report", () => {
 		const restore = mockTriggeredFetch();
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 		restore();
@@ -170,7 +180,7 @@ describe("POST /api/report", () => {
 		const restore = mockTriggeredFetch("Low Actionable");
 		await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 		restore();
@@ -182,7 +192,7 @@ describe("POST /api/report", () => {
 		const restore = mockTriggeredFetch();
 		await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 		restore();
@@ -192,7 +202,7 @@ describe("POST /api/report", () => {
 	test("rejects missing lik_codes", async () => {
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk" }),
 		});
 		expect(res.status).toBe(400);
@@ -203,7 +213,7 @@ describe("POST /api/report", () => {
 	test("rejects empty lik_codes array", async () => {
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: [] }),
 		});
 		expect(res.status).toBe(400);
@@ -212,7 +222,7 @@ describe("POST /api/report", () => {
 	test("rejects missing beach_location", async () => {
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ lik_codes: ["Wn-1"] }),
 		});
 		expect(res.status).toBe(400);
@@ -223,7 +233,7 @@ describe("POST /api/report", () => {
 	test("rejects invalid beach_location", async () => {
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_tidak_ada", lik_codes: ["Wn-1"] }),
 		});
 		expect(res.status).toBe(400);
@@ -232,7 +242,7 @@ describe("POST /api/report", () => {
 	test("rejects invalid clientReportId", async () => {
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"], clientReportId: "not-a-uuid" }),
 		});
 		expect(res.status).toBe(400);
@@ -241,7 +251,7 @@ describe("POST /api/report", () => {
 	test("rejects invalid createdAtClient", async () => {
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"], createdAtClient: -100 }),
 		});
 		expect(res.status).toBe(400);
@@ -253,7 +263,7 @@ describe("POST /api/report", () => {
 
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 
@@ -283,14 +293,14 @@ describe("POST /api/report", () => {
 					sign_description: "Awan gelap",
 					community_characteristics: "Actionable",
 					action_recommendation: "Segera evakuasi",
-				}), { status: 200, headers: { "content-type": "application/json" } });
+				}), { status: 200, headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" } });
 			}
 			return new Response("not found", { status: 404 });
 		}) as unknown as typeof fetch;
 
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 
@@ -329,14 +339,14 @@ describe("POST /api/report", () => {
 					community_characteristics: "Actionable",
 					action_recommendation: "Siaga penuh",
 					triggered_lik_codes: ["Wn-1"],
-				}), { status: 200, headers: { "content-type": "application/json" } });
+				}), { status: 200, headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" } });
 			}
 			return new Response("not found", { status: 404 });
 		}) as unknown as typeof fetch;
 
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 
@@ -364,7 +374,7 @@ describe("POST /api/report", () => {
 
 		const res = await app.request("/api/report", {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: { "x-fisherman-token": "token-of-a-registered-fisherman", "content-type": "application/json" },
 			body: JSON.stringify({ beach_location: "pantai_lampuuk", lik_codes: ["Wn-1"] }),
 		});
 
@@ -373,5 +383,28 @@ describe("POST /api/report", () => {
 		expect(res.status).toBe(502);
 		const body = await res.json();
 		expect(body.error).toContain("ML");
+	});
+});
+
+describe("POST /api/report — registration", () => {
+	test("an app report without a registered fisherman is refused (401)", async () => {
+		const res = await app.request("/api/report", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ lik_codes: ["Wn-3"], beach_location: "pantai_depok" }),
+		});
+		expect(res.status).toBe(401);
+		expect(((await res.json()) as { error: string }).error).toBe("registration_required");
+	});
+
+	test("an unknown token is refused (401)", async () => {
+		registeredFisherman = null;
+		const res = await app.request("/api/report", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Fisherman-Token": "not-a-real-token-xxxxxxxx" },
+			body: JSON.stringify({ lik_codes: ["Wn-3"], beach_location: "pantai_depok" }),
+		});
+		registeredFisherman = { id: "fisher-1" };
+		expect(res.status).toBe(401);
 	});
 });

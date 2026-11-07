@@ -88,6 +88,18 @@ function createTablesIfNotExist(sqlite: Database) {
 			details TEXT,
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
+
+		CREATE TABLE IF NOT EXISTS fishermen (
+			id TEXT PRIMARY KEY NOT NULL,
+			phone_hash TEXT NOT NULL UNIQUE,
+			phone_last4 TEXT NOT NULL,
+			home_beach TEXT NOT NULL,
+			profile TEXT,
+			token_hash TEXT NOT NULL,
+			consent_at TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
 	`);
 	console.log("[db] Tables ensured");
 }

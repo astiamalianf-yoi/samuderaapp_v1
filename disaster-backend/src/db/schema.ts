@@ -51,3 +51,20 @@ export const reassuranceResults = sqliteTable("reassurance_results", {
 	details: text("details").$type<Record<string, unknown>>(),
 	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 });
+
+/**
+ * Registered fishermen (app). Identity = WhatsApp number; only a keyed hash of the number and its
+ * last 4 digits are stored, so the number itself is never kept in the database. The same hash is
+ * computed for WhatsApp senders, which links a fisherman's app and WhatsApp-group reports.
+ */
+export const fishermen = sqliteTable("fishermen", {
+	id: text("id").$defaultFn(() => crypto.randomUUID()).primaryKey(),
+	phoneHash: text("phone_hash").notNull().unique(),
+	phoneLast4: text("phone_last4").notNull(),
+	homeBeach: text("home_beach").notNull(),
+	profile: text("profile", { mode: "json" }).$type<Record<string, number>>(),
+	tokenHash: text("token_hash").notNull(),
+	consentAt: text("consent_at").notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+	updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
+});

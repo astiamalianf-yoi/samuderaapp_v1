@@ -2,6 +2,7 @@ import type { PredictionInput, ReportResponse, HistoryResponse, AckInput, Active
 import type { FishermanProfile } from '../lib/profile';
 
 import { API_BASE_URL } from '../config';
+import { loadRegistration } from '../lib/registration';
 
 export interface BmkgData {
   beach: string;
@@ -58,12 +59,16 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const reportService = {
   async submitReport(data: PredictionInput): Promise<ReportResponse> {
+    // The fisherman's token goes in the header and in the body: a report queued offline by the
+    // service worker is replayed from its body.
+    const token = loadRegistration()?.token;
     const response = await fetch(`${API_BASE_URL}/api/report`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { 'X-Fisherman-Token': token } : {}),
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(token ? { ...data, fishermanToken: token } : data),
     });
 
     return handleResponse<ReportResponse>(response);

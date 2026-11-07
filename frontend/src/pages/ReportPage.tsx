@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { CheckCircle2, Send, WifiOff } from "lucide-react"
+import { CheckCircle2, Send, UserPlus, WifiOff } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BeachPicker } from "../components/BeachPicker"
 import { SIGNS, SIGN_GROUPS, type Sign } from "../constants/signs"
 import { getBeachMeta } from "../constants/observationData"
-import { useSelectedBeach } from "../hooks/useAppState"
-import { reportService } from "../services/reportService"
+import { useRegistration, useSelectedBeach } from "../hooks/useAppState"
+import { ApiError, reportService } from "../services/reportService"
+import { saveRegistration } from "../lib/registration"
+import { WHATSAPP_GROUP_URL } from "../config"
 import { getDeviceId } from "../lib/device"
 
 type Result = { kind: "sent" | "queued" | "offline"; count: number } | { kind: "error"; message: string }
@@ -20,6 +22,7 @@ const newId = () =>
 /** Report a sign in two taps: tap the sign(s) you see, tap "Kirim". */
 export function ReportPage() {
   const [beach, setBeach] = useSelectedBeach()
+  const registration = useRegistration()
   const [selected, setSelected] = useState<string[]>([])
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
@@ -44,6 +47,9 @@ export function ReportPage() {
       if (!navigator.onLine || err instanceof TypeError) {
         setResult({ kind: "offline", count: selected.length })
         setSelected([])
+      } else if (err instanceof ApiError && err.statusCode === 401) {
+        // Registration no longer valid (e.g. the same number registered on another phone).
+        saveRegistration(null)
       } else {
         setResult({ kind: "error", message: err instanceof Error ? err.message : "Gagal mengirim" })
       }
@@ -51,6 +57,8 @@ export function ReportPage() {
       setSending(false)
     }
   }
+
+  if (!registration) return <RegisterFirst />
 
   if (result && result.kind !== "error") {
     return (
@@ -135,5 +143,31 @@ function SignGrid({ signs, selected, onToggle }: { signs: Sign[]; selected: stri
         </section>
       ))}
     </div>
+  )
+}
+
+/** Reporting needs a registered fisherman, so every report is linked to one person. */
+function RegisterFirst() {
+  return (
+    <AppShell title="Lapor" showWhatsApp={false}>
+      <div className="flex flex-col items-center text-center gap-4 pt-8">
+        <UserPlus className="w-20 h-20 text-sky-800" aria-hidden />
+        <h1 className="text-3xl font-black">Daftar dulu untuk melapor</h1>
+        <p className="text-lg max-w-sm">
+          Isi nomor WhatsApp, pantai asal dan 10 pertanyaan singkat, cukup sekali. Dengan begitu laporan Anda
+          dikenali sebagai laporan Anda, dan tidak dihitung dua kali.
+        </p>
+        <Link to="/profil" className="w-full max-w-sm min-h-14 flex items-center justify-center rounded-2xl bg-sky-900 text-white text-lg font-bold">
+          Daftar sekarang
+        </Link>
+        <p className="text-base text-gray-700 max-w-sm">
+          Peringatan tetap bisa dilihat tanpa mendaftar. Anda juga bisa melapor di grup WhatsApp dengan
+          menulis <span className="font-mono font-bold">!lapor</span>.
+        </p>
+        <a href={WHATSAPP_GROUP_URL} target="_blank" rel="noreferrer" className="min-h-12 flex items-center text-lg font-semibold text-emerald-700">
+          Buka grup WhatsApp
+        </a>
+      </div>
+    </AppShell>
   )
 }

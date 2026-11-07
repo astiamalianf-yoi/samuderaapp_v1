@@ -1,9 +1,11 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
-import { Home, Minus, Plus, ShieldCheck } from "lucide-react"
+import { Home, Minus, Phone, Plus, ShieldCheck } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BEACH_LOCATIONS } from "../constants/observationData"
-import { useHomeBeach } from "../hooks/useAppState"
+import { useHomeBeach, useRegistration } from "../hooks/useAppState"
+import { normalizePhone, saveRegistration } from "../lib/registration"
+import { fishermenService } from "../services/fishermenService"
 import { clearProfile, loadProfile, PROFILE_LIMITS, saveProfile, validateProfile, type FishermanProfile } from "../lib/profile"
 
 const HAZARDS = ["Angin kencang", "Gelombang tinggi", "Badai / hujan lebat", "Tsunami", "Gempa", "Banjir rob"]
@@ -13,26 +15,62 @@ const DEFAULTS: Partial<FishermanProfile> = {
   lik_combination_count: 2, usage_frequency_min: 2, usage_frequency_max: 4, disaster_experience_count: 1,
 }
 
-/** One-time profile so the Random Forest can tailor warnings to this fisherman. */
+/**
+ * Registration = WhatsApp number + home beach + consent + the 10 profile questions (the Random
+ * Forest features). Needed to report a sign, so every report is linked to one fisherman; the
+ * same number links his WhatsApp-group reports. Warnings stay open without registering.
+ */
 export function ProfilePage() {
   const saved = loadProfile()
+  const registration = useRegistration()
+  const [home] = useHomeBeach()
   const [p, setP] = useState<Partial<FishermanProfile>>(saved ?? DEFAULTS)
   const [hazards, setHazards] = useState<string[]>(() => HAZARDS.slice(0, saved?.disaster_experience_count ?? 1))
   const [errors, setErrors] = useState<string[]>([])
   const [done, setDone] = useState(false)
+  const [phone, setPhone] = useState("")
+  const [consent, setConsent] = useState(Boolean(registration))
+  const [sending, setSending] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
 
   const set = <K extends keyof FishermanProfile>(k: K, v: FishermanProfile[K]) => setP((cur) => ({ ...cur, [k]: v }))
 
-  const submit = () => {
+  const submit = async () => {
     const full = { ...p, disaster_experience_count: hazards.length } as FishermanProfile
-    const errs = validateProfile(full)
+    const errs: string[] = []
+    // A new number is needed unless this phone is already registered (then it may stay empty).
+    if (!registration || phone.trim()) {
+      if (!normalizePhone(phone)) errs.push("phone")
+    }
+    if (!home) errs.push("home")
+    if (!consent) errs.push("consent")
+    errs.push(...validateProfile(full))
     setErrors(errs)
+    setServerError(null)
     if (errs.length) {
       document.getElementById(`q-${errs[0]}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
       return
     }
-    saveProfile(full)
-    setDone(true)
+    setSending(true)
+    try {
+      const res = registration && !phone.trim()
+        ? { ...(await fishermenService.update(registration.token, { homeBeach: home!, profile: full })), token: registration.token }
+        : await fishermenService.register({ phone, homeBeach: home!, profile: full, consent: true })
+      saveProfile(full)
+      saveRegistration({
+        token: res.token, fishermanId: res.fisherman.id, phoneLast4: res.fisherman.phoneLast4, homeBeach: res.fisherman.homeBeach,
+      })
+      setPhone("")
+      setDone(true)
+    } catch (err) {
+      setServerError(
+        err instanceof TypeError || !navigator.onLine
+          ? "Belum ada sinyal. Pendaftaran perlu internet, coba lagi nanti."
+          : err instanceof Error ? err.message : "Gagal mendaftar",
+      )
+    } finally {
+      setSending(false)
+    }
   }
 
   if (done) {
@@ -40,8 +78,12 @@ export function ProfilePage() {
       <AppShell title="Profil">
         <div className="flex flex-col items-center text-center gap-4 pt-10">
           <ShieldCheck className="w-20 h-20 text-emerald-600" aria-hidden />
-          <h1 className="text-3xl font-black">Profil tersimpan</h1>
-          <p className="text-lg max-w-sm">Mulai sekarang, peringatan di aplikasi ini disesuaikan dengan pengalaman Anda.</p>
+          <h1 className="text-3xl font-black">Anda sudah terdaftar</h1>
+          <p className="text-lg max-w-sm">
+            Sekarang Anda bisa melapor tanda alam. Laporan Anda dari aplikasi dan dari grup WhatsApp (nomor
+            ••••{registration?.phoneLast4}) dikenali sebagai laporan Anda, dan peringatan disesuaikan dengan pengalaman Anda.
+          </p>
+          <Link to="/lapor" className="w-full max-w-sm min-h-14 flex items-center justify-center rounded-2xl bg-orange-600 text-white text-lg font-bold">Lapor tanda alam</Link>
           <Link to="/" className="w-full max-w-sm min-h-14 flex items-center justify-center rounded-2xl bg-sky-900 text-white text-lg font-bold">Kembali ke beranda</Link>
           <button onClick={() => setDone(false)} className="min-h-12 text-lg font-semibold text-sky-800">Ubah jawaban</button>
         </div>
@@ -49,22 +91,37 @@ export function ProfilePage() {
     )
   }
 
-  const err = (k: keyof FishermanProfile) => errors.includes(k)
+  const err = (k: keyof FishermanProfile | "phone" | "home" | "consent") => errors.includes(k)
 
   return (
     <AppShell title="Profil">
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-black">Profil nelayan</h1>
+          <h1 className="text-2xl font-black">{registration ? "Profil nelayan" : "Daftar sebagai nelayan"}</h1>
           <p className="text-base text-gray-700">
-            10 pertanyaan singkat, cukup sekali. Jawaban dipakai untuk memilih peringatan yang paling cocok untuk Anda.
+            {registration
+              ? `Terdaftar dengan nomor WhatsApp ••••${registration.phoneLast4}. Anda bisa mengubah jawaban kapan saja.`
+              : "Daftar sekali untuk bisa melapor tanda alam. Peringatan tetap bisa dilihat tanpa mendaftar."}
           </p>
           <p className="mt-2 text-sm text-gray-600 bg-white rounded-xl border border-gray-200 p-3">
-            🔒 Tidak ada nama atau nomor HP yang diminta. Jawaban disimpan di HP ini dan dikirim ke server Samudra hanya untuk menghitung peringatan.
+            🔒 Nomor WhatsApp dipakai agar laporan Anda dari aplikasi dan dari grup WhatsApp dikenali sebagai laporan
+            Anda. Server tidak menyimpan nomor lengkap, hanya kode acak dan 4 angka terakhir. Tidak ada nama yang diminta.
           </p>
         </div>
 
-        <HomeBeachChooser />
+        <div id="q-phone" className={`rounded-2xl p-3 ${err("phone") ? "bg-red-50 ring-2 ring-red-500" : ""}`}>
+          <label htmlFor="in-phone" className="flex items-center gap-2 text-lg font-bold mb-2">
+            <Phone className="w-5 h-5 text-sky-800" aria-hidden /> Nomor WhatsApp Anda
+          </label>
+          <input id="in-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+            placeholder={registration ? `••••${registration.phoneLast4} (kosongkan jika tidak ganti)` : "contoh: 0812 3456 7890"}
+            className="w-full min-h-14 rounded-xl border-2 border-gray-300 px-4 text-xl" />
+          {err("phone") && <p className="mt-1 text-base text-red-700">Nomor belum benar. Tulis seperti 0812 3456 7890.</p>}
+        </div>
+
+        <div id="q-home" className={`rounded-2xl ${err("home") ? "ring-2 ring-red-500" : ""}`}>
+          <HomeBeachChooser required showError={err("home")} />
+        </div>
 
         <Stepper id="age" label="1. Berapa umur Anda?" unit="tahun" value={p.age} onChange={(v) => set("age", v)} error={err("age")} />
         <Stepper id="fishing_experience" label="2. Sudah berapa tahun menjadi nelayan?" unit="tahun"
@@ -108,17 +165,33 @@ export function ProfilePage() {
             value={p.usage_frequency_max} onChange={(v) => set("usage_frequency_max", v)} error={err("usage_frequency_max")} />
         </div>
 
+        <label id="q-consent" className={`flex items-start gap-3 rounded-2xl border-2 p-4 ${
+          err("consent") ? "bg-red-50 border-red-500" : "bg-white border-gray-300"}`}>
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1 w-7 h-7 shrink-0" />
+          <span className="text-base">
+            Saya setuju nomor WhatsApp, pantai asal, jawaban profil dan laporan saya dipakai untuk sistem peringatan
+            Samudra dan untuk penelitian. Saya bisa berhenti kapan saja.
+          </span>
+        </label>
+
+        {serverError && (
+          <p className="rounded-xl bg-red-50 border border-red-300 p-3 text-base text-red-800">{serverError}</p>
+        )}
+
         {errors.length > 0 && (
           <p className="rounded-xl bg-red-50 border border-red-300 p-3 text-base text-red-800">
             Ada jawaban yang belum diisi atau belum masuk akal (ditandai merah).
           </p>
         )}
 
-        <button onClick={submit} className="w-full min-h-16 rounded-2xl bg-sky-900 text-white text-xl font-extrabold">Simpan profil</button>
-        {saved && (
-          <button onClick={() => { clearProfile(); setP(DEFAULTS); setHazards(HAZARDS.slice(0, 1)) }}
+        <button onClick={submit} disabled={sending}
+          className="w-full min-h-16 rounded-2xl bg-sky-900 text-white text-xl font-extrabold disabled:opacity-60">
+          {sending ? "Mengirim…" : registration ? "Simpan perubahan" : "Daftar"}
+        </button>
+        {(saved || registration) && (
+          <button onClick={() => { clearProfile(); saveRegistration(null); setP(DEFAULTS); setHazards(HAZARDS.slice(0, 1)); setConsent(false) }}
             className="w-full min-h-12 rounded-xl border-2 border-gray-300 text-base font-semibold text-gray-700">
-            Hapus profil dari HP ini
+            Keluar dan hapus profil dari HP ini
           </button>
         )}
       </div>
@@ -172,7 +245,7 @@ function Choice({ id, label, value, options, onChange, error }: {
  * Pantai asal: the beach the app opens on and the beach push alerts are sent for.
  * Saved as soon as it is tapped (separate from the 10 questions, which feed the model).
  */
-function HomeBeachChooser() {
+function HomeBeachChooser({ required = false, showError = false }: { required?: boolean; showError?: boolean }) {
   const [home, setHome] = useHomeBeach()
   return (
     <fieldset className="space-y-2 rounded-2xl bg-white border-2 border-sky-200 p-4">
@@ -194,7 +267,9 @@ function HomeBeachChooser() {
           )
         })}
       </div>
-      {home ? (
+      {required && !home ? (
+        <p className={`text-base ${showError ? "font-semibold text-red-700" : "text-gray-600"}`}>Pilih pantai asal Anda untuk mendaftar.</p>
+      ) : home && !required ? (
         <button type="button" onClick={() => setHome(null)} className="min-h-11 text-base font-semibold text-sky-800">
           Hapus pantai asal (pakai lokasi GPS)
         </button>

@@ -6,12 +6,13 @@ import { WarningStatusCard } from "../components/WarningStatusCard"
 import { BmkgMarineCard } from "../components/BmkgMarineCard"
 import { PushNotificationCard } from "../components/PushNotificationCard"
 import { WeatherAlertList } from "../components/WeatherAlertList"
-import { useBmkg, useHomeBeach, useSelectedBeach } from "../hooks/useAppState"
+import { useBmkg, useHomeBeach, useRegistration, useSelectedBeach } from "../hooks/useAppState"
 import { useWeatherAlerts } from "../hooks/useWeatherAlerts"
 
 export function HomePage() {
   const [beach, setBeach] = useSelectedBeach()
   const [homeBeach] = useHomeBeach()
+  const registration = useRegistration()
   const weather = useWeatherAlerts(beach)
   const bmkg = useBmkg(beach)
 
@@ -22,14 +23,16 @@ export function HomePage() {
 
         <WarningStatusCard beach={beach} bmkg={bmkg} weatherAlerts={weather.alerts} />
 
-        <Link to="/lapor"
+        <Link to={registration ? "/lapor" : "/profil"}
           className="flex items-center gap-4 rounded-2xl bg-orange-600 text-white p-4 shadow-md active:scale-[0.99]">
           <span className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center shrink-0">
             <Megaphone className="w-7 h-7" aria-hidden />
           </span>
           <span className="flex-1">
             <span className="block text-xl font-extrabold">Lihat tanda alam?</span>
-            <span className="block text-base">Lapor sekarang, cukup 2 sentuhan</span>
+            <span className="block text-base">
+              {registration ? "Lapor sekarang, cukup 2 sentuhan" : "Daftar sekali dulu, lalu lapor dengan 2 sentuhan"}
+            </span>
           </span>
           <ArrowRight className="w-6 h-6" aria-hidden />
         </Link>

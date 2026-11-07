@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { riskLabelFor } from "../lib/whatsapp-commands";
 import { redis } from "../lib/redis";
 import { sendOpenClawAlert } from "../lib/openclaw";
+import { findFishermanByPhone, fishermanReporterKey } from "../lib/fishermen";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
@@ -69,9 +70,11 @@ route.get("/report/submit", async (c) => {
 	const reportId = crypto.randomUUID();
 	const threshold = BEACH_THRESHOLDS[beachLocation] ?? REPORT_THRESHOLD;
 
-	const reporterKey = reporterKeyFor(
-		isWA ? { waSender: reporterRaw } : { deviceId: reporterRaw },
-	);
+	// A registered WhatsApp number is the same person as his app reports ("fisher:<id>").
+	const registered = isWA ? findFishermanByPhone(reporterRaw) : null;
+	const reporterKey = registered
+		? fishermanReporterKey(registered)
+		: reporterKeyFor(isWA ? { waSender: reporterRaw } : { deviceId: reporterRaw });
 	const { triggeredCodes, codeCounts, duplicateCodes } = await processReport(
 		beachLocation,
 		lik_codes,
@@ -137,7 +140,7 @@ route.get("/report/submit", async (c) => {
 	try {
 		const savedReport = await persistReport({
 			beachLocation,
-			reporterId: null,
+			reporterId: registered?.id ?? null,
 			source: normalizedChannel,
 			naturalSigns: triggeredCodes,
 			rawBody: { beach_location: beachLocation, lik_codes, createdAtClient, _channel: channel },

@@ -26,6 +26,8 @@ export const REPORT_DEDUPE_PREFIX = process.env.REPORT_DEDUPE_PREFIX ?? "reports
 export const REPORT_WINDOW_MS = Number(process.env.REPORT_WINDOW_MS ?? 24 * 60 * 60 * 1000);
 export const REPORT_THRESHOLD = Number(process.env.REPORT_THRESHOLD ?? 5);
 // Same reporter + same sign + same beach within this window counts as one report (app and WhatsApp alike).
+// App reports need a registered fisherman (X-Fisherman-Token). WhatsApp reports are identified by the number.
+export const REPORT_REQUIRE_REGISTRATION = (process.env.REPORT_REQUIRE_REGISTRATION ?? "true") !== "false";
 export const REPORT_REPEAT_WINDOW_MS = Number(process.env.REPORT_REPEAT_WINDOW_MS ?? 5 * 60 * 1000);
 
 export const BEACH_THRESHOLDS: Record<string, number> = {
@@ -105,6 +107,7 @@ export const JWT_PUBLIC_PATHS = parseCsvEnv(process.env.JWT_PUBLIC_PATHS, [
 	"/api/bmkg",
 	"/api/openclaw/webhook",
 	"/api/warning/personal",
+	"/api/fishermen",
 ]);
 export const AUTH_USER_KEY_PREFIX = process.env.AUTH_USER_KEY_PREFIX ?? "auth:user";
 export const AUTH_USER_EMAIL_KEY_PREFIX =

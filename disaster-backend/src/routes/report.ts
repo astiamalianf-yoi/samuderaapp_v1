@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { sendOpenClawAlert } from "../lib/openclaw";
+import { findFishermanByToken, fishermanReporterKey } from "../lib/fishermen";
+import { tokenFrom } from "./fishermen";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
@@ -14,6 +16,7 @@ import {
 	REPORT_SYNC_STREAM,
 	REPORT_WINDOW_MS,
 	REPORT_REPEAT_WINDOW_MS,
+	REPORT_REQUIRE_REGISTRATION,
 	REPORT_THRESHOLD,
 	BEACH_THRESHOLDS,
 	ACTIVE_WARNING_TTL_SECONDS,
@@ -165,11 +168,25 @@ route.post("/report", async (c) => {
 	}
 
 	const jwtPayload = c.get("jwtPayload") as { sub?: unknown; email?: unknown } | undefined;
-	const reporterUserId = typeof jwtPayload?.sub === "string" ? jwtPayload.sub : null;
+	const jwtUserId = typeof jwtPayload?.sub === "string" ? jwtPayload.sub : null;
 	const reporterEmail = typeof jwtPayload?.email === "string" ? jwtPayload.email : null;
 
 	const input = await c.req.json<PredictionInput>().catch(() => null);
 	if (!input) return c.json({ ok: false, error: "Invalid JSON" }, 400);
+
+	// Who reports: a registered fisherman (token from the app). The token is removed from the
+	// input so it is never stored with the report.
+	const fisherman = findFishermanByToken(
+		tokenFrom(c.req.header("X-Fisherman-Token"), input as unknown as Record<string, unknown>),
+	);
+	delete (input as unknown as Record<string, unknown>).fishermanToken;
+	if (!fisherman && !jwtUserId && REPORT_REQUIRE_REGISTRATION) {
+		return c.json(
+			{ ok: false, error: "registration_required", message: "Lengkapi profil dulu untuk melapor." },
+			401,
+		);
+	}
+	const reporterUserId = jwtUserId ?? fisherman?.id ?? null;
 
 	if (!Array.isArray(input.lik_codes) || input.lik_codes.length === 0) {
 		return c.json({ ok: false, error: "lik_codes required" }, 400);
@@ -264,10 +281,12 @@ route.post("/report", async (c) => {
 		const threshold = BEACH_THRESHOLDS[beachLocation] ?? REPORT_THRESHOLD;
 
 		// Crowdsource queue: accumulate reports per (beach, code) and check threshold
-		const reporterKey = reporterKeyFor({
-			userId: reporterUserId,
-			deviceId: typeof input.deviceId === "string" ? input.deviceId : null,
-		});
+		const reporterKey = fisherman
+			? fishermanReporterKey(fisherman)
+			: reporterKeyFor({
+					userId: reporterUserId,
+					deviceId: typeof input.deviceId === "string" ? input.deviceId : null,
+				});
 		const { triggeredCodes, codeCounts, duplicateCodes } = await processReport(
 			beachLocation,
 			input.lik_codes,

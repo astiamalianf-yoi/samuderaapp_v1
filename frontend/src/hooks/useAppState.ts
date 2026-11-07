@@ -3,6 +3,7 @@ import { reportService } from "../services/reportService"
 import type { BmkgData } from "../services/reportService"
 import type { ActiveReportResponse, BeachLocation, PersonalWarningResponse } from "../types/api"
 import { BEACH_KEY, loadProfile, type FishermanProfile } from "../lib/profile"
+import { loadRegistration, type Registration } from "../lib/registration"
 import {
   choseThisVisit, gpsTriedThisVisit, initialBeach, isBeach, loadHomeBeach, markChosenThisVisit, markGpsTried,
   nearestBeach, saveHomeBeach,
@@ -81,6 +82,21 @@ export function useSelectedBeach(): [BeachLocation, (b: BeachLocation) => void] 
   }, [])
 
   return [beach, setBeach]
+}
+
+/** This phone's registration (null = not registered: warnings only, no reporting). */
+export function useRegistration(): Registration | null {
+  const [reg, setReg] = useState<Registration | null>(() => loadRegistration())
+  useEffect(() => {
+    const onChange = () => setReg(loadRegistration())
+    window.addEventListener("samudra-registration-changed", onChange)
+    window.addEventListener("storage", onChange)
+    return () => {
+      window.removeEventListener("samudra-registration-changed", onChange)
+      window.removeEventListener("storage", onChange)
+    }
+  }, [])
+  return reg
 }
 
 /** Home beach from the Profil page (null when not set). */
