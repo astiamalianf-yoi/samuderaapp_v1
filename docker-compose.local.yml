@@ -55,6 +55,11 @@ services:
       # Trust Index: adaptive (survey + app reports) or paper (Table 2 fixed); confirmation window in hours
       TRUST_INDEX_MODE: ${TRUST_INDEX_MODE:-adaptive}
       TRUST_CONFIRM_WINDOW_HOURS: ${TRUST_CONFIRM_WINDOW_HOURS:-24}
+      # Local testing: BMKG test switch on (POST /api/research/uat/bmkg with X-Research-Key)
+      BMKG_SIM_ENABLED: ${BMKG_SIM_ENABLED:-true}
+      # WhatsApp group class by majority of registered fishermen (3 locally, so a few test numbers reach it)
+      GROUP_CLASS_MODE: ${GROUP_CLASS_MODE:-majority}
+      GROUP_MAJORITY_MIN: ${GROUP_MAJORITY_MIN:-3}
       ENABLE_IOT_MQTT_DELIVERY: "true"
       MQTT_BROKER_URL: mqtt://mosquitto:1883
       MQTT_TOPIC_PREFIX: alert
