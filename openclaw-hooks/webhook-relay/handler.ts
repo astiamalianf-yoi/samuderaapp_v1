@@ -1,4 +1,4 @@
-const BACKEND_URL = process.env.BACKEND_WEBHOOK_URL || "http://samudra-backend:3000/api/openclaw/webhook";
+const BACKEND_URL = process.env.BACKEND_WEBHOOK_URL || "http://backend:3000/api/openclaw/webhook";
 // Same value as OPENCLAW_HOOK_TOKEN in the backend's .env (set in openclaw.json, hook env).
 const HOOK_TOKEN = process.env.BACKEND_WEBHOOK_TOKEN || "";
 const SESSION_KEY = process.env.SESSION_KEY || "agent:main:whatsapp:group:120363406080394106@g.us";

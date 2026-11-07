@@ -1,0 +1,26 @@
+{
+  "gateway": {
+    "auth": { "mode": "token" }
+  },
+  "channels": {
+    "whatsapp": {
+      "dmPolicy": "disabled",
+      "groupPolicy": "open",
+      "groups": { "*": { "requireMention": true } }
+    }
+  },
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "webhook-relay": {
+          "enabled": true,
+          "env": {
+            "BACKEND_WEBHOOK_URL": "http://backend:3000/api/openclaw/webhook",
+            "BACKEND_WEBHOOK_TOKEN": "PUT-THE-SAME-VALUE-AS-OPENCLAW_HOOK_TOKEN-HERE"
+          }
+        }
+      }
+    }
+  }
+}

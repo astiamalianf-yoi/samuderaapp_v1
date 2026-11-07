@@ -27,4 +27,4 @@ Set the same secret in both places, so only this OpenClaw can post to the backen
 
 - backend `.env`: `OPENCLAW_HOOK_TOKEN=<secret>`
 - OpenClaw `openclaw.json`: `hooks.internal.entries["webhook-relay"].env.BACKEND_WEBHOOK_TOKEN = "<secret>"`
-  (and `BACKEND_WEBHOOK_URL` if the backend is not reachable as `http://samudra-backend:3000`)
+  (`BACKEND_WEBHOOK_URL` defaults to `http://backend:3000/api/openclaw/webhook`, the backend in the same stack)

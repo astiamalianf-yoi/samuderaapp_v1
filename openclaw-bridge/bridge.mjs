@@ -193,7 +193,32 @@ async function forwardToBackend(msg) {
   }
 }
 
+// Sends the text as it is, through the Gateway's message tool (same as
+// `openclaw message send --channel whatsapp --target <group> --message ...`): no AI agent in
+// between, so a warning is never reworded and no AI provider key is needed.
+async function sendDirect(target, text) {
+  const result = await gatewayPost("/tools/invoke", {
+    tool: "message",
+    action: "send",
+    args: { action: "send", channel: "whatsapp", target, message: text },
+  }, { "x-openclaw-message-channel": "whatsapp" });
+  if (result && result.ok === false) throw new Error(JSON.stringify(result.error ?? result).slice(0, 200));
+  return result;
+}
+
+// Old route (asks the AI agent to repeat the text). Only used if direct sending fails and
+// OUTBOUND_AGENT_FALLBACK is not "false".
+const AGENT_FALLBACK = process.env.OUTBOUND_AGENT_FALLBACK !== "false";
+
 async function sendOutboundMessage(target, text) {
+  try {
+    await sendDirect(target, text);
+    log(`outbound sent directly to ${target}: "${(text || "").slice(0, 60)}"`);
+    return;
+  } catch (err) {
+    log(`direct send failed for ${target}: ${err.message}${AGENT_FALLBACK ? " (trying the agent route)" : ""}`);
+    if (!AGENT_FALLBACK) return;
+  }
   try {
     const result = await gatewayPost("/v1/chat/completions", {
       model: "openclaw",

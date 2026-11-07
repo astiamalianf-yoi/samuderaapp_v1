@@ -129,8 +129,59 @@ services:
       BACKEND_REPORT_URL: http://backend:3000/api/report
     depends_on:
       - backend
+      - openclaw-gateway
     networks:
       - default
+
+  # Our own OpenClaw (the samudraapp.com bot number), separate from the .id app's /root/openclaw.
+  # Same image as the .id one (openclaw:local, already built on the server). No public ports:
+  # only the bridge (and the backend through the hook) talk to it, inside this stack.
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    container_name: samudra-openclaw-gateway
+    restart: unless-stopped
+    init: true
+    environment: &openclaw-env
+      HOME: /home/node
+      OPENCLAW_HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
+      OPENCLAW_CONFIG_DIR: /home/node/.openclaw
+      OPENCLAW_WORKSPACE_DIR: /home/node/.openclaw/workspace
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?set OPENCLAW_GATEWAY_TOKEN in .env}
+      TZ: Asia/Jakarta
+    volumes: &openclaw-volumes
+      - ${SAMUDRA_OPENCLAW_DIR:-/root/.openclaw-samudra}:/home/node/.openclaw
+      - ${SAMUDRA_OPENCLAW_SECRETS_DIR:-/root/.openclaw-samudra-auth}:/home/node/.config/openclaw
+    cap_drop: [NET_RAW, NET_ADMIN]
+    security_opt: ["no-new-privileges:true"]
+    command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - default
+
+  # Run only when needed, e.g. to link the bot number:
+  #   docker compose run --rm openclaw-cli channels login --channel whatsapp
+  openclaw-cli:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    profiles: ["cli"]
+    network_mode: "service:openclaw-gateway"
+    environment: *openclaw-env
+    volumes: *openclaw-volumes
+    cap_drop: [NET_RAW, NET_ADMIN]
+    security_opt: ["no-new-privileges:true"]
+    stdin_open: true
+    tty: true
+    init: true
+    entrypoint: ["node", "dist/index.js"]
+    depends_on:
+      - openclaw-gateway
 
 volumes:
   redis_data:
