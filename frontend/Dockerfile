@@ -15,6 +15,9 @@ COPY . .
 # Backend URL baked into the build (see src/config.ts)
 ARG VITE_API_BASE_URL=https://api.samudraapp.com
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# Staging only: label shown on every page (empty in production)
+ARG VITE_STAGE_LABEL=
+ENV VITE_STAGE_LABEL=$VITE_STAGE_LABEL
 
 # Build the application
 RUN npm run build
