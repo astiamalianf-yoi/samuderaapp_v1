@@ -45,6 +45,8 @@ const makeRss = (items: string) =>
   `<?xml version="1.0"?><rss><channel>${items}</channel></rss>`
 
 function mockRssThenCap(rssBody: string, capBody: string) {
+  // UAT test switch feed: off (404)
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: false, status: 404, text: () => Promise.resolve('') } as unknown as Response)
   // First fetch: RSS feed
   vi.mocked(fetch).mockResolvedValueOnce({
     ok: true,
@@ -129,6 +131,8 @@ describe('useWeatherAlerts', () => {
       RSS_ITEM('Bantul DI Yogyakarta', 'https://www.bmkg.go.id/cap/bantul.xml') +
       RSS_ITEM('Aceh Besar', 'https://www.bmkg.go.id/cap/aceh.xml'),
     )
+    // UAT test switch feed: off (404)
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: false, status: 404, text: () => Promise.resolve('') } as unknown as Response)
     // Mock RSS
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,

@@ -1,4 +1,5 @@
 import { redis } from "../lib/redis";
+import { getSimWeather, simulatedBmkgData } from "./bmkg-sim";
 import { BMKG_CACHE_TTL_SECONDS } from "../config";
 
 export type BmkgData = {
@@ -115,6 +116,10 @@ async function fetchFreshBmkgData(beach: string): Promise<BmkgData | null> {
 
 export async function getBmkgData(beach: string): Promise<BmkgData | null> {
 	if (!isBeachValid(beach)) return null;
+
+	// UAT test switch: a simulated forecast replaces BMKG's for up to one hour.
+	const sim = await getSimWeather(beach);
+	if (sim) return sim.unavailable ? null : (simulatedBmkgData(beach, sim) as BmkgData);
 
 	const cacheKey = `bmkg:data:${beach}`;
 	const cached = await redis.get(cacheKey);

@@ -9,6 +9,7 @@ import {
   extractLocation,
 } from "../utils/weatherUtils"
 import type { BeachLocation } from "../types/api"
+import { API_BASE_URL } from "../config"
 import { capAppliesToBeach } from "../utils/bmkgArea"
 
 const locationKeywords: Record<BeachLocation, string[]> = {
@@ -106,14 +107,22 @@ export function useWeatherAlerts(selectedBeach?: BeachLocation, disableFilter: b
         setLoading(true)
         setError(null)
 
-        const rssRes = await fetch(WEATHER_CONFIG.BMKG_RSS_PROXY, {
-          signal: controller.signal,
-        })
-        const rssText = await rssRes.text()
-
         const parser = new DOMParser()
-        const rssXml = parser.parseFromString(rssText, "application/xml")
-        const allItems = Array.from(rssXml.querySelectorAll("item"))
+        const readItems = async (url: string) => {
+          const res = await fetch(url, { signal: controller.signal })
+          if (!res.ok) throw new Error(`RSS status ${res.status}`)
+          return Array.from(parser.parseFromString(await res.text(), "application/xml").querySelectorAll("item"))
+        }
+        // UAT test switch: simulated BMKG warnings (only when the switch is on; 404 otherwise).
+        const simItems = await readItems(`${API_BASE_URL}/api/bmkg/sim/rss`).catch(() => [] as Element[])
+        let bmkgItems: Element[] = []
+        try {
+          bmkgItems = await readItems(WEATHER_CONFIG.BMKG_RSS_PROXY)
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") throw err
+          if (!simItems.length) throw err
+        }
+        const allItems = [...simItems, ...bmkgItems]
 
         let filteredItems = allItems;
         if (selectedBeach && !disableFilter) {

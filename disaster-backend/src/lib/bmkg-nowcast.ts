@@ -8,6 +8,7 @@
  * the fusion in reassurance.ts), and broadcasts each new warning once to the
  * WhatsApp group, push subscribers, SSE/WS clients and the IoT buzzer.
  */
+import { listSimWarnings, simWarningCap } from "./bmkg-sim";
 import { beachesByGroup } from "./openclaw";
 import { createHash } from "node:crypto";
 import { redis } from "./redis";
@@ -154,6 +155,14 @@ async function fetchText(url: string): Promise<string | null> {
 /** Active warnings per beach, straight from BMKG. */
 export async function fetchNowcastByBeach(now = Date.now()): Promise<Record<string, CapInfo[]>> {
 	const out: Record<string, CapInfo[]> = Object.fromEntries(Object.keys(BEACH_AREA).map((b) => [b, []]));
+	// UAT test switch: simulated warnings go through the same CAP parsing and beach matching.
+	for (const w of await listSimWarnings(now)) {
+		const cap = parseCap(simWarningCap(w));
+		if (!cap) continue;
+		for (const beach of Object.keys(BEACH_AREA)) {
+			if (capAppliesToBeach(beach, cap)) out[beach]!.push(cap);
+		}
+	}
 	const rss = await fetchText(BMKG_NOWCAST_RSS_URL);
 	if (!rss) return out;
 	const items = parseRssItems(rss).filter((i) => PROVINCE_KEYWORDS.some((k) => i.title.toLowerCase().includes(k)));
@@ -275,7 +284,15 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
+let monitorDeps: Deps | null = null;
+
+/** Runs one monitor pass now (used by the UAT test switch so a simulated warning is sent at once). */
+export async function triggerNowcastCheck() {
+	return runNowcastCheck(monitorDeps ?? {});
+}
+
 export function startNowcastMonitor(deps: Deps) {
+	monitorDeps = deps;
 	if (!BMKG_NOWCAST_ENABLED || timer) return;
 	const run = () =>
 		runNowcastCheck(deps)

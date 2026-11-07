@@ -1,4 +1,8 @@
 import { Hono } from "hono";
+import { ALLOWED_BEACH_LOCATIONS } from "../types";
+import { getBmkgData } from "../lib/bmkg-fetch";
+import { BEACH_AREA, capAppliesToBeach, parseCap, triggerNowcastCheck } from "../lib/bmkg-nowcast";
+import { addSimWarning, clearSims, getSimWeather, listSimWarnings, setSimWeather, SIM_ENABLED, simWarningCap } from "../lib/bmkg-sim";
 import { desc } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 import { fishermanClassHistory, fishermanReports, fishermen, incidents } from "../db/schema";
@@ -65,4 +69,57 @@ route.get("/research/fisherman-reports.csv", () =>
 route.get("/research/incidents.csv", () =>
 	sendCsv("incidents.csv", getDb().select().from(incidents).all() as unknown as Record<string, unknown>[]));
 
+/**
+ * UAT test switch (BMKG_SIM_ENABLED=true and X-Research-Key):
+ *   POST   /api/research/uat/bmkg          { beach, windSpeed?, forecast?: clear|cloudy|rain, unavailable?, minutes? }
+ *   POST   /api/research/uat/bmkg/warning  { areaDesc?, polygon?, event?, headline?, description?, minutes? }
+ *   GET    /api/research/uat/bmkg          what is simulated now
+ *   DELETE /api/research/uat/bmkg          end every simulation
+ * Everything expires after at most 60 minutes.
+ */
+route.use("/research/uat/*", async (c, next) => {
+	if (!SIM_ENABLED()) return c.json({ ok: false, error: "test switch off (BMKG_SIM_ENABLED is not true)" }, 404);
+	await next();
+});
+
+route.post("/research/uat/bmkg", async (c) => {
+	const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+	const beach = String(b.beach ?? "");
+	if (!(ALLOWED_BEACH_LOCATIONS as readonly string[]).includes(beach)) return c.json({ ok: false, error: "unknown beach" }, 400);
+	const forecast = ["clear", "cloudy", "rain"].includes(String(b.forecast)) ? (b.forecast as "clear" | "cloudy" | "rain") : undefined;
+	const windSpeed = b.windSpeed === undefined ? undefined : Number(b.windSpeed);
+	if (windSpeed !== undefined && !(windSpeed >= 0 && windSpeed < 300)) return c.json({ ok: false, error: "windSpeed must be 0-300 km/h" }, 400);
+	const sim = await setSimWeather(beach, { windSpeed, forecast, unavailable: b.unavailable === true }, Number(b.minutes) || undefined);
+	return c.json({ ok: true, beach, sim, bmkg: await getBmkgData(beach) });
+});
+
+route.post("/research/uat/bmkg/warning", async (c) => {
+	const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+	if (!b.areaDesc && !b.polygon) return c.json({ ok: false, error: "give areaDesc and/or polygon" }, 400);
+	const w = await addSimWarning({
+		areaDesc: b.areaDesc as string | undefined, polygon: b.polygon as string | undefined, event: b.event as string | undefined,
+		headline: b.headline as string | undefined, description: b.description as string | undefined, minutes: Number(b.minutes) || undefined,
+	});
+	const cap = parseCap(simWarningCap(w))!;
+	const beaches = Object.keys(BEACH_AREA).filter((beach) => capAppliesToBeach(beach, cap));
+	const sent = await triggerNowcastCheck();
+	return c.json({ ok: true, warning: w, coversBeaches: beaches, broadcast: sent });
+});
+
+route.get("/research/uat/bmkg", async (c) => {
+	const weather: Record<string, unknown> = {};
+	for (const beach of ALLOWED_BEACH_LOCATIONS) {
+		const s = await getSimWeather(beach);
+		if (s) weather[beach] = s;
+	}
+	return c.json({ ok: true, weather, warnings: await listSimWarnings() });
+});
+
+route.delete("/research/uat/bmkg", async (c) => {
+	await clearSims([...ALLOWED_BEACH_LOCATIONS]);
+	await triggerNowcastCheck();
+	return c.json({ ok: true, cleared: true });
+});
+
 export default route;
+
