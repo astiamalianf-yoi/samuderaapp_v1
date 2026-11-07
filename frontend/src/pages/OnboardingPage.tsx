@@ -1,0 +1,174 @@
+import { useRef, useState, type ReactNode } from "react"
+import { useNavigate } from "react-router-dom"
+import {
+  ArrowLeft, ArrowRight, BellRing, CloudLightning, Map, Megaphone, MessageCircle, ShieldAlert, UserPlus, Users, WifiOff,
+} from "lucide-react"
+import { markOnboardingDone } from "../lib/onboarding"
+
+interface Slide {
+  title: string
+  body: ReactNode
+  art: ReactNode
+}
+
+const Circle = ({ className, children }: { className: string; children: ReactNode }) => (
+  <div className={`w-28 h-28 rounded-full flex items-center justify-center ${className}`}>{children}</div>
+)
+
+const Feature = ({ icon, text }: { icon: ReactNode; text: string }) => (
+  <li className="flex items-center gap-3 text-left text-base leading-snug">
+    <span className="w-11 h-11 shrink-0 rounded-xl bg-sky-100 text-sky-900 flex items-center justify-center">{icon}</span>
+    {text}
+  </li>
+)
+
+const SLIDES: Slide[] = [
+  {
+    title: "Selamat datang di SAMUDRA",
+    art: <img src="/192x192.png" alt="Logo SAMUDRA" className="w-28 h-28 rounded-[1.75rem] shadow-lg bg-white" />,
+    body: (
+      <>
+        <p>
+          <b>Sistem peringatan dini angin kencang</b> untuk nelayan. SAMUDRA menggabungkan{" "}
+          <b>tanda alam</b> yang dilihat nelayan dengan <b>informasi resmi BMKG</b>, supaya Anda tahu kapan aman
+          melaut dan apa yang harus dilakukan.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Untuk siapa?",
+    art: <Circle className="bg-emerald-100 text-emerald-800"><Users className="w-14 h-14" aria-hidden /></Circle>,
+    body: (
+      <>
+        <p>Untuk <b>nelayan</b>, kelompok nelayan, dan keluarga nelayan di:</p>
+        <ul className="mt-3 space-y-1 font-semibold">
+          <li>Aceh — Lampuuk, Lhoknga, Ulee Lheue</li>
+          <li>Yogyakarta — Depok, Samas</li>
+          <li>Jawa Barat — Pangandaran, Batu Karas, Bojongsalawe</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    title: "Status pantai Anda",
+    art: (
+      <div className="grid grid-cols-3 gap-2 w-full max-w-xs" aria-hidden>
+        <span className="rounded-2xl bg-emerald-600 text-white text-sm font-black py-6 text-center">AMAN</span>
+        <span className="rounded-2xl bg-amber-400 text-black text-[13px] tracking-tight font-black py-6 text-center">WASPADA</span>
+        <span className="rounded-2xl bg-red-600 text-white text-sm font-black py-6 text-center">SIAGA</span>
+      </div>
+    ),
+    body: (
+      <p>
+        Lihat sekilas apakah pantai Anda <b>aman</b>, perlu <b>waspada</b>, atau <b>siaga</b>. Peringatan langsung
+        memberi tahu <b>apa yang harus dilakukan</b>, dan Anda bisa melihat <b>mengapa</b> peringatan itu muncul.
+      </p>
+    ),
+  },
+  {
+    title: "Lapor tanda alam",
+    art: <Circle className="bg-orange-100 text-orange-700"><Megaphone className="w-14 h-14" aria-hidden /></Circle>,
+    body: (
+      <p>
+        Lihat awan turun, kilat, atau ombak berubah? <b>Lapor dengan 2 sentuhan</b> di aplikasi, atau tulis{" "}
+        <span className="font-mono font-bold">!lapor</span> di grup WhatsApp. Jika <b>5 nelayan</b> melaporkan tanda
+        yang sama, peringatan dikirim ke semua.
+      </p>
+    ),
+  },
+  {
+    title: "Fitur lainnya",
+    art: <div className="w-20 h-20 rounded-full flex items-center justify-center bg-sky-100 text-sky-900"><ShieldAlert className="w-11 h-11" aria-hidden /></div>,
+    body: (
+      <ul className="space-y-2">
+        <Feature icon={<CloudLightning className="w-6 h-6" aria-hidden />} text="Peringatan resmi dan prakiraan cuaca BMKG per jam" />
+        <Feature icon={<BellRing className="w-6 h-6" aria-hidden />} text="Notifikasi di HP untuk pantai asal Anda" />
+        <Feature icon={<MessageCircle className="w-6 h-6" aria-hidden />} text="Grup WhatsApp untuk lapor dan cek peringatan" />
+        <Feature icon={<Map className="w-6 h-6" aria-hidden />} text="Peta pantai dan pengetahuan 17 tanda alam" />
+        <Feature icon={<WifiOff className="w-6 h-6" aria-hidden />} text="Tetap bisa dipakai saat sinyal lemah" />
+      </ul>
+    ),
+  },
+  {
+    title: "Mulai sekarang",
+    art: <Circle className="bg-sky-900 text-white"><UserPlus className="w-14 h-14" aria-hidden /></Circle>,
+    body: (
+      <p>
+        <b>Daftar sekali</b> dengan nomor WhatsApp untuk bisa melapor dan mendapat peringatan yang sesuai dengan
+        pengalaman Anda. Sudah pernah daftar di HP lain? Daftar lagi dengan <b>nomor yang sama</b>.
+      </p>
+    ),
+  },
+]
+
+/**
+ * First-run introduction: what SAMUDRA is, who it is for, and its features. Shown once on the
+ * first visit to the home page; "Lewati" and the last slide both end it. Warnings are never behind
+ * it: a link to a warning (e.g. from a notification) opens directly.
+ */
+export function OnboardingPage() {
+  const navigate = useNavigate()
+  const [i, setI] = useState(0)
+  const touchX = useRef<number | null>(null)
+  const last = i === SLIDES.length - 1
+  const slide = SLIDES[i]
+
+  const finish = (to: string) => {
+    markOnboardingDone()
+    navigate(to, { replace: true })
+  }
+  const go = (n: number) => setI(Math.max(0, Math.min(SLIDES.length - 1, n)))
+
+  return (
+    <main
+      className="min-h-dvh bg-gradient-to-b from-sky-50 to-white flex flex-col max-w-md mx-auto px-6 pt-4 pb-6"
+      onTouchStart={(e) => { touchX.current = e.touches[0].clientX }}
+      onTouchEnd={(e) => {
+        if (touchX.current === null) return
+        const dx = e.changedTouches[0].clientX - touchX.current
+        if (Math.abs(dx) > 50) go(i + (dx < 0 ? 1 : -1))
+        touchX.current = null
+      }}
+    >
+      <div className="flex items-center justify-between min-h-12">
+        {i > 0 ? (
+          <button onClick={() => go(i - 1)} aria-label="Sebelumnya" className="w-12 h-12 -ml-2 flex items-center justify-center text-sky-900">
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+        ) : <span />}
+        {!last && (
+          <button onClick={() => finish("/")} className="min-h-12 px-3 text-lg font-semibold text-sky-800">Lewati</button>
+        )}
+      </div>
+
+      <section className="flex-1 flex flex-col items-center justify-center text-center gap-5 overflow-y-auto" aria-live="polite"
+        aria-roledescription="slide" aria-label={`${i + 1} dari ${SLIDES.length}`}>
+        <div className="flex items-center justify-center">{slide.art}</div>
+        <h1 className="text-[1.7rem] leading-tight font-black text-gray-900">{slide.title}</h1>
+        <div className="text-[17px] text-gray-700 leading-normal">{slide.body}</div>
+      </section>
+
+      <div className="flex justify-center gap-2 py-4" role="tablist" aria-label="Halaman pengenalan">
+        {SLIDES.map((s, n) => (
+          <button key={s.title} role="tab" aria-selected={n === i} aria-label={`Halaman ${n + 1}`} onClick={() => go(n)}
+            className={`h-3 rounded-full transition-all ${n === i ? "w-8 bg-sky-900" : "w-3 bg-gray-300"}`} />
+        ))}
+      </div>
+
+      {last ? (
+        <div className="space-y-3">
+          <button onClick={() => finish("/profil")}
+            className="w-full min-h-16 rounded-2xl bg-sky-900 text-white text-xl font-extrabold">Daftar sekarang</button>
+          <button onClick={() => finish("/")}
+            className="w-full min-h-14 rounded-2xl border-2 border-sky-900 text-sky-900 text-lg font-bold">Lihat peringatan dulu</button>
+        </div>
+      ) : (
+        <button onClick={() => go(i + 1)}
+          className="w-full min-h-16 rounded-2xl bg-sky-900 text-white text-xl font-extrabold flex items-center justify-center gap-2">
+          Lanjut <ArrowRight className="w-6 h-6" aria-hidden />
+        </button>
+      )}
+    </main>
+  )
+}

@@ -194,6 +194,10 @@ export function ProfilePage() {
             Keluar dan hapus profil dari HP ini
           </button>
         )}
+
+        <Link to="/mulai" className="block text-center min-h-12 py-3 text-base font-semibold text-sky-800">
+          Lihat pengenalan aplikasi lagi
+        </Link>
       </div>
     </AppShell>
   )
