@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { ALERTS_STREAM } from "../config";
-import { sendOpenClawAlert } from "../lib/openclaw";
+import { beachesByGroup, sendOpenClawToGroups } from "../lib/openclaw";
 import { BEACH_DISPLAY_NAMES } from "./report";
 import { riskLabelFor } from "../lib/whatsapp-commands";
 
@@ -230,45 +230,38 @@ async function fetchAstronomy(): Promise<{
 	}
 }
 
-route.get("/broadcast/morning", async (c) => {
-	console.log("[broadcast-morning] Starting morning broadcast...");
+/** A warning level in either vocabulary (fusion: waspada/siaga/ekstrem; legacy: unsafe…). */
+export const isWarningLevel = (level: string) => /unsafe|waspada|siaga|ekstrem|awas/i.test(level);
 
-	const [alerts, weather, astronomy] = await Promise.all([
-		fetchAlerts(),
-		fetchWeather(),
-		fetchAstronomy(),
-	]);
+type Weather = { condition: string; windSpeed: number; waveHeight: number }[] | null;
+type Astronomy = { sunrise: string; sunset: string; moonPhase: string } | null;
 
+/** The morning message for the beaches of one group. */
+export function buildMorningMessage(beaches: string[], alerts: AlertData[], weather: Weather, astronomy: Astronomy): string {
 	const sections: string[] = [];
-
 	sections.push("\u{1F305} SELAMAT PAGI \u2014 Laporan Cuaca Laut");
 	sections.push("");
 
-	const unsafeAlerts = alerts.filter((a) => {
-		const lower = a.riskLevel.toLowerCase();
-		return lower.includes("unsafe");
-	});
-
+	const unsafeAlerts = alerts.filter((a) => beaches.includes(a.beachLocation) && isWarningLevel(a.riskLevel));
 	if (unsafeAlerts.length > 0) {
 		sections.push(unsafeAlerts.map(formatAlert).join("\n\n---\n\n"));
 	} else {
-		sections.push("\u2705 Cuaca aman di semua pantai hari ini.");
+		const where = beaches.length === 1 ? `di ${BEACH_DISPLAY_NAMES[beaches[0]!] ?? beaches[0]}` : "di pantai Anda";
+		sections.push(`\u2705 Cuaca aman ${where} hari ini.`);
 		sections.push("Tetap waspada dan perhatikan tanda-tanda alam ya, Bang.");
 	}
 
+	sections.push("");
+	sections.push("\u{1F324}\uFE0F CUACA HARI INI");
 	if (weather) {
-		sections.push("");
-		sections.push("\u{1F324}\uFE0F CUACA HARI INI");
 		BEACH_COORDS.forEach((beach, i) => {
 			const w = weather[i];
-			if (w) {
+			if (w && beaches.includes(beach.slug)) {
 				const shortName = beach.name.replace("Pantai ", "");
 				sections.push(`\u{1F4CD} ${shortName}: ${w.condition}, angin ${w.windSpeed} km/h, ombak ${w.waveHeight}m`);
 			}
 		});
 	} else {
-		sections.push("");
-		sections.push("\u{1F324}\uFE0F CUACA HARI INI");
 		sections.push("Data cuaca belum tersedia.");
 	}
 
@@ -278,17 +271,36 @@ route.get("/broadcast/morning", async (c) => {
 		sections.push(`Sunrise: ${astronomy.sunrise} WIB | Sunset: ${astronomy.sunset} WIB`);
 		sections.push(`Fase bulan: ${astronomy.moonPhase}`);
 	}
+	return sections.join("\n");
+}
 
-	const message = sections.join("\n");
+route.get("/broadcast/morning", async (c) => {
+	console.log("[broadcast-morning] Starting morning broadcast...");
 
-	console.log("[broadcast-morning] Sending broadcast, length:", message.length);
+	const [alerts, weather, astronomy] = await Promise.all([
+		fetchAlerts(),
+		fetchWeather(),
+		fetchAstronomy(),
+	]);
+
+	// One message per WhatsApp group, about that group's own beach(es) only: a neighbouring
+	// beach's warning in the morning message would teach fishermen to ignore warnings.
+	const groups = beachesByGroup(BEACH_COORDS.map((b) => b.slug));
+
+	console.log("[broadcast-morning] Sending broadcast to", groups.size, "group(s)");
 
 	try {
-		await sendOpenClawAlert(message);
+		let unsafeCount = 0;
+		for (const [group, beaches] of groups) {
+			const own = alerts.filter((a) => beaches.includes(a.beachLocation));
+			unsafeCount += own.filter((a) => isWarningLevel(a.riskLevel)).length;
+			await sendOpenClawToGroups([group], buildMorningMessage(beaches, own, weather, astronomy));
+		}
 		return c.json({
 			ok: true,
-			sent: true,
-			alertsCount: unsafeAlerts.length,
+			sent: groups.size > 0,
+			groups: groups.size,
+			alertsCount: unsafeCount,
 			weatherAvailable: weather !== null,
 			astronomyAvailable: astronomy !== null,
 		});

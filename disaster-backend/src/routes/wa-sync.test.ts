@@ -19,7 +19,15 @@ mock.module("../db", () => ({ initDb: () => db, getDb: () => db, schema }));
 mock.module("../lib/redis", () => ({ redis: { xAdd: async () => "1", set: async () => "OK", publish: async () => 0 } }));
 mock.module("../lib/class-history", () => ({ recordClass: async () => {} }));
 const replies: string[] = [];
-mock.module("../lib/openclaw", () => ({ sendOpenClawReply: async (_to: string, t: string) => { replies.push(t); }, sendOpenClawAlert: async () => {} }));
+mock.module("../lib/openclaw", () => ({
+	sendOpenClawReply: async (_to: string, t: string) => { replies.push(t); },
+	sendOpenClawAlert: async () => {},
+	sendOpenClawBeachAlert: async () => {},
+	sendOpenClawToGroups: async () => {},
+	beachForGroup: () => null,
+	groupsForBeach: () => [],
+	beachesByGroup: () => new Map(),
+}));
 // @ts-expect-error -- the query string only makes Bun load the real file
 const realCrowd = (await import("../lib/crowdsource.ts?real-for-wa-sync")) as typeof import("../lib/crowdsource");
 const seen: (string | null)[] = [];

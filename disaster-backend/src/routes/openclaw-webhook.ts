@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
-import { sendOpenClawReply } from "../lib/openclaw";
+import { beachForGroup, sendOpenClawReply } from "../lib/openclaw";
 import {
 	parseLaporCommand,
 	parsePeringatanCommand,
@@ -65,13 +65,13 @@ function syncNote(data: { registered?: boolean; heldForRegistration?: boolean },
 	return ["ℹ️ Nomor pengirim tidak terbaca, laporan dihitung tetapi belum masuk ke profil Anda."];
 }
 
-async function handleKejadian(text: string, sender?: string): Promise<string> {
+async function handleKejadian(text: string, sender?: string, chatId?: string): Promise<string> {
 	const parsed = parseKejadianCommand(text);
 	if (parsed.types.length === 0) {
 		return "Kejadian apa, Bang? Contoh: *!kejadian angin kencang di lampuuk* (angin kencang, gelombang besar, badai, arus kuat).";
 	}
 	const fisherman = findFishermanByPhone(sender);
-	const beach = parsed.beachLocation ?? fisherman?.homeBeach ?? null;
+	const beach = parsed.beachLocation ?? beachForGroup(chatId) ?? fisherman?.homeBeach ?? null;
 	if (!beach) return "Di pantai mana, Bang? Contoh: *!kejadian angin kencang di lampuuk*";
 	const names = parsed.types.map((t) => INCIDENT_NAMES[t] ?? t).join(", ");
 	const beachName = BEACH_DISPLAY[beach] ?? beach;
@@ -91,7 +91,12 @@ async function handleKejadian(text: string, sender?: string): Promise<string> {
 }
 
 async function handleLapor(text: string, chatId: string, sender?: string): Promise<string> {
-	const result = parseLaporCommand(text);
+	let result = parseLaporCommand(text);
+	// In a beach group, a report without a beach name is about that group's beach.
+	const groupBeach = beachForGroup(chatId);
+	if (!result.ok && result.missing === "location" && groupBeach) {
+		result = parseLaporCommand(`${text} ${groupBeach.replace(/_/g, " ")}`);
+	}
 
 	if (!result.ok) {
 		if (result.missing === "location") return getMissingLocationMessage();
@@ -164,7 +169,8 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 }
 
 async function handlePeringatan(text: string, chatId: string): Promise<string> {
-	const beachFilter = parsePeringatanCommand(text);
+	// In a beach group, "!peringatan" alone shows that beach only, never the neighbours'.
+	const beachFilter = parsePeringatanCommand(text) ?? beachForGroup(chatId);
 
 	try {
 		const params = beachFilter ? `?beach_location=${beachFilter}` : "";
@@ -247,7 +253,7 @@ route.post("/openclaw/webhook", async (c) => {
 				if (command === "lapor") {
 					reply = await handleLapor(cleanText, replyTarget, sender);
 				} else if (command === "kejadian") {
-					reply = await handleKejadian(cleanText, sender);
+					reply = await handleKejadian(cleanText, sender, replyTarget);
 				} else {
 					reply = await handlePeringatan(cleanText, replyTarget);
 				}

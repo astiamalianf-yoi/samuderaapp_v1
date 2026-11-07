@@ -8,6 +8,7 @@
  * the fusion in reassurance.ts), and broadcasts each new warning once to the
  * WhatsApp group, push subscribers, SSE/WS clients and the IoT buzzer.
  */
+import { beachesByGroup } from "./openclaw";
 import { createHash } from "node:crypto";
 import { redis } from "./redis";
 import {
@@ -217,7 +218,10 @@ export function buildNowcastAlertEvent(w: NowcastWarning, beach: string, now = D
 
 type Deps = {
 	fetchByBeach?: typeof fetchNowcastByBeach;
-	sendWhatsApp?: (text: string) => Promise<void>;
+	/** Sends one message to one WhatsApp group. */
+	sendWhatsApp?: (group: string, text: string) => Promise<void>;
+	/** Group -> the beaches it covers (default: OPENCLAW_BEACH_GROUPS / OPENCLAW_BROADCAST_GROUPS). */
+	groupsFor?: (beaches: string[]) => Map<string, string[]>;
 	publishIot?: (event: unknown) => Promise<unknown>;
 };
 
@@ -261,7 +265,10 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 			await deps.publishIot?.(event).catch(() => undefined);
 			events += 1;
 		}
-		await deps.sendWhatsApp?.(formatNowcastWhatsApp(warning, beaches)).catch(() => undefined);
+		// Each beach group gets the warning only if it covers its beach, naming only its beaches.
+		for (const [group, own] of (deps.groupsFor ?? beachesByGroup)(beaches)) {
+			await deps.sendWhatsApp?.(group, formatNowcastWhatsApp(warning, own)).catch(() => undefined);
+		}
 	}
 	return { warnings: fresh.size, events };
 }

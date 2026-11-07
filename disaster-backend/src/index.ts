@@ -31,7 +31,7 @@ import trustIndexRoute from "./routes/trust-index";
 import incidentsRoute from "./routes/incidents";
 import researchRoute from "./routes/research";
 import { startNowcastMonitor } from "./lib/bmkg-nowcast";
-import { sendOpenClawAlert } from "./lib/openclaw";
+import { sendOpenClawToGroups } from "./lib/openclaw";
 import { publishIotAlertForEvent } from "./lib/iot-mqtt";
 import bmkgRoute from "./routes/bmkg";
 import alertsRoute from "./routes/alerts";
@@ -64,7 +64,7 @@ app.onError((err, c) => {
 await initRedis();
 initDb();
 initWebPush();
-startNowcastMonitor({ sendWhatsApp: sendOpenClawAlert, publishIot: publishIotAlertForEvent });
+startNowcastMonitor({ sendWhatsApp: (group, text) => sendOpenClawToGroups([group], text), publishIot: publishIotAlertForEvent });
 
 await sub.subscribe(ALERTS_CHANNEL, async (message) => {
 	console.log("[sub] received alert from Redis, SSE clients:", sseClients.size, "WS clients:", wsClients.size);

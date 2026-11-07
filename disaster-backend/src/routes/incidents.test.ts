@@ -14,7 +14,15 @@ sqlite.run(`INSERT INTO fishermen (id, phone_hash, phone_last4, home_beach, toke
 const sent: string[] = [];
 const keys = new Set<string>();
 mock.module("../db", () => ({ initDb: () => db, getDb: () => db, schema }));
-mock.module("../lib/openclaw", () => ({ sendOpenClawAlert: async (t: string) => { sent.push(t); }, sendOpenClawReply: async () => {} }));
+mock.module("../lib/openclaw", () => ({
+	sendOpenClawAlert: async (t: string) => { sent.push(t); },
+	sendOpenClawBeachAlert: async (_beach: string, t: string) => { sent.push(t); },
+	sendOpenClawToGroups: async () => {},
+	sendOpenClawReply: async () => {},
+	beachForGroup: () => null,
+	groupsForBeach: () => [],
+	beachesByGroup: () => new Map(),
+}));
 mock.module("../lib/redis", () => ({
 	redis: { set: async (k: string, _v: string, o: { NX?: boolean }) => (o.NX && keys.has(k) ? null : (keys.add(k), "OK")) },
 }));

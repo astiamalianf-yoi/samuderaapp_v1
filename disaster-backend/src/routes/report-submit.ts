@@ -3,7 +3,7 @@ import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
 import { riskLabelFor } from "../lib/whatsapp-commands";
 import { redis } from "../lib/redis";
-import { sendOpenClawAlert } from "../lib/openclaw";
+import { sendOpenClawBeachAlert } from "../lib/openclaw";
 import { findFishermanByPhone, fishermanReporterKey } from "../lib/fishermen";
 import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
@@ -261,7 +261,7 @@ route.get("/report/submit", async (c) => {
 			`Rekomendasi: ${alertEvent.ml?.action_recommendation ?? "Tidak ada rekomendasi"}`,
 			"Peringatan sedang dikirim ke semua nelayan.",
 		].join("\n");
-		await sendOpenClawAlert(alertText);
+		await sendOpenClawBeachAlert(beachLocation, alertText);
 		console.log("[report-submit] sent WhatsApp alert broadcast");
 	}
 

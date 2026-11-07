@@ -64,6 +64,12 @@ mock.module("../lib/reassurance", () => ({
 
 mock.module("../lib/openclaw", () => ({
 	sendOpenClawAlert: mockSendOpenClawAlert,
+	sendOpenClawBeachAlert: (_beach: string, _text: string) => mockSendOpenClawAlert(),
+	sendOpenClawToGroups: async () => {},
+	sendOpenClawReply: async () => {},
+	beachForGroup: () => null,
+	groupsForBeach: () => [],
+	beachesByGroup: () => new Map(),
 }));
 
 mock.module("../lib/iot-mqtt", () => ({

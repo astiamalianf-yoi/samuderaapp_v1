@@ -1,7 +1,7 @@
 import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
-import { sendOpenClawAlert } from "../lib/openclaw";
+import { sendOpenClawBeachAlert } from "../lib/openclaw";
 import { findFishermanByToken, fishermanReporterKey } from "../lib/fishermen";
 import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
@@ -479,7 +479,7 @@ route.post("/report", async (c) => {
 				activeWarningTtlSeconds: ACTIVE_WARNING_TTL_SECONDS,
 				warningStrategy: result.warning_strategy,
 			});
-			await sendOpenClawAlert(alertText);
+			await sendOpenClawBeachAlert(beachLocation, alertText);
 		}
 
 		// Reset the crowdsource queue for the triggered codes so a fresh batch of

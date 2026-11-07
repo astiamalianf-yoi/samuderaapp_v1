@@ -121,6 +121,20 @@ export const AUTH_USER_IDENTITY_KEY_PREFIX =
 export const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL ?? "";
 export const OPENCLAW_HOOK_TOKEN = process.env.OPENCLAW_HOOK_TOKEN ?? "";
 export const OPENCLAW_BROADCAST_GROUPS = parseCsvEnv(process.env.OPENCLAW_BROADCAST_GROUPS, []);
+/**
+ * One WhatsApp group per beach: "pantai_lhoknga=1203…@g.us,pantai_ulee_lheue=1203…@g.us".
+ * When set, a beach's warnings go ONLY to its own group(s) (neighbouring beaches never see them);
+ * a beach without a group gets no WhatsApp message. When empty, everything goes to
+ * OPENCLAW_BROADCAST_GROUPS as before.
+ */
+export const OPENCLAW_BEACH_GROUPS: Record<string, string[]> = (() => {
+	const out: Record<string, string[]> = {};
+	for (const pair of parseCsvEnv(process.env.OPENCLAW_BEACH_GROUPS, [])) {
+		const [beach, group] = pair.split("=").map((s) => s.trim());
+		if (beach && group) (out[beach] ??= []).push(group);
+	}
+	return out;
+})();
 export const WEATHERAPI_KEY = process.env.WEATHERAPI_KEY ?? "";
 
 if (JWT_AUTH_ENABLED && !JWT_SECRET) {

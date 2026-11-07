@@ -56,6 +56,8 @@ services:
       OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}
       OPENCLAW_HOOK_TOKEN: ${OPENCLAW_HOOK_TOKEN:-}
       OPENCLAW_BROADCAST_GROUPS: ${OPENCLAW_BROADCAST_GROUPS:-}
+      # One group per beach: pantai_lhoknga=<id>@g.us,pantai_ulee_lheue=<id>@g.us (warnings only to the beach's own group)
+      OPENCLAW_BEACH_GROUPS: ${OPENCLAW_BEACH_GROUPS:-}
       WEATHERAPI_KEY: ${WEATHERAPI_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}

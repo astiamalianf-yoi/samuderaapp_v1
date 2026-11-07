@@ -3,7 +3,7 @@ import { saveIncident } from "../lib/incident-store";
 import { findFishermanByToken, normalizePhone } from "../lib/fishermen";
 import { INCIDENT_TYPES, type IncidentType } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
-import { sendOpenClawAlert } from "../lib/openclaw";
+import { sendOpenClawBeachAlert } from "../lib/openclaw";
 import { redis } from "../lib/redis";
 import { BEACH_DISPLAY_NAMES } from "./report";
 import { ALLOWED_BEACH_LOCATIONS } from "../types";
@@ -78,7 +78,7 @@ route.post("/incidents", async (c) => {
 			.catch(() => "OK");
 		if (fresh === "OK") {
 			const phone = normalizePhone(typeof body.contactPhone === "string" ? body.contactPhone : null);
-			await sendOpenClawAlert(formatHelpMessage({ beach, type, lat, lon, phone }))
+			await sendOpenClawBeachAlert(beach, formatHelpMessage({ beach, type, lat, lon, phone }))
 				.then(() => { helpSent = true; })
 				.catch(() => { helpReason = "whatsapp_unavailable"; });
 		} else {
