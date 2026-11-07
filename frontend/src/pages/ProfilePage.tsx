@@ -242,8 +242,14 @@ function ActivityCard({ token }: { token: string }) {
         <Row label="macam tanda dilaporkan" value={act.signs_12m.length} />
         <Row label="kejadian di laut" value={act.incidents_total} />
       </div>
+      {act.channels_30d && (act.channels_30d.app > 0 || act.channels_30d.whatsapp > 0) && (
+        <p className="text-base text-gray-800">
+          Dikirim lewat aplikasi: <b>{act.channels_30d.app}</b> · lewat WhatsApp: <b>{act.channels_30d.whatsapp}</b>
+        </p>
+      )}
       <p className="text-sm text-gray-600">
-        Laporan dan kejadian yang Anda kirim ikut memperbarui profil Anda, supaya peringatan makin sesuai dengan pengalaman Anda.
+        Laporan dan kejadian yang Anda kirim, lewat aplikasi atau grup WhatsApp dengan nomor ini, ikut memperbarui
+        profil Anda, supaya peringatan makin sesuai dengan pengalaman Anda.
       </p>
     </section>
   )

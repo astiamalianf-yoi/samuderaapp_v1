@@ -1,3 +1,4 @@
+import { holdForRegistration } from "../lib/wa-sync";
 import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
 import { riskLabelFor } from "../lib/whatsapp-commands";
@@ -14,6 +15,7 @@ import {
 	ALERTS_CHANNEL,
 	ALERTS_STREAM,
 	ML_BASE_URL,
+	INTERNAL_REQUEST_SECRET,
 	REPORT_SYNC_STREAM,
 	REPORT_WINDOW_MS,
 	REPORT_REPEAT_WINDOW_MS,
@@ -32,7 +34,10 @@ route.get("/report/submit", async (c) => {
 	const createdAtClientRaw = c.req.query("created_at_client");
 	const channel = c.req.query("channel") || "PWA";
 	// Who sent it: WhatsApp sender number (channel=WA) or the app's device id.
-	const reporterRaw = c.req.query("reporter")?.trim().slice(0, 100) || null;
+	// The WhatsApp number is trusted only from our own webhook (internal header); from the public
+	// URL it is ignored, so nobody can file reports in a registered fisherman's name.
+	const trustedSender = c.req.header("X-Internal-Key") === INTERNAL_REQUEST_SECRET;
+	const reporterRaw = trustedSender ? c.req.query("reporter")?.trim().slice(0, 100) || null : null;
 
 	if (!beachLocation) {
 		return c.json({ ok: false, error: "beach_location query parameter required" }, 400);
@@ -86,9 +91,14 @@ route.get("/report/submit", async (c) => {
 		reporterKey,
 		REPORT_REPEAT_WINDOW_MS,
 	);
+	const counted = (duplicateCodes ?? []).length < lik_codes.length;
+	let heldForRegistration = false;
 	if (registered) {
-		logFishermanReport(registered.id, beachLocation, lik_codes, isWA ? "WHATSAPP" : channel, (duplicateCodes ?? []).length < lik_codes.length);
+		logFishermanReport(registered.id, beachLocation, lik_codes, isWA ? "WHATSAPP" : channel, counted);
 		void recordClass(registered, "report");
+	} else if (isWA) {
+		// Not registered yet: kept under his hashed number and added to his history when he registers.
+		heldForRegistration = holdForRegistration(reporterRaw, "report", beachLocation, { signs: lik_codes, counted });
 	}
 
 	await redis.xAdd(REPORT_SYNC_STREAM, "*", {
@@ -115,6 +125,8 @@ route.get("/report/submit", async (c) => {
 			reportCounts: codeCounts,
 			threshold,
 			duplicateCodes,
+			registered: Boolean(registered),
+			heldForRegistration,
 		});
 	}
 
@@ -264,6 +276,8 @@ route.get("/report/submit", async (c) => {
 		shouldDistribute: true,
 		alertEvent,
 		reportCounts: codeCounts,
+		registered: Boolean(registered),
+		heldForRegistration,
 	});
 });
 

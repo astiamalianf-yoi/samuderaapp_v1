@@ -134,3 +134,10 @@ if (!Number.isFinite(JWT_EXPIRES_SECONDS) || JWT_EXPIRES_SECONDS <= 0) {
 export const BMKG_NOWCAST_ENABLED = (process.env.BMKG_NOWCAST_ENABLED ?? "true") !== "false";
 export const BMKG_NOWCAST_INTERVAL_MINUTES = Number(process.env.BMKG_NOWCAST_INTERVAL_MINUTES ?? 10);
 export const BMKG_NOWCAST_RSS_URL = process.env.BMKG_NOWCAST_RSS_URL ?? "https://www.bmkg.go.id/alerts/nowcast/id";
+
+/**
+ * Shared only between the WhatsApp webhook and /api/report/submit inside this process: a
+ * "reporter" (WhatsApp number) is trusted only with this header, so nobody can file reports in a
+ * registered fisherman's name through the public URL.
+ */
+export const INTERNAL_REQUEST_SECRET = process.env.INTERNAL_REQUEST_SECRET || crypto.randomUUID();

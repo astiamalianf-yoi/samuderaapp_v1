@@ -111,6 +111,15 @@ function createTablesIfNotExist(sqlite: Database) {
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
 
+		CREATE TABLE IF NOT EXISTS wa_held (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			phone_hash TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			beach TEXT NOT NULL,
+			payload TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+
 		CREATE TABLE IF NOT EXISTS incidents (
 			id TEXT PRIMARY KEY NOT NULL,
 			fisherman_id TEXT NOT NULL REFERENCES fishermen(id),

@@ -16,6 +16,8 @@ export interface Activity {
   incidents_total: number
   interaction_incidents: number
   incident_hazards: string[]
+  /** Messages logged in the last 30 days per channel (repeats within 5 minutes included). */
+  channels_30d?: { app: number; whatsapp: number }
 }
 
 export type IncidentType = "angin_kencang" | "gelombang_ekstrem" | "badai" | "arus_kuat"

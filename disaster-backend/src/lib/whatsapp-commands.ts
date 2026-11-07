@@ -287,3 +287,27 @@ export function formatAlertsResponse(alerts: any[], beachFilter?: string | null)
 
 	return parts.join("\n\n---\n\n");
 }
+
+/** "!kejadian": the four incident types of "Lapor kejadian" in the app (codebook hazards). */
+export const INCIDENT_KEYWORDS: [RegExp, string][] = [
+	[/\bangin\s*(kencang|ribut|besar|kuat|keras|badai)\b|puting\s*beliung/, "angin_kencang"],
+	[/\b(gelombang|ombak)\s*(besar|tinggi|ekstrem|ekstrim|ganas)\b/, "gelombang_ekstrem"],
+	[/\bbadai\b|\btopan\b|hujan\s*(lebat|deras|badai)/, "badai"],
+	[/\barus\s*(kuat|deras|kencang)\b/, "arus_kuat"],
+];
+
+export const INCIDENT_NAMES: Record<string, string> = {
+	angin_kencang: "Angin kencang di laut",
+	gelombang_ekstrem: "Gelombang ekstrem",
+	badai: "Badai / hujan lebat",
+	arus_kuat: "Arus kuat",
+};
+
+export type KejadianResult = { types: string[]; beachLocation: string | null };
+
+/** "!kejadian angin kencang di lampuuk" -> types + beach (beach may be missing: his home beach). */
+export function parseKejadianCommand(text: string): KejadianResult {
+	const lower = normaliseReportText(text.toLowerCase().replace(/^!kejadian/, " "));
+	const types = INCIDENT_KEYWORDS.filter(([re]) => re.test(lower)).map(([, t]) => t);
+	return { types, beachLocation: parsePeringatanCommand(text) };
+}

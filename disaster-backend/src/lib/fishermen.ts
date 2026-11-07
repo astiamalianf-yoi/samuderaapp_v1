@@ -1,3 +1,4 @@
+import { linkHeldWhatsApp } from "./wa-sync";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { initDb as getDb } from "../db";
@@ -58,6 +59,16 @@ const isBeach = (v: unknown): v is string => typeof v === "string" && (ALLOWED_B
  * Registers a fisherman, or updates him when the number is already registered (e.g. new phone,
  * reinstalled app). A new token is issued each time; older tokens stop working.
  */
+/** WhatsApp reports sent from this number before he registered join his history. */
+function linkHeld(fishermanId: string, hash: string) {
+	try {
+		const moved = linkHeldWhatsApp(fishermanId, hash);
+		if (moved.reports || moved.incidents) console.log(`[fishermen] linked earlier WhatsApp items: ${moved.reports} reports, ${moved.incidents} incidents`);
+	} catch (err) {
+		console.warn("[fishermen] could not link earlier WhatsApp items:", err);
+	}
+}
+
 export async function registerFisherman(input: RegisterInput): Promise<RegisterResult> {
 	if (input.consent !== true) return { ok: false, error: "consent_required" };
 	const digits = normalizePhone(typeof input.phone === "string" ? input.phone : null);
@@ -77,6 +88,7 @@ export async function registerFisherman(input: RegisterInput): Promise<RegisterR
 			.set({ homeBeach: input.homeBeach, profile, tokenHash: tokenHash(token), consentAt: now, updatedAt: now })
 			.where(eq(fishermen.id, existing.id))
 			.run();
+		linkHeld(existing.id, hash);
 		const updated = db.select().from(fishermen).where(eq(fishermen.id, existing.id)).get()!;
 		return { ok: true, fisherman: toPublic(updated), token, created: false };
 	}
@@ -93,6 +105,7 @@ export async function registerFisherman(input: RegisterInput): Promise<RegisterR
 		})
 		.returning()
 		.get();
+	linkHeld(row.id, hash);
 	return { ok: true, fisherman: toPublic(row), token, created: true };
 }
 

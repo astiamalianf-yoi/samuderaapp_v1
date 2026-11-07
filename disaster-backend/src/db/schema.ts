@@ -85,6 +85,20 @@ export const fishermanReports = sqliteTable("fisherman_reports", {
 	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 });
 
+/**
+ * WhatsApp reports and incidents from a number that is not registered yet, kept under the keyed
+ * hash of the number (never the number). When that number registers in the app, they move into
+ * his history with their original time, so app and WhatsApp give one history per fisherman.
+ */
+export const waHeld = sqliteTable("wa_held", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	phoneHash: text("phone_hash").notNull(),
+	kind: text("kind").notNull(), // "report" | "incident"
+	beach: text("beach").notNull(),
+	payload: text("payload", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
 /** "Lapor kejadian": a fisherman met dangerous weather at sea, optionally asking for help. */
 export const incidents = sqliteTable("incidents", {
 	id: text("id").$defaultFn(() => crypto.randomUUID()).primaryKey(),

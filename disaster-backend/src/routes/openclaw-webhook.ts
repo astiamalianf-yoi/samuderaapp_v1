@@ -10,13 +10,22 @@ import {
 	riskLabelFor,
 	signLabel,
 	BEACH_DISPLAY,
+	parseKejadianCommand,
+	INCIDENT_NAMES,
 } from "../lib/whatsapp-commands";
+import { INTERNAL_REQUEST_SECRET } from "../config";
+import { findFishermanByPhone, normalizePhone, phoneHash } from "../lib/fishermen";
+import { saveIncident } from "../lib/incident-store";
+import { holdForRegistration } from "../lib/wa-sync";
+import { recordClass } from "../lib/class-history";
 
 const route = new Hono();
 
 type OpenClawWebhookEvent = {
 	direction?: "incoming" | "outgoing";
 	from?: string;
+	/** The person who wrote it (his number, from OpenClaw metadata.senderE164); `from` may be the group id. */
+	sender?: string;
 	to?: string;
 	text?: string;
 	messageId?: string;
@@ -32,6 +41,53 @@ export async function isRepeatedMessage(messageId: string | undefined): Promise<
 	if (!messageId) return false;
 	const fresh = await redis.set(`whatsapp:seen:${messageId}`, "1", { NX: true, EX: MESSAGE_DEDUPE_TTL_SECONDS });
 	return fresh !== "OK";
+}
+
+/** Who wrote the message: the relay's sender field, else `from` unless that is the group id. */
+export function senderOf(body: { sender?: string; from?: string }): string | undefined {
+	for (const v of [body.sender, body.from]) {
+		if (typeof v === "string" && v.trim() && !/@g\.us$/i.test(v.trim())) return v.trim();
+	}
+	return undefined;
+}
+
+const masked = (v?: string) => {
+	const d = normalizePhone(v);
+	return d ? `…${d.slice(-4)}` : v ? "(not a phone number)" : "(none)";
+};
+
+/** Line added to a receipt when the report could not be put in a fisherman's own history. */
+function syncNote(data: { registered?: boolean; heldForRegistration?: boolean }, sender?: string): string[] {
+	if (data.registered) return [];
+	if (data.heldForRegistration || normalizePhone(sender)) {
+		return ["ℹ️ Nomor ini belum terdaftar. Daftar di aplikasi SAMUDRA dengan nomor WhatsApp ini, laporan Anda akan masuk ke profil Anda."];
+	}
+	return ["ℹ️ Nomor pengirim tidak terbaca, laporan dihitung tetapi belum masuk ke profil Anda."];
+}
+
+async function handleKejadian(text: string, sender?: string): Promise<string> {
+	const parsed = parseKejadianCommand(text);
+	if (parsed.types.length === 0) {
+		return "Kejadian apa, Bang? Contoh: *!kejadian angin kencang di lampuuk* (angin kencang, gelombang besar, badai, arus kuat).";
+	}
+	const fisherman = findFishermanByPhone(sender);
+	const beach = parsed.beachLocation ?? fisherman?.homeBeach ?? null;
+	if (!beach) return "Di pantai mana, Bang? Contoh: *!kejadian angin kencang di lampuuk*";
+	const names = parsed.types.map((t) => INCIDENT_NAMES[t] ?? t).join(", ");
+	const beachName = BEACH_DISPLAY[beach] ?? beach;
+	if (fisherman) {
+		for (const type of parsed.types) saveIncident({ fishermanId: fisherman.id, beach, type, channel: "WHATSAPP" });
+		void recordClass(fisherman, "incident");
+	} else {
+		for (const type of parsed.types) holdForRegistration(sender, "incident", beach, { type });
+	}
+	return [
+		"✅ Kejadian dicatat, Bang. Hati-hati di laut.",
+		`Kejadian: ${names}`,
+		`Pantai: ${beachName}`,
+		"Butuh bantuan? Telepon Basarnas *115* atau *112*.",
+		...syncNote({ registered: Boolean(fisherman) }, sender),
+	].join("\n");
 }
 
 async function handleLapor(text: string, chatId: string, sender?: string): Promise<string> {
@@ -52,9 +108,9 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 	if (sender) params.set("reporter", sender);
 
 	try {
-		const res = await fetch(
-			`http://localhost:3000/api/report/submit?${params.toString()}`,
-		);
+		const res = await fetch(`http://localhost:3000/api/report/submit?${params.toString()}`, {
+			headers: { "X-Internal-Key": INTERNAL_REQUEST_SECRET },
+		});
 		const data = (await res.json()) as any;
 
 		if (!res.ok || !data.ok) {
@@ -71,6 +127,7 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 				`Pantai: ${beachName}`,
 				`Jumlah pelapor: ${alertEvent.reporterCount}`,
 				"Peringatan sedang dikirim ke semua nelayan.",
+				...syncNote(data, sender),
 			].join("\n");
 		}
 
@@ -85,6 +142,7 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 				`Tanda: ${signText}`,
 				`Pantai: ${beachName}`,
 				"Laporan yang sama dari nomor yang sama dalam 5 menit dihitung satu kali.",
+				...syncNote(data, sender),
 			].join("\n");
 		}
 
@@ -97,6 +155,7 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 				? [`(${duplicates.join(", ")} sudah Anda laporkan dalam 5 menit terakhir, tidak dihitung lagi)`]
 				: []),
 			"Menunggu laporan lain untuk mencapai threshold.",
+			...syncNote(data, sender),
 		].join("\n");
 	} catch (err) {
 		console.error("[openclaw-webhook] lapor fetch error:", err);
@@ -132,7 +191,8 @@ route.post("/openclaw/webhook", async (c) => {
 		}
 
 		const { direction, from, to, text, messageId, ack } = body;
-		console.log("[openclaw-webhook] Received event:", { direction, from, to, text: text?.substring(0, 100), messageId, ack });
+		const sender = senderOf(body);
+		console.log("[openclaw-webhook] Received event:", { direction, from, sender: masked(sender), to, text: text?.substring(0, 100), messageId, ack });
 
 		if (!direction) {
 			console.log("[openclaw-webhook] Missing direction");
@@ -159,6 +219,8 @@ route.post("/openclaw/webhook", async (c) => {
 			await redis.xAdd("whatsapp:incoming", "*", {
 				timestamp: String(timestamp),
 				from,
+				// Keyed hash of the sender's number (not the number), to link the message to his history.
+				...(normalizePhone(sender) ? { senderHash: phoneHash(normalizePhone(sender)!) } : {}),
 				text,
 				...(experimentId && { experimentId }),
 			});
@@ -167,7 +229,10 @@ route.post("/openclaw/webhook", async (c) => {
 
 			const cleanText = text.replace(/@\d+\s*/, "").trim();
 			const lowerText = cleanText.toLowerCase();
-			const isCommand = lowerText.startsWith("!lapor") || lowerText.startsWith("!peringatan");
+			const command = lowerText.startsWith("!lapor") ? "lapor"
+				: lowerText.startsWith("!kejadian") ? "kejadian"
+				: lowerText.startsWith("!peringatan") ? "peringatan" : null;
+			const isCommand = command !== null;
 			const replyTarget = to || from;
 
 			if (isCommand && (await isRepeatedMessage(messageId))) {
@@ -179,8 +244,10 @@ route.post("/openclaw/webhook", async (c) => {
 				console.log(`[openclaw-webhook] Intercepted command: ${lowerText.substring(0, 50)}`);
 
 				let reply: string;
-				if (lowerText.startsWith("!lapor")) {
-					reply = await handleLapor(cleanText, replyTarget, from);
+				if (command === "lapor") {
+					reply = await handleLapor(cleanText, replyTarget, sender);
+				} else if (command === "kejadian") {
+					reply = await handleKejadian(cleanText, sender);
 				} else {
 					reply = await handlePeringatan(cleanText, replyTarget);
 				}
@@ -188,7 +255,7 @@ route.post("/openclaw/webhook", async (c) => {
 				await sendOpenClawReply(replyTarget, reply);
 				console.log("[openclaw-webhook] Command handled, reply sent to:", replyTarget);
 
-				return c.json({ success: true, handled: true, command: lowerText.startsWith("!lapor") ? "lapor" : "peringatan" });
+				return c.json({ success: true, handled: true, command });
 			}
 		} else if (direction === "outgoing") {
 			if (!to || !text) {

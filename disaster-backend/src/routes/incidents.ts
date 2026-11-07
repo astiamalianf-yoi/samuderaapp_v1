@@ -1,8 +1,5 @@
 import { Hono } from "hono";
-import { initDb as getDb } from "../db";
-import { fishermanReports, incidents } from "../db/schema";
-import { and, eq, gte, lte } from "drizzle-orm";
-import { CONFIRM_WINDOW_MS } from "../lib/trust-index";
+import { saveIncident } from "../lib/incident-store";
 import { findFishermanByToken, normalizePhone } from "../lib/fishermen";
 import { INCIDENT_TYPES, type IncidentType } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
@@ -50,26 +47,6 @@ export function formatHelpMessage(o: { beach: string; type: IncidentType; lat?: 
 
 const coord = (v: unknown, lim: number) => (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= lim ? v : null);
 
-const sqliteTime = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
-
-/**
- * Codebook No. 12 counts hazards "detected using LIK". Rather than asking, it is read from his own
- * reports: he reported a natural sign at the same beach within the confirmation window before.
- */
-export function reportedSignBefore(fishermanId: string, beach: string, at = new Date()): boolean {
-	const row = getDb()
-		.select({ id: fishermanReports.id })
-		.from(fishermanReports)
-		.where(and(
-			eq(fishermanReports.fishermanId, fishermanId),
-			eq(fishermanReports.beach, beach),
-			gte(fishermanReports.createdAt, sqliteTime(new Date(at.getTime() - CONFIRM_WINDOW_MS))),
-			lte(fishermanReports.createdAt, sqliteTime(at)),
-		))
-		.get();
-	return Boolean(row);
-}
-
 /**
  * POST /api/incidents { beach, type, needHelp, lat?, lon?, contactPhone? } (X-Fisherman-Token)
  * "Lapor kejadian": strong wind / storm adds to his level of interaction with disaster (codebook
@@ -88,15 +65,10 @@ route.post("/incidents", async (c) => {
 	const type = body.type as IncidentType;
 	if (!INCIDENT_TYPES.includes(type)) return c.json({ ok: false, error: "invalid_type" }, 400);
 	const needHelp = body.needHelp === true;
-	const detectedBySign = reportedSignBefore(fisherman.id, beach);
 	const lat = coord(body.lat, 90);
 	const lon = coord(body.lon, 180);
 
-	const row = getDb()
-		.insert(incidents)
-		.values({ fishermanId: fisherman.id, beach, type, needHelp, detectedBySign, latitude: lat, longitude: lon })
-		.returning()
-		.get();
+	const row = saveIncident({ fishermanId: fisherman.id, beach, type, needHelp, lat, lon });
 
 	let helpSent = false;
 	let helpReason: string | null = null;

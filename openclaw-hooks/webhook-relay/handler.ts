@@ -18,11 +18,20 @@ async function handler(event) {
 
   if (!content) return;
 
+  // The person who wrote the message. In a group, `from` is the group id; the sender's number is
+  // in metadata.senderE164 (OpenClaw hook context). It links his WhatsApp reports to his app
+  // registration, so never send the group id as the sender.
+  const isGroupId = (v) => typeof v === "string" && /@g\.us$/i.test(v);
+  const sender =
+    [metadata.senderE164, ctx.senderE164, metadata.senderId, ctx.senderId, from]
+      .find((v) => typeof v === "string" && v.trim() && !isGroupId(v)) || "";
+
   const payload = {
-    messageId: event.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    messageId: ctx.messageId || event.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     sessionKey: event.sessionKey || SESSION_KEY,
     direction: "incoming",
     from: from || chatId,
+    sender,
     to: chatId,
     text: content,
     timestamp: event.timestamp || new Date().toISOString(),
