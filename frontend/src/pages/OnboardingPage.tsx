@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import {
-  ArrowLeft, ArrowRight, BellRing, CloudLightning, Map, Megaphone, MessageCircle, ShieldAlert, UserPlus, Users, WifiOff,
+  ArrowLeft, ArrowRight, BellRing, CloudLightning, Megaphone, ShieldAlert, UserPlus, WifiOff,
 } from "lucide-react"
 import { markOnboardingDone } from "../lib/onboarding"
 
@@ -29,7 +29,8 @@ const SLIDES: Slide[] = [
     body: (
       <>
         <p>
-          <b>Sistem peringatan dini angin kencang</b> untuk nelayan. SAMUDRA menggabungkan{" "}
+          <b>Sistem peringatan dini angin kencang</b> untuk nelayan di Aceh, Yogyakarta dan Jawa Barat.
+          SAMUDRA menggabungkan{" "}
           <b>tanda alam</b> yang dilihat nelayan dengan <b>informasi resmi BMKG</b>, supaya Anda tahu kapan aman
           melaut dan apa yang harus dilakukan.
         </p>
@@ -37,55 +38,20 @@ const SLIDES: Slide[] = [
     ),
   },
   {
-    title: "Untuk siapa?",
-    art: <Circle className="bg-emerald-100 text-emerald-800"><Users className="w-14 h-14" aria-hidden /></Circle>,
-    body: (
-      <>
-        <p>Untuk <b>nelayan</b>, kelompok nelayan, dan keluarga nelayan di:</p>
-        <ul className="mt-3 space-y-1 font-semibold">
-          <li>Aceh — Lampuuk, Lhoknga, Ulee Lheue</li>
-          <li>Yogyakarta — Depok, Samas</li>
-          <li>Jawa Barat — Pangandaran, Batu Karas, Bojongsalawe</li>
-        </ul>
-      </>
-    ),
-  },
-  {
-    title: "Status pantai Anda",
+    title: "Yang bisa Anda lakukan",
     art: (
       <div className="grid grid-cols-3 gap-2 w-full max-w-xs" aria-hidden>
-        <span className="rounded-2xl bg-emerald-600 text-white text-sm font-black py-6 text-center">AMAN</span>
-        <span className="rounded-2xl bg-amber-400 text-black text-[13px] tracking-tight font-black py-6 text-center">WASPADA</span>
-        <span className="rounded-2xl bg-red-600 text-white text-sm font-black py-6 text-center">SIAGA</span>
+        <span className="rounded-2xl bg-emerald-600 text-white text-sm font-black py-5 text-center">AMAN</span>
+        <span className="rounded-2xl bg-amber-400 text-black text-[13px] tracking-tight font-black py-5 text-center">WASPADA</span>
+        <span className="rounded-2xl bg-red-600 text-white text-sm font-black py-5 text-center">SIAGA</span>
       </div>
     ),
     body: (
-      <p>
-        Lihat sekilas apakah pantai Anda <b>aman</b>, perlu <b>waspada</b>, atau <b>siaga</b>. Peringatan langsung
-        memberi tahu <b>apa yang harus dilakukan</b>, dan Anda bisa melihat <b>mengapa</b> peringatan itu muncul.
-      </p>
-    ),
-  },
-  {
-    title: "Lapor tanda alam",
-    art: <Circle className="bg-orange-100 text-orange-700"><Megaphone className="w-14 h-14" aria-hidden /></Circle>,
-    body: (
-      <p>
-        Lihat awan turun, kilat, atau ombak berubah? <b>Lapor dengan 2 sentuhan</b> di aplikasi, atau tulis{" "}
-        <span className="font-mono font-bold">!lapor</span> di grup WhatsApp. Jika <b>5 nelayan</b> melaporkan tanda
-        yang sama, peringatan dikirim ke semua.
-      </p>
-    ),
-  },
-  {
-    title: "Fitur lainnya",
-    art: <div className="w-20 h-20 rounded-full flex items-center justify-center bg-sky-100 text-sky-900"><ShieldAlert className="w-11 h-11" aria-hidden /></div>,
-    body: (
       <ul className="space-y-2">
-        <Feature icon={<CloudLightning className="w-6 h-6" aria-hidden />} text="Peringatan resmi dan prakiraan cuaca BMKG per jam" />
+        <Feature icon={<ShieldAlert className="w-6 h-6" aria-hidden />} text="Lihat status pantai Anda dan apa yang harus dilakukan" />
+        <Feature icon={<Megaphone className="w-6 h-6" aria-hidden />} text="Lapor tanda alam dengan 2 sentuhan, atau !lapor di grup WhatsApp" />
+        <Feature icon={<CloudLightning className="w-6 h-6" aria-hidden />} text="Peringatan resmi dan prakiraan cuaca BMKG" />
         <Feature icon={<BellRing className="w-6 h-6" aria-hidden />} text="Notifikasi di HP untuk pantai asal Anda" />
-        <Feature icon={<MessageCircle className="w-6 h-6" aria-hidden />} text="Grup WhatsApp untuk lapor dan cek peringatan" />
-        <Feature icon={<Map className="w-6 h-6" aria-hidden />} text="Peta pantai dan pengetahuan 17 tanda alam" />
         <Feature icon={<WifiOff className="w-6 h-6" aria-hidden />} text="Tetap bisa dipakai saat sinyal lemah" />
       </ul>
     ),

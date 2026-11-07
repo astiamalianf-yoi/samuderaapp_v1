@@ -37,14 +37,14 @@ describe("onboarding", () => {
     expect(localStorage.getItem(ONBOARDING_KEY)).toBe("1")
   })
 
-  it("Lanjut walks through who it is for and the features, ending with Daftar", () => {
+  it("Lanjut walks through 3 slides: welcome, features, ending with Daftar", () => {
     renderFlow()
     const titles: string[] = []
     for (let n = 0; n < 10 && !screen.queryByText("Daftar sekarang"); n++) {
       titles.push(screen.getByRole("heading").textContent ?? "")
       fireEvent.click(screen.getByText("Lanjut"))
     }
-    expect(titles).toEqual(["Selamat datang di SAMUDRA", "Untuk siapa?", "Status pantai Anda", "Lapor tanda alam", "Fitur lainnya"])
+    expect(titles).toEqual(["Selamat datang di SAMUDRA", "Yang bisa Anda lakukan"])
     expect(screen.queryByText("Lewati")).toBeNull()
     fireEvent.click(screen.getByText("Daftar sekarang"))
     expect(screen.getByText("DAFTAR")).toBeTruthy()
