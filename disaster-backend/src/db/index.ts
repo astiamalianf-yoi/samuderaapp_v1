@@ -117,6 +117,7 @@ function createTablesIfNotExist(sqlite: Database) {
 			beach TEXT NOT NULL,
 			type TEXT NOT NULL,
 			need_help INTEGER NOT NULL DEFAULT 0,
+			detected_by_sign INTEGER NOT NULL DEFAULT 0,
 			latitude REAL,
 			longitude REAL,
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))

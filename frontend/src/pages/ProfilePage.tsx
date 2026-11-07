@@ -147,7 +147,7 @@ export function ProfilePage() {
           options={[[1, "Kurang dari 1 hari"], [2, "Beberapa hari"], [3, "Beberapa minggu"]]} onChange={(v) => set("fishing_duration", v as 1 | 2 | 3)} />
 
         <fieldset id="q-hazards" className="space-y-2">
-          <legend className="text-lg font-bold">6. Bencana apa saja yang pernah Anda alami?</legend>
+          <legend className="text-lg font-bold">6. Bencana atau bahaya apa saja yang pernah Anda alami dan Anda kenali dari tanda alam?</legend>
           <div className="grid grid-cols-2 gap-2">
             {HAZARD_OPTIONS.map(([key, text]) => {
               const on = hazards.includes(key)

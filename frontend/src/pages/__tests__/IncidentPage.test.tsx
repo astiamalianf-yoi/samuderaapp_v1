@@ -20,7 +20,7 @@ afterEach(() => vi.restoreAllMocks())
 describe("answers by year", () => {
   const a: ProfileAnswers = {
     birth_year: 1981, fishing_start_year: 2001, lik_start_year: 2010, fishing_role: 1, head_of_community: 0,
-    fishing_duration: 1, hazards: ["angin_kencang", "badai"], disaster_interaction: 3, lik_combination_count: 2,
+    fishing_duration: 1, hazards: ["angin_kencang", "badai"] as ProfileAnswers["hazards"], disaster_interaction: 3, lik_combination_count: 2,
     usage_frequency_min: 2, usage_frequency_max: 4,
   }
   it("age and years are computed for the year", () => {
@@ -50,12 +50,13 @@ describe("Lapor kejadian / Minta bantuan", () => {
       new Response(JSON.stringify({ ok: true, incidentId: "i1", helpSent: true, helpReason: null }), { status: 201 }))
     render(<MemoryRouter><IncidentPage /></MemoryRouter>)
     fireEvent.click(screen.getByText("Angin kencang di laut"))
+    fireEvent.click(screen.getByText("Ya"))
     fireEvent.click(screen.getByRole("switch"))
     expect(screen.getAllByRole("link", { name: /115/ }).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
     await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
     const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
-    expect(body).toMatchObject({ type: "angin_kencang", needHelp: true, lat: 5.49, lon: 95.24, contactPhone: "6281234567890" })
+    expect(body).toMatchObject({ type: "angin_kencang", detectedBySign: true, needHelp: true, lat: 5.49, lon: 95.24, contactPhone: "6281234567890" })
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/incidents")
   })
 
@@ -69,6 +70,19 @@ describe("Lapor kejadian / Minta bantuan", () => {
     await waitFor(() => expect(screen.getByText("Kejadian tercatat")).toBeTruthy())
     const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
     expect(body.needHelp).toBe(false)
+    expect(body.detectedBySign).toBe(false) // not answered: not counted as detected by a sign
     expect(body.contactPhone).toBeUndefined()
+  })
+})
+
+describe("codebook hazards (No. 12)", () => {
+  it("old saved keys become codebook codes; gempa is dropped", async () => {
+    const { loadAnswers, ANSWERS_KEY } = await import("../../lib/profile")
+    localStorage.setItem(ANSWERS_KEY, JSON.stringify({
+      birth_year: 1981, fishing_start_year: 2001, lik_start_year: 2010, fishing_role: 1, head_of_community: 0,
+      fishing_duration: 1, hazards: ["gelombang_tinggi", "banjir_rob", "gempa"], disaster_interaction: 3,
+      lik_combination_count: 2, usage_frequency_min: 2, usage_frequency_max: 4,
+    }))
+    expect(loadAnswers()!.hazards.sort()).toEqual(["gelombang_ekstrem", "pasang_tinggi"])
   })
 })

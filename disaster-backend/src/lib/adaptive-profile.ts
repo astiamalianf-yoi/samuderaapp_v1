@@ -10,26 +10,35 @@ import type { FishermanProfile } from "./personal-warning";
  * value, never take it below what he said:
  *  - age, fishing experience and years using natural signs are computed from the YEARS he gave,
  *    for the current year, so they grow by themselves every January;
- *  - reports in the last 30 days (spaced >= 5 min) raise "frequency of usage (max) per month";
- *  - different signs reported in the last 12 months raise "number of LIK combination";
- *  - each incident he reports ("Lapor kejadian": dangerous wind/waves/storm at sea) adds 1 to
- *    "level of interaction with disaster", and its hazard type is added to the hazards he lived.
+ *  - frequency of usage per month (codebook No. 23-25): reports in the last 30 days (spaced
+ *    >= 5 min) raise the max; the lowest monthly count of the last three 30-day windows raises the
+ *    min (so the average follows steady use, not one busy month);
+ *  - different signs reported in the last 12 months raise "number of LIK combination" (No. 7);
+ *  - experience with disaster (No. 12-13: hazard types experienced AND detected using natural
+ *    signs, codes B.1-B.6): an incident adds its hazard type only when he says he saw a natural
+ *    sign before it happened;
+ *  - level of interaction with disaster (No. 14: times he personally experienced STRONG WIND that
+ *    threatened his life, damaged/capsized his boat or cost him his catch): +1 per incident of
+ *    strong wind or storm.
  * The result (12 Random Forest inputs) is what the model sees; the category is never shown to him.
  */
 
-export const HAZARD_KEYS = ["angin_kencang", "gelombang_tinggi", "badai", "tsunami", "gempa", "banjir_rob"] as const;
+/** Codebook No. 12 hazard codes: B.1 Tsunami ... B.6 High Tide. */
+export const HAZARD_KEYS = ["tsunami", "angin_kencang", "gelombang_ekstrem", "badai", "arus_kuat", "pasang_tinggi"] as const;
 export type HazardKey = (typeof HAZARD_KEYS)[number];
-
-export const INCIDENT_TYPES = ["angin_kencang", "gelombang_tinggi", "badai", "perahu_rusak"] as const;
-export type IncidentType = (typeof INCIDENT_TYPES)[number];
-
-/** Hazard type an incident counts as (perahu_rusak is a consequence, not a hazard type). */
-const INCIDENT_HAZARD: Record<IncidentType, HazardKey | null> = {
-	angin_kencang: "angin_kencang",
-	gelombang_tinggi: "gelombang_tinggi",
-	badai: "badai",
-	perahu_rusak: null,
+export const HAZARD_CODE: Record<HazardKey, string> = {
+	tsunami: "B.1", angin_kencang: "B.2", gelombang_ekstrem: "B.3", badai: "B.4", arus_kuat: "B.5", pasang_tinggi: "B.6",
 };
+/** Keys used before 7 Nov 2026 (gempa is not a codebook hazard and is dropped). */
+const LEGACY_HAZARD: Record<string, HazardKey | null> = { gelombang_tinggi: "gelombang_ekstrem", banjir_rob: "pasang_tinggi", gempa: null };
+const toHazard = (h: unknown): HazardKey | null =>
+	HAZARD_KEYS.includes(h as HazardKey) ? (h as HazardKey) : typeof h === "string" ? (LEGACY_HAZARD[h] ?? null) : null;
+
+/** What happened at sea ("Lapor kejadian"); each is a codebook hazard at sea. */
+export const INCIDENT_TYPES = ["angin_kencang", "gelombang_ekstrem", "badai", "arus_kuat"] as const;
+export type IncidentType = (typeof INCIDENT_TYPES)[number];
+/** No. 14 counts strong wind only (a storm brings strong wind; older "perahu_rusak" rows were strong-wind damage). */
+const INTERACTION_TYPES = new Set(["angin_kencang", "badai", "perahu_rusak"]);
 
 export type ProfileAnswers = {
 	birth_year: number;
@@ -47,8 +56,13 @@ export type ProfileAnswers = {
 
 export type Activity = {
 	reports_30d: number;
+	/** Lowest report count among the last three 30-day windows. */
+	reports_min_3m: number;
 	signs_12m: string[];
 	incidents_total: number;
+	/** Incidents of strong wind / storm (codebook No. 14). */
+	interaction_incidents: number;
+	/** Hazard types of incidents he detected with a natural sign (codebook No. 12). */
 	incident_hazards: HazardKey[];
 };
 
@@ -71,7 +85,7 @@ export function parseAnswers(input: unknown, year = currentYear()): ProfileAnswe
 		fishing_role: int(r.fishing_role),
 		head_of_community: int(r.head_of_community),
 		fishing_duration: int(r.fishing_duration),
-		hazards: Array.isArray(r.hazards) ? [...new Set(r.hazards.filter((h): h is HazardKey => HAZARD_KEYS.includes(h as HazardKey)))] : [],
+		hazards: Array.isArray(r.hazards) ? [...new Set(r.hazards.map(toHazard).filter((h): h is HazardKey => h !== null))] : [],
 		disaster_interaction: int(r.disaster_interaction),
 		lik_combination_count: int(r.lik_combination_count),
 		usage_frequency_min: int(r.usage_frequency_min),
@@ -95,6 +109,8 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 /** The 12 model inputs for this year: answers raised by activity (never lowered). */
 export function effectiveProfile(a: ProfileAnswers, act: Activity, year = currentYear()): FishermanProfile {
+	const freqMax = clamp(Math.max(a.usage_frequency_max, act.reports_30d), 0, 60);
+	const freqMin = clamp(Math.max(a.usage_frequency_min, act.reports_min_3m), 0, freqMax);
 	const hazards = new Set<HazardKey>([...a.hazards, ...act.incident_hazards]);
 	return {
 		age: clamp(year - a.birth_year, 10, 100),
@@ -103,11 +119,11 @@ export function effectiveProfile(a: ProfileAnswers, act: Activity, year = curren
 		head_of_community: a.head_of_community as FishermanProfile["head_of_community"],
 		fishing_duration: a.fishing_duration as FishermanProfile["fishing_duration"],
 		disaster_experience_count: clamp(hazards.size, 0, 6),
-		disaster_interaction: clamp(a.disaster_interaction + act.incidents_total, 0, 50),
+		disaster_interaction: clamp(a.disaster_interaction + act.interaction_incidents, 0, 50),
 		lik_combination_count: clamp(Math.max(a.lik_combination_count, act.signs_12m.length), 1, 17),
 		usage_duration: clamp(year - a.lik_start_year, 0, 80),
-		usage_frequency_min: a.usage_frequency_min,
-		usage_frequency_max: clamp(Math.max(a.usage_frequency_max, act.reports_30d), a.usage_frequency_min, 60),
+		usage_frequency_min: freqMin,
+		usage_frequency_max: freqMax,
 	} as FishermanProfile;
 }
 
@@ -136,23 +152,31 @@ export function loadActivity(fishermanId: string, now = new Date()): Activity {
 		.from(fishermanReports)
 		.where(and(eq(fishermanReports.fishermanId, fishermanId), gte(fishermanReports.createdAt, since12m)))
 		.all();
-	const cut30 = now.getTime() - 30 * DAY;
-	const times30 = reports
-		.map((r) => Date.parse(`${r.createdAt.replace(" ", "T")}Z`))
-		.filter((t) => Number.isFinite(t) && t >= cut30);
+	const times = reports.map((r) => Date.parse(`${r.createdAt.replace(" ", "T")}Z`)).filter(Number.isFinite);
+	const windowCount = (k: number) => {
+		const end = now.getTime() - k * 30 * DAY;
+		return spacedCount(times.filter((t) => t > end - 30 * DAY && t <= end));
+	};
+	const months = [windowCount(0), windowCount(1), windowCount(2)];
 	const signs = new Set<string>();
 	for (const r of reports) for (const s of r.signs ?? []) signs.add(String(s).replace(/^WN-/i, "Wn-"));
 
-	const inc = db.select({ type: incidents.type }).from(incidents).where(eq(incidents.fishermanId, fishermanId)).all();
+	const inc = db
+		.select({ type: incidents.type, detected: incidents.detectedBySign })
+		.from(incidents)
+		.where(eq(incidents.fishermanId, fishermanId))
+		.all();
 	const hazards = new Set<HazardKey>();
 	for (const i of inc) {
-		const h = INCIDENT_HAZARD[i.type as IncidentType];
+		const h = i.detected ? toHazard(i.type) : null;
 		if (h) hazards.add(h);
 	}
 	return {
-		reports_30d: spacedCount(times30),
+		reports_30d: months[0]!,
+		reports_min_3m: Math.min(...months),
 		signs_12m: [...signs].sort(),
 		incidents_total: inc.length,
+		interaction_incidents: inc.filter((i) => INTERACTION_TYPES.has(i.type)).length,
 		incident_hazards: [...hazards],
 	};
 }

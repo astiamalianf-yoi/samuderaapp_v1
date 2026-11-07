@@ -87,13 +87,14 @@ export const BEACH_KEY = "samudra_selected_beach"
 // keeps a copy to fill the form again and to derive a profile when offline.
 // ---------------------------------------------------------------------------------------------
 
+/** Codebook No. 12 hazard codes B.1-B.6 (hazards experienced and detected with natural signs). */
 export const HAZARD_OPTIONS = [
-  ["angin_kencang", "Angin kencang"],
-  ["gelombang_tinggi", "Gelombang tinggi"],
-  ["badai", "Badai / hujan lebat"],
   ["tsunami", "Tsunami"],
-  ["gempa", "Gempa"],
-  ["banjir_rob", "Banjir rob"],
+  ["angin_kencang", "Angin kencang"],
+  ["gelombang_ekstrem", "Gelombang ekstrem"],
+  ["badai", "Badai (hujan lebat)"],
+  ["arus_kuat", "Arus kuat"],
+  ["pasang_tinggi", "Air pasang tinggi"],
 ] as const
 export type HazardKey = (typeof HAZARD_OPTIONS)[number][0]
 
@@ -157,6 +158,10 @@ export function loadAnswers(): ProfileAnswers | null {
     const raw = localStorage.getItem(ANSWERS_KEY)
     if (!raw) return null
     const a = JSON.parse(raw) as ProfileAnswers
+    // Keys used before 7 Nov 2026 -> codebook codes (gempa is not a codebook hazard).
+    const legacy: Record<string, HazardKey | null> = { gelombang_tinggi: "gelombang_ekstrem", banjir_rob: "pasang_tinggi", gempa: null }
+    const known = HAZARD_OPTIONS.map(([k]) => k as string)
+    a.hazards = [...new Set((a.hazards ?? []).map((h) => (known.includes(h) ? h : legacy[h] ?? null)).filter((h): h is HazardKey => h !== null))]
     return validateAnswers(a).length === 0 ? a : null
   } catch {
     return null

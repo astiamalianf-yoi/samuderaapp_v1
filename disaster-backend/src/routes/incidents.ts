@@ -14,9 +14,9 @@ const route = new Hono();
 
 export const INCIDENT_LABEL: Record<IncidentType, string> = {
 	angin_kencang: "Angin kencang di laut",
-	gelombang_tinggi: "Gelombang tinggi",
+	gelombang_ekstrem: "Gelombang ekstrem",
 	badai: "Badai / hujan lebat",
-	perahu_rusak: "Perahu rusak / terbalik",
+	arus_kuat: "Arus kuat",
 };
 
 /** One help message per fisherman per 10 minutes (taps repeated in panic are sent once). */
@@ -49,9 +49,10 @@ export function formatHelpMessage(o: { beach: string; type: IncidentType; lat?: 
 const coord = (v: unknown, lim: number) => (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= lim ? v : null);
 
 /**
- * POST /api/incidents { beach, type, needHelp, lat?, lon?, contactPhone? } (X-Fisherman-Token)
- * "Lapor kejadian": raises his level of interaction with disaster; with needHelp, a help message
- * goes to the WhatsApp group(s).
+ * POST /api/incidents { beach, type, detectedBySign, needHelp, lat?, lon?, contactPhone? } (X-Fisherman-Token)
+ * "Lapor kejadian": strong wind / storm adds to his level of interaction with disaster (codebook
+ * No. 14); with detectedBySign the hazard type counts as an experience detected with LIK (No. 12).
+ * With needHelp, a help message goes to the WhatsApp group(s).
  */
 route.post("/incidents", async (c) => {
 	const body = await c.req.json<Record<string, unknown>>().catch(() => null);
@@ -64,12 +65,13 @@ route.post("/incidents", async (c) => {
 	const type = body.type as IncidentType;
 	if (!INCIDENT_TYPES.includes(type)) return c.json({ ok: false, error: "invalid_type" }, 400);
 	const needHelp = body.needHelp === true;
+	const detectedBySign = body.detectedBySign === true;
 	const lat = coord(body.lat, 90);
 	const lon = coord(body.lon, 180);
 
 	const row = getDb()
 		.insert(incidents)
-		.values({ fishermanId: fisherman.id, beach, type, needHelp, latitude: lat, longitude: lon })
+		.values({ fishermanId: fisherman.id, beach, type, needHelp, detectedBySign, latitude: lat, longitude: lon })
 		.returning()
 		.get();
 

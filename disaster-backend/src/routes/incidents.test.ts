@@ -67,6 +67,6 @@ describe("Lapor kejadian / Minta bantuan", () => {
 	test("needs registration; rejects unknown beach or type", async () => {
 		expect((await post({ beach: "pantai_lampuuk", type: "badai" }, "nope")).status).toBe(401);
 		expect((await post({ beach: "pantai_kuta", type: "badai" })).status).toBe(400);
-		expect((await post({ beach: "pantai_lampuuk", type: "tsunami" })).status).toBe(400);
+		expect((await post({ beach: "pantai_lampuuk", type: "gempa" })).status).toBe(400);
 	});
 });

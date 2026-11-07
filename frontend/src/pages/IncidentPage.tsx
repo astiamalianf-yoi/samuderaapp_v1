@@ -1,17 +1,18 @@
 import { useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
-import { CheckCircle2, CloudLightning, LifeBuoy, MapPin, MessageCircle, Phone, Siren, Waves, Wind } from "lucide-react"
+import { CheckCircle2, CloudLightning, MapPin, MessageCircle, Phone, Siren, Waves, Wind, MoveRight } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BeachPicker } from "../components/BeachPicker"
 import { getBeachMeta } from "../constants/observationData"
 import { useRegistration, useSelectedBeach } from "../hooks/useAppState"
 import { fishermenService, type IncidentType } from "../services/fishermenService"
 
+/** Hazards at sea, codebook No. 12 codes B.2-B.5. */
 const TYPES: { key: IncidentType; label: string; icon: ReactNode }[] = [
   { key: "angin_kencang", label: "Angin kencang di laut", icon: <Wind className="w-8 h-8" aria-hidden /> },
-  { key: "gelombang_tinggi", label: "Gelombang tinggi", icon: <Waves className="w-8 h-8" aria-hidden /> },
+  { key: "gelombang_ekstrem", label: "Gelombang ekstrem", icon: <Waves className="w-8 h-8" aria-hidden /> },
   { key: "badai", label: "Badai / hujan lebat", icon: <CloudLightning className="w-8 h-8" aria-hidden /> },
-  { key: "perahu_rusak", label: "Perahu rusak / terbalik", icon: <LifeBuoy className="w-8 h-8" aria-hidden /> },
+  { key: "arus_kuat", label: "Arus kuat", icon: <MoveRight className="w-8 h-8" aria-hidden /> },
 ]
 
 /** Emergency numbers (Basarnas 115, national emergency 112), always one tap away on this page. */
@@ -48,6 +49,7 @@ export function IncidentPage() {
   const [beach, setBeach] = useSelectedBeach()
   const [type, setType] = useState<IncidentType | null>(null)
   const [needHelp, setNeedHelp] = useState(false)
+  const [sawSign, setSawSign] = useState<boolean | null>(null)
   const [shareGps, setShareGps] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +123,7 @@ export function IncidentPage() {
     try {
       const pos = needHelp && shareGps ? await getPosition() : null
       const res = await fishermenService.reportIncident(registration.token, {
-        beach, type, needHelp,
+        beach, type, needHelp, detectedBySign: sawSign === true,
         ...(pos ? { lat: pos.coords.latitude, lon: pos.coords.longitude } : {}),
         ...(needHelp && registration.phone ? { contactPhone: registration.phone } : {}),
       })
@@ -157,6 +159,19 @@ export function IncidentPage() {
                 </button>
               )
             })}
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-2">
+          <legend className="text-lg font-bold mb-2">Apakah Anda melihat tanda alam sebelum ini terjadi?</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {([[true, "Ya"], [false, "Tidak"]] as const).map(([v, text]) => (
+              <button key={text} type="button" aria-pressed={sawSign === v} onClick={() => setSawSign(v)}
+                className={`min-h-14 rounded-xl border-2 text-lg font-bold ${
+                  sawSign === v ? "bg-sky-900 border-sky-900 text-white" : "bg-white border-gray-300"}`}>
+                {text}
+              </button>
+            ))}
           </div>
         </fieldset>
 

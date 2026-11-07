@@ -11,12 +11,14 @@ export interface PublicFisherman {
 
 export interface Activity {
   reports_30d: number
+  reports_min_3m: number
   signs_12m: string[]
   incidents_total: number
+  interaction_incidents: number
   incident_hazards: string[]
 }
 
-export type IncidentType = "angin_kencang" | "gelombang_tinggi" | "badai" | "perahu_rusak"
+export type IncidentType = "angin_kencang" | "gelombang_ekstrem" | "badai" | "arus_kuat"
 
 export class RegistrationError extends Error {
   code: string
@@ -57,7 +59,7 @@ export const fishermenService = {
   },
 
   async reportIncident(token: string, body: {
-    beach: BeachLocation; type: IncidentType; needHelp: boolean; lat?: number; lon?: number; contactPhone?: string
+    beach: BeachLocation; type: IncidentType; detectedBySign: boolean; needHelp: boolean; lat?: number; lon?: number; contactPhone?: string
   }) {
     const res = await fetch(`${API_BASE_URL}/api/incidents`, {
       method: "POST",
