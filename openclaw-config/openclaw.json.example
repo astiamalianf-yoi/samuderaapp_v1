@@ -4,9 +4,18 @@
   },
   "channels": {
     "whatsapp": {
+      "enabled": true,
+      "selfChatMode": false,
       "dmPolicy": "disabled",
-      "groupPolicy": "open",
-      "groups": { "*": { "requireMention": true } }
+      "accounts": {
+        "default": {
+          "enabled": true,
+          "dmPolicy": "disabled",
+          "allowFrom": ["*"],
+          "groupPolicy": "open",
+          "groups": { "*": { "requireMention": true } }
+        }
+      }
     }
   },
   "hooks": {
