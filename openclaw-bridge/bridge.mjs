@@ -7,23 +7,24 @@ const GATEWAY_HTTP_URL =
     "wss://",
     "https://",
   ) ||
-  "http://openclaw-openclaw-gateway-1:18789";
+  "http://openclaw-gateway:18789";
 
 const BACKEND_WEBHOOK_URL =
   process.env.BACKEND_WEBHOOK_URL ||
-  "http://peringatan-backend:3000/api/openclaw/webhook";
+  "http://backend:3000/api/openclaw/webhook";
 
 const BACKEND_REPORT_URL =
-  process.env.BACKEND_REPORT_URL || "http://peringatan-backend:3000/api/report";
+  process.env.BACKEND_REPORT_URL || "http://backend:3000/api/report";
 
-const REDIS_URL = process.env.REDIS_URL || "redis://peringatan-redis:6379";
+const REDIS_URL = process.env.REDIS_URL || "redis://redis:6379";
 
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 3000);
 const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 10);
 const OUTBOUND_POLL_MS = Number(process.env.OUTBOUND_POLL_MS || 2000);
 
-const GATEWAY_TOKEN =
-  process.env.GATEWAY_TOKEN || "6c7aa1065d6bb7d3b4aa8d05613c79cd6d93eaceafa3c524";
+// Never a default here: the token is OpenClaw's password (set GATEWAY_TOKEN / OPENCLAW_GATEWAY_TOKEN).
+const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || "";
+if (!GATEWAY_TOKEN) console.warn("[openclaw-bridge] GATEWAY_TOKEN is not set");
 
 const SESSION_KEY =
   process.env.SESSION_KEY ||

@@ -1,7 +1,11 @@
+# samudraapp.com stack. It shares the server with the samudraapp.id app (peringatan-* containers,
+# /root/peringatan-cuaca), so every container, router and volume here has its own samudra-* name.
+name: samudra-com
+
 services:
   redis:
     image: redis:7-alpine
-    container_name: peringatan-redis
+    container_name: samudra-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -14,7 +18,7 @@ services:
 
   mosquitto:
     image: eclipse-mosquitto:2
-    container_name: peringatan-mosquitto
+    container_name: samudra-mosquitto
     restart: unless-stopped
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
@@ -23,7 +27,7 @@ services:
     build:
       context: ./SHAP-model-api
       dockerfile: Dockerfile
-    container_name: peringatan-ml
+    container_name: samudra-ml
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -35,7 +39,7 @@ services:
     build:
       context: ./disaster-backend
       dockerfile: Dockerfile
-    container_name: peringatan-backend
+    container_name: samudra-backend
     restart: unless-stopped
     environment:
       PORT: "3000"
@@ -80,14 +84,13 @@ services:
         condition: service_healthy
     networks:
       - default
-      - shared-net
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.peringatan-backend.rule=Host(`${API_DOMAIN:-api.samudraapp.com}`)"
-      - "traefik.http.routers.peringatan-backend.entrypoints=websecure"
-      - "traefik.http.routers.peringatan-backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.peringatan-backend.loadbalancer.server.port=3000"
+      - "traefik.http.routers.samudra-api.rule=Host(`${API_DOMAIN:-api.samudraapp.com}`)"
+      - "traefik.http.routers.samudra-api.entrypoints=websecure"
+      - "traefik.http.routers.samudra-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.samudra-api.loadbalancer.server.port=3000"
       - "traefik.docker.network=traefik-public"
 
   frontend:
@@ -96,7 +99,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: https://${API_DOMAIN:-api.samudraapp.com}
-    container_name: peringatan-frontend
+    container_name: samudra-web
     restart: unless-stopped
     depends_on:
       - backend
@@ -105,22 +108,25 @@ services:
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.peringatan-frontend.rule=Host(`${APP_DOMAIN:-www.samudraapp.com}`) || Host(`${APP_APEX_DOMAIN:-samudraapp.com}`)"
-      - "traefik.http.routers.peringatan-frontend.entrypoints=websecure"
-      - "traefik.http.routers.peringatan-frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.peringatan-frontend.loadbalancer.server.port=80"
+      - "traefik.http.routers.samudra-web.rule=Host(`${APP_DOMAIN:-www.samudraapp.com}`) || Host(`${APP_APEX_DOMAIN:-samudraapp.com}`)"
+      - "traefik.http.routers.samudra-web.entrypoints=websecure"
+      - "traefik.http.routers.samudra-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.samudra-web.loadbalancer.server.port=80"
       - "traefik.docker.network=traefik-public"
 
   openclaw-bridge:
     build:
       context: ./openclaw-bridge
       dockerfile: Dockerfile
-    container_name: peringatan-openclaw-bridge
+    container_name: samudra-openclaw-bridge
     restart: unless-stopped
     environment:
-      GATEWAY_WS_URL: ws://openclaw-openclaw-gateway-1:18789
-      GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
-      BACKEND_WEBHOOK_URL: http://peringatan-backend:3000/api/openclaw/webhook
+      # Our own OpenClaw (bot number of samudraapp.com), not the .id app's openclaw-openclaw-gateway-1.
+      GATEWAY_WS_URL: ${OPENCLAW_GATEWAY_INTERNAL_URL:-ws://openclaw-gateway:18789}
+      GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?set OPENCLAW_GATEWAY_TOKEN in .env}
+      REDIS_URL: redis://redis:6379
+      BACKEND_WEBHOOK_URL: http://backend:3000/api/openclaw/webhook
+      BACKEND_REPORT_URL: http://backend:3000/api/report
     depends_on:
       - backend
     networks:
@@ -131,7 +137,5 @@ volumes:
   backend_data:
 
 networks:
-  shared-net:
-    external: true
   traefik-public:
     external: true
