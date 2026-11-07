@@ -20,3 +20,11 @@ Forwards every inbound WhatsApp message to the disaster backend webhook for comm
 
 After changing `handler.ts`, copy this folder to the OpenClaw hooks directory on the gateway host
 and restart OpenClaw.
+
+## Password
+
+Set the same secret in both places, so only this OpenClaw can post to the backend:
+
+- backend `.env`: `OPENCLAW_HOOK_TOKEN=<secret>`
+- OpenClaw `openclaw.json`: `hooks.internal.entries["webhook-relay"].env.BACKEND_WEBHOOK_TOKEN = "<secret>"`
+  (and `BACKEND_WEBHOOK_URL` if the backend is not reachable as `http://peringatan-backend:3000`)

@@ -1,4 +1,6 @@
 const BACKEND_URL = process.env.BACKEND_WEBHOOK_URL || "http://peringatan-backend:3000/api/openclaw/webhook";
+// Same value as OPENCLAW_HOOK_TOKEN in the backend's .env (set in openclaw.json, hook env).
+const HOOK_TOKEN = process.env.BACKEND_WEBHOOK_TOKEN || "";
 const SESSION_KEY = process.env.SESSION_KEY || "agent:main:whatsapp:group:120363406080394106@g.us";
 
 function extractGroupIdFromSessionKey(key) {
@@ -41,7 +43,7 @@ async function handler(event) {
   try {
     await fetch(BACKEND_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(HOOK_TOKEN ? { "X-Hook-Token": HOOK_TOKEN } : {}) },
       body: JSON.stringify(payload),
     });
   } catch (err) {

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { beachForGroup, sendOpenClawReply } from "../lib/openclaw";
@@ -13,7 +14,7 @@ import {
 	parseKejadianCommand,
 	INCIDENT_NAMES,
 } from "../lib/whatsapp-commands";
-import { INTERNAL_REQUEST_SECRET } from "../config";
+import { INTERNAL_REQUEST_SECRET, OPENCLAW_HOOK_TOKEN } from "../config";
 import { findFishermanByPhone, normalizePhone, phoneHash } from "../lib/fishermen";
 import { saveIncident } from "../lib/incident-store";
 import { holdForRegistration } from "../lib/wa-sync";
@@ -188,7 +189,20 @@ async function handlePeringatan(text: string, chatId: string): Promise<string> {
 	}
 }
 
+/**
+ * Only our OpenClaw may post here: with OPENCLAW_HOOK_TOKEN set, the relay hook must send it
+ * (X-Hook-Token or Authorization: Bearer). Otherwise anyone could post fake group messages
+ * "from" a registered fisherman and change his profile or the Trust Index.
+ */
+export function hookTokenOk(headers: { get(name: string): string | null }, expected = OPENCLAW_HOOK_TOKEN): boolean {
+	if (!expected) return true;
+	const given = headers.get("x-hook-token") ?? headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+	return given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+}
+if (!OPENCLAW_HOOK_TOKEN) console.warn("[openclaw-webhook] OPENCLAW_HOOK_TOKEN is not set: the webhook accepts posts from anyone");
+
 route.post("/openclaw/webhook", async (c) => {
+	if (!hookTokenOk(c.req.raw.headers)) return c.json({ success: false, error: "unauthorized" }, 401);
 	try {
 		const body = await c.req.json<OpenClawWebhookEvent>().catch(() => null);
 		if (!body) {

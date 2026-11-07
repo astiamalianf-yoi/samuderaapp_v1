@@ -45,7 +45,7 @@ const F = (await import("../lib/fishermen.ts?real-for-wa-sync")) as typeof impor
 // @ts-expect-error
 const { default: submit } = (await import("./report-submit.ts?real-for-wa-sync")) as typeof import("./report-submit");
 // @ts-expect-error
-const { senderOf, default: webhook } = (await import("./openclaw-webhook.ts?real-for-wa-sync")) as typeof import("./openclaw-webhook");
+const { senderOf, hookTokenOk, default: webhook } = (await import("./openclaw-webhook.ts?real-for-wa-sync")) as typeof import("./openclaw-webhook");
 // @ts-expect-error
 const W = (await import("../lib/wa-sync.ts?real-for-wa-sync")) as typeof import("../lib/wa-sync");
 // @ts-expect-error
@@ -80,6 +80,19 @@ describe("WhatsApp sender", () => {
 		globalThis.fetch = orig;
 		expect(sent[0].sender).toBe("+6281234567890");
 		expect(sent[0].messageId).toBe("m1");
+	});
+});
+
+describe("webhook password", () => {
+	const h = (o: Record<string, string>) => new Headers(o);
+	test("with a token set, only posts carrying it are accepted", () => {
+		expect(hookTokenOk(h({ "x-hook-token": "s3cret-token" }), "s3cret-token")).toBe(true);
+		expect(hookTokenOk(h({ authorization: "Bearer s3cret-token" }), "s3cret-token")).toBe(true);
+		expect(hookTokenOk(h({}), "s3cret-token")).toBe(false);
+		expect(hookTokenOk(h({ "x-hook-token": "guess" }), "s3cret-token")).toBe(false);
+	});
+	test("without a token (local testing) everything is accepted", () => {
+		expect(hookTokenOk(h({}), "")).toBe(true);
 	});
 });
 
