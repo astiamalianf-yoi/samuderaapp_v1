@@ -31,6 +31,7 @@ import trustIndexRoute from "./routes/trust-index";
 import incidentsRoute from "./routes/incidents";
 import researchRoute from "./routes/research";
 import { startNowcastMonitor } from "./lib/bmkg-nowcast";
+import { startMorningSchedule } from "./routes/broadcast-morning";
 import { sendOpenClawToGroups } from "./lib/openclaw";
 import { publishIotAlertForEvent } from "./lib/iot-mqtt";
 import bmkgRoute from "./routes/bmkg";
@@ -64,6 +65,7 @@ app.onError((err, c) => {
 await initRedis();
 initDb();
 initWebPush();
+startMorningSchedule();
 startNowcastMonitor({ sendWhatsApp: (group, text) => sendOpenClawToGroups([group], text), publishIot: publishIotAlertForEvent });
 
 await sub.subscribe(ALERTS_CHANNEL, async (message) => {

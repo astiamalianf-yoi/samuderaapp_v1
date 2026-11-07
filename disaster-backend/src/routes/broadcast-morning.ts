@@ -274,40 +274,73 @@ export function buildMorningMessage(beaches: string[], alerts: AlertData[], weat
 	return sections.join("\n");
 }
 
-route.get("/broadcast/morning", async (c) => {
+/** Sends the morning message to every WhatsApp group (each about its own beach). */
+export async function runMorningBroadcast(): Promise<{ sent: boolean; groups: number; alertsCount: number; weatherAvailable: boolean; astronomyAvailable: boolean }> {
 	console.log("[broadcast-morning] Starting morning broadcast...");
-
-	const [alerts, weather, astronomy] = await Promise.all([
-		fetchAlerts(),
-		fetchWeather(),
-		fetchAstronomy(),
-	]);
+	const [alerts, weather, astronomy] = await Promise.all([fetchAlerts(), fetchWeather(), fetchAstronomy()]);
 
 	// One message per WhatsApp group, about that group's own beach(es) only: a neighbouring
 	// beach's warning in the morning message would teach fishermen to ignore warnings.
 	const groups = beachesByGroup(BEACH_COORDS.map((b) => b.slug));
-
 	console.log("[broadcast-morning] Sending broadcast to", groups.size, "group(s)");
 
+	let unsafeCount = 0;
+	for (const [group, beaches] of groups) {
+		const own = alerts.filter((a) => beaches.includes(a.beachLocation));
+		unsafeCount += own.filter((a) => isWarningLevel(a.riskLevel)).length;
+		await sendOpenClawToGroups([group], buildMorningMessage(beaches, own, weather, astronomy));
+	}
+	return { sent: groups.size > 0, groups: groups.size, alertsCount: unsafeCount, weatherAvailable: weather !== null, astronomyAvailable: astronomy !== null };
+}
+
+/** Only with the researcher key: otherwise anyone could make the bot message every group. */
+export function broadcastKeyOk(given: string | null | undefined, expected = process.env.RESEARCH_API_KEY): boolean {
+	return Boolean(expected) && given === expected;
+}
+
+/** Manual trigger (testing): GET /api/broadcast/morning with header X-Research-Key. */
+route.get("/broadcast/morning", async (c) => {
+	if (!broadcastKeyOk(c.req.header("X-Research-Key"))) return c.json({ ok: false, error: "unauthorized" }, 401);
 	try {
-		let unsafeCount = 0;
-		for (const [group, beaches] of groups) {
-			const own = alerts.filter((a) => beaches.includes(a.beachLocation));
-			unsafeCount += own.filter((a) => isWarningLevel(a.riskLevel)).length;
-			await sendOpenClawToGroups([group], buildMorningMessage(beaches, own, weather, astronomy));
-		}
-		return c.json({
-			ok: true,
-			sent: groups.size > 0,
-			groups: groups.size,
-			alertsCount: unsafeCount,
-			weatherAvailable: weather !== null,
-			astronomyAvailable: astronomy !== null,
-		});
+		return c.json({ ok: true, ...(await runMorningBroadcast()) });
 	} catch (err) {
 		console.error("[broadcast-morning] Failed to send:", err);
 		return c.json({ ok: true, sent: false, error: "Failed to send broadcast" }, 500);
 	}
 });
+
+/**
+ * Daily schedule: MORNING_BROADCAST_TIME (WIB, "HH:MM", default 05:30; empty = off). Checked every
+ * minute; a Redis key makes sure it is sent once per day even after a restart.
+ */
+export function morningDue(now: Date, time: string, lastSentDay: string | null): { due: boolean; day: string } {
+	const wib = new Date(now.getTime() + 7 * 3600_000);
+	const day = wib.toISOString().slice(0, 10);
+	const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+	if (!m) return { due: false, day };
+	const minutes = wib.getUTCHours() * 60 + wib.getUTCMinutes();
+	const target = Number(m[1]) * 60 + Number(m[2]);
+	return { due: minutes >= target && minutes < target + 60 && lastSentDay !== day, day };
+}
+
+export function startMorningSchedule(time = process.env.MORNING_BROADCAST_TIME ?? "05:30") {
+	if (!time.trim()) {
+		console.log("[broadcast-morning] daily schedule off (MORNING_BROADCAST_TIME empty)");
+		return;
+	}
+	const tick = async () => {
+		try {
+			const last = await redis.get("broadcast:morning:last-day");
+			const { due, day } = morningDue(new Date(), time, last);
+			if (!due) return;
+			await redis.set("broadcast:morning:last-day", day, { EX: 3 * 86400 });
+			await runMorningBroadcast();
+		} catch (err) {
+			console.error("[broadcast-morning] scheduled run failed:", err);
+		}
+	};
+	setInterval(tick, 60_000);
+	console.log(`[broadcast-morning] daily at ${time} WIB`);
+}
 
 export default route;

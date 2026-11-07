@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 // @ts-expect-error -- the real file, not other tests' mocks of "../lib/openclaw"
 const O = (await import("./openclaw.ts?real-groups")) as typeof import("./openclaw");
 // @ts-expect-error -- the real file
-const { buildMorningMessage, isWarningLevel } = (await import("../routes/broadcast-morning.ts?real-groups")) as typeof import("../routes/broadcast-morning");
+const { buildMorningMessage, isWarningLevel, morningDue, broadcastKeyOk } = (await import("../routes/broadcast-morning.ts?real-groups")) as typeof import("../routes/broadcast-morning");
 // @ts-expect-error -- the real file
 const { formatNowcastWhatsApp } = (await import("./bmkg-nowcast.ts?real-groups")) as typeof import("./bmkg-nowcast");
 
@@ -59,5 +59,21 @@ describe("morning message per group", () => {
 		expect(isWarningLevel("aman")).toBe(false);
 		const msg = buildMorningMessage(["pantai_lhoknga"], [alert("pantai_lhoknga", "siaga")], null, null);
 		expect(msg).toContain("PERINGATAN");
+	});
+});
+
+describe("morning broadcast schedule and key", () => {
+	const at = (iso: string) => new Date(iso);
+	test("due once per day from 05:30 WIB", () => {
+		expect(morningDue(at("2026-11-07T22:29:00Z"), "05:30", null).due).toBe(false); // 05:29 WIB
+		expect(morningDue(at("2026-11-07T22:30:00Z"), "05:30", null)).toEqual({ due: true, day: "2026-11-08" });
+		expect(morningDue(at("2026-11-07T22:45:00Z"), "05:30", "2026-11-08").due).toBe(false); // already sent
+		expect(morningDue(at("2026-11-08T00:00:00Z"), "05:30", null).due).toBe(false); // 07:00 WIB, too late
+	});
+	test("manual trigger needs the researcher key", () => {
+		expect(broadcastKeyOk(undefined, "k")).toBe(false);
+		expect(broadcastKeyOk("wrong", "k")).toBe(false);
+		expect(broadcastKeyOk("k", "k")).toBe(true);
+		expect(broadcastKeyOk("", "")).toBe(false);
 	});
 });
