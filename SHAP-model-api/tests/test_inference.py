@@ -182,3 +182,39 @@ def test_new_west_java_beaches_are_supported_and_cautious():
         assert out["warning_strategy"]["code"] == "MAXIMUM_ALERT"
         expl = eng.compute_contributions(out, rules, slug)
         assert expl["community_profile"]["overall"] == "Unknown"
+
+
+class TestCommunityMajority:
+    """Beach alert (WhatsApp group): class by majority of the beach's registered fishermen."""
+
+    def pred(self, engine, codes, community, beach="pantai_lampuuk", profile=None):
+        return engine.predict({"lik_codes": codes, "active_warning": [], "rules": engine.beach_rules[beach],
+                               "fisherman_profile": profile, "community_classes": community})
+
+    def test_majority_inaction_turns_the_group_warning_to_inaction(self, engine):
+        # Survey profile of Lampuuk is Actionable (STANDARD for a High sign) ...
+        assert run(engine, ["wn-3"])["warning_strategy"]["code"] == "STANDARD"
+        # ... most registered fishermen are Inaction for Wn-3 -> Extra Warning for the group.
+        r = self.pred(engine, ["wn-3"], {"Wn-3": 0})
+        assert r["warning_strategy"]["code"] == "EXTRA_WARNING"
+        assert r["warning_strategy"]["behavioral_source"] == "community_majority"
+        r = self.pred(engine, ["wn-5"], {"wn-5": 0})
+        assert r["warning_strategy"]["code"] == "MAXIMUM_ALERT"
+
+    def test_majority_actionable_keeps_actionable(self, engine):
+        r = self.pred(engine, ["wn-3"], {"Wn-3": 1})
+        assert r["warning_strategy"]["code"] == "STANDARD"
+        assert r["warning_strategy"]["behavioral_source"] == "community_majority"
+
+    def test_sign_without_majority_falls_back_to_survey_profile(self, engine):
+        r = self.pred(engine, ["wn-3"], {"Wn-8": 0})
+        assert r["warning_strategy"]["code"] == "STANDARD"
+        assert r["warning_strategy"]["behavioral_source"] == "beach_profile"
+
+    def test_personal_profile_still_wins(self, engine):
+        r = self.pred(engine, ["wn-3"], {"Wn-3": 0}, profile=SAFE_PROFILE)
+        assert r["warning_strategy"]["behavioral_source"] == "random_forest"
+
+    def test_beach_without_local_model_is_unchanged(self, engine):
+        r = self.pred(engine, ["wn-3"], {"Wn-3": 1}, beach="pantai_pangandaran")
+        assert r["warning_strategy"]["code"] == "EXTRA_WARNING"

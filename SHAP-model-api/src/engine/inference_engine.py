@@ -222,13 +222,16 @@ class InferenceEngine:
         X = pd.DataFrame([row], columns=cfg["features"])
         return float(model.predict_proba(X)[0, list(model.classes_).index(1)])
 
-    def behavioral_class(self, sign: str, profile: dict | None, rules: dict) -> dict:
+    def behavioral_class(self, sign: str, profile: dict | None, rules: dict, community: dict | None = None) -> dict:
         if rules.get('location_model') is False:
             return {"class": 0, "probability": None, "threshold": None, "source": "no_location_model"}
         if profile:
             p = self.predict_proba_for_sign(self.profile_to_features(profile), sign)
             cls = 1 if p >= self.threshold else 0
             return {"class": cls, "probability": round(p, 4), "threshold": self.threshold, "source": "random_forest"}
+        if community and sign in community and community[sign] in (0, 1):
+            # Majority of the beach's registered fishermen (computed by the backend).
+            return {"class": int(community[sign]), "probability": None, "threshold": None, "source": "community_majority"}
         cls = 0 if rules.get('Overall Category') == "Unsafe" else 1
         return {"class": cls, "probability": None, "threshold": None, "source": "beach_profile"}
 
@@ -254,9 +257,10 @@ class InferenceEngine:
 
         # ---- Per-sign decision: tier x behavioral class -> strategy
         high, ranked = tiers_from(data)
+        community = {normalize_code(k): v for k, v in (data.get('community_classes') or {}).items()}
         signs = []
         for code in combined_codes:
-            beh = self.behavioral_class(code, profile, rules)
+            beh = self.behavioral_class(code, profile, rules, community)
             strategy = MATRIX[(tier_of(code, high), beh["class"])]
             signs.append({
                 "code": code,
@@ -266,6 +270,7 @@ class InferenceEngine:
                 "probability_actionable": beh["probability"],
                 "strategy": strategy,
                 "dominant_action": dominant_action.get(code),
+                "behavioral_source": beh["source"],
             })
 
         # ---- Overall strategy for the beach alert.
@@ -333,7 +338,8 @@ class InferenceEngine:
                 "trust_tier": tier,
                 "behavioral_class": cls,
                 "behavioral_label": None if cls is None else ("Actionable" if cls == 1 else "Inaction"),
-                "behavioral_source": "random_forest" if profile else "beach_profile",
+                "behavioral_source": "random_forest" if profile
+                    else ("community_majority" if any(s["behavioral_source"] == "community_majority" for s in basis) else "beach_profile"),
             },
             "signs": signs,
         }

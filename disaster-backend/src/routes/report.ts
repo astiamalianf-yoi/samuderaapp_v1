@@ -2,6 +2,7 @@ import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { sendOpenClawBeachAlert } from "../lib/openclaw";
+import { communityBasisFor } from "../lib/community-class";
 import { findFishermanByToken, fishermanReporterKey } from "../lib/fishermen";
 import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
@@ -129,6 +130,8 @@ function formatWhatsAppAlert(params: {
 		``,
 		`📋 *Rekomendasi Aksi:*`,
 		`[${riskLabel}] ${actionRecommendation}`,
+		``,
+		`📱 Buka aplikasi SAMUDRA untuk peringatan khusus Anda.`,
 	];
 
 	return lines.join("\n");
@@ -321,12 +324,16 @@ route.post("/report", async (c) => {
 
 		const existingWarning = await getActiveWarning(beachLocation);
 
+		// The beach alert (and its WhatsApp group message) uses the beach's class: by majority of the
+		// registered fishermen at the beach when there are enough, else the survey profile.
+		const communityBasis = communityBasisFor(beachLocation);
 		const mlPayload = {
 			lik_codes: triggeredCodes,
 			beach_location: beachLocation,
 			is_active_warning: existingWarning !== null,
 			active_warning: existingWarning?.codes ?? [],
 			trust_tiers: trustTiersFor(beachLocation),
+			...(communityBasis ? { community_classes: communityBasis.classes } : {}),
 		};
 
 		const mlRes = await fetch(`${ML_BASE_URL}/predict`, {
@@ -424,6 +431,9 @@ route.post("/report", async (c) => {
 				is_actionable: isActionable,
 				final_risk_level: reassuranceFinalLevel,
 				shouldDistribute,
+				community_basis: communityBasis
+					? { source: communityBasis.source, registered: communityBasis.registered, min: communityBasis.min, inaction_share: communityBasis.inactionShare }
+					: { source: "beach_profile" },
 			},
 			input: mlPayload,
 			ml: result,

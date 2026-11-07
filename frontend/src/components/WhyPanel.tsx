@@ -51,7 +51,9 @@ export function WhyPanel({ event }: { event: ActiveWarningEvent }) {
           <h4 className="font-bold mb-1">Cara peringatan dipilih</h4>
           <p className="text-sm leading-relaxed">
             Tanda: <b>{strategy.trust_tier === "High" ? "sangat dipercaya" : "kurang dipercaya"}</b>. Kebiasaan bertindak{" "}
-            {strategy.behavioral_source === "random_forest" ? "Anda" : "komunitas pantai ini"}:{" "}
+            {strategy.behavioral_source === "random_forest" ? "Anda"
+              : strategy.behavioral_source === "community_majority" ? "sebagian besar nelayan terdaftar di pantai ini"
+              : "komunitas pantai ini"}:{" "}
             <b>{strategy.behavioral_class === 1 ? "biasanya bertindak" : "sering tidak bertindak"}</b>. Maka peringatan: <b>{strategy.label_id}</b>.
           </p>
         </section>

@@ -82,7 +82,7 @@ export interface WarningStrategy {
   trust_tier: 'High' | 'Low';
   behavioral_class: 0 | 1;
   behavioral_label: 'Actionable' | 'Inaction';
-  behavioral_source: 'random_forest' | 'beach_profile';
+  behavioral_source: 'random_forest' | 'beach_profile' | 'community_majority';
 }
 
 export interface Contribution {
