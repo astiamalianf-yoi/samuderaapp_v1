@@ -92,7 +92,7 @@ export const incidents = sqliteTable("incidents", {
 	beach: text("beach").notNull(),
 	type: text("type").notNull(),
 	needHelp: integer("need_help", { mode: "boolean" }).notNull().default(false),
-	/** He saw a natural sign before it happened (codebook No. 12: hazards "detected using LIK"). */
+	/** He reported a natural sign at this beach within the window before (codebook No. 12: "detected using LIK"); set by the server. */
 	detectedBySign: integer("detected_by_sign", { mode: "boolean" }).notNull().default(false),
 	latitude: real("latitude"),
 	longitude: real("longitude"),

@@ -18,6 +18,7 @@ Coupling - Warning Strategy Matrix (paper Eq. 5 / Table 10):
     High tier    Standard EWS Notification        Extra Warning + Action Guide
     Low tier     Enhanced Sign Monitoring         Maximum Alert + Intervention
 """
+from typing import Optional
 import json
 from pathlib import Path
 
@@ -96,8 +97,18 @@ FISHERMAN_FEATURE_KEYS = {
 }
 
 
-def tier_of(code: str) -> str:
-    return "High" if code in HIGH_TRUST_SIGNS else "Low"
+def tier_of(code: str, high: Optional[list] = None) -> str:
+    return "High" if code in (HIGH_TRUST_SIGNS if high is None else high) else "Low"
+
+
+def tiers_from(data: dict):
+    """(high, ranked) from a live Trust Index sent by the backend, else Paper 2 Table 2."""
+    t = data.get('trust_tiers') or None
+    if not t or not isinstance(t.get('high'), list) or not t['high']:
+        return HIGH_TRUST_SIGNS, RANKED_SIGNS
+    high = [normalize_code(c) for c in t['high']]
+    low = [normalize_code(c) for c in t.get('low') or []]
+    return high, high + low
 
 
 def normalize_code(code) -> str:
@@ -242,14 +253,15 @@ class InferenceEngine:
                                 key=lambda c: int(c.split('-')[1]))
 
         # ---- Per-sign decision: tier x behavioral class -> strategy
+        high, ranked = tiers_from(data)
         signs = []
         for code in combined_codes:
             beh = self.behavioral_class(code, profile, rules)
-            strategy = MATRIX[(tier_of(code), beh["class"])]
+            strategy = MATRIX[(tier_of(code, high), beh["class"])]
             signs.append({
                 "code": code,
-                "trust_tier": tier_of(code),
-                "ranked": code in RANKED_SIGNS,
+                "trust_tier": tier_of(code, high),
+                "ranked": code in ranked,
                 "behavioral_class": beh["class"],
                 "probability_actionable": beh["probability"],
                 "strategy": strategy,

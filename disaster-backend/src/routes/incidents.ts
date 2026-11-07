@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { initDb as getDb } from "../db";
-import { incidents } from "../db/schema";
+import { fishermanReports, incidents } from "../db/schema";
+import { and, eq, gte, lte } from "drizzle-orm";
+import { CONFIRM_WINDOW_MS } from "../lib/trust-index";
 import { findFishermanByToken, normalizePhone } from "../lib/fishermen";
 import { INCIDENT_TYPES, type IncidentType } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
@@ -48,10 +50,31 @@ export function formatHelpMessage(o: { beach: string; type: IncidentType; lat?: 
 
 const coord = (v: unknown, lim: number) => (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= lim ? v : null);
 
+const sqliteTime = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
+
 /**
- * POST /api/incidents { beach, type, detectedBySign, needHelp, lat?, lon?, contactPhone? } (X-Fisherman-Token)
+ * Codebook No. 12 counts hazards "detected using LIK". Rather than asking, it is read from his own
+ * reports: he reported a natural sign at the same beach within the confirmation window before.
+ */
+export function reportedSignBefore(fishermanId: string, beach: string, at = new Date()): boolean {
+	const row = getDb()
+		.select({ id: fishermanReports.id })
+		.from(fishermanReports)
+		.where(and(
+			eq(fishermanReports.fishermanId, fishermanId),
+			eq(fishermanReports.beach, beach),
+			gte(fishermanReports.createdAt, sqliteTime(new Date(at.getTime() - CONFIRM_WINDOW_MS))),
+			lte(fishermanReports.createdAt, sqliteTime(at)),
+		))
+		.get();
+	return Boolean(row);
+}
+
+/**
+ * POST /api/incidents { beach, type, needHelp, lat?, lon?, contactPhone? } (X-Fisherman-Token)
  * "Lapor kejadian": strong wind / storm adds to his level of interaction with disaster (codebook
- * No. 14); with detectedBySign the hazard type counts as an experience detected with LIK (No. 12).
+ * No. 14); if he reported a sign before it, the hazard type counts as detected with LIK (No. 12).
+ * A strong-wind or storm incident also confirms other fishermen's sign reports (Trust Index).
  * With needHelp, a help message goes to the WhatsApp group(s).
  */
 route.post("/incidents", async (c) => {
@@ -65,7 +88,7 @@ route.post("/incidents", async (c) => {
 	const type = body.type as IncidentType;
 	if (!INCIDENT_TYPES.includes(type)) return c.json({ ok: false, error: "invalid_type" }, 400);
 	const needHelp = body.needHelp === true;
-	const detectedBySign = body.detectedBySign === true;
+	const detectedBySign = reportedSignBefore(fisherman.id, beach);
 	const lat = coord(body.lat, 90);
 	const lon = coord(body.lon, 180);
 

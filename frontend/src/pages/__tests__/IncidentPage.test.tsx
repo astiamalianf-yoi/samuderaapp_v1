@@ -50,13 +50,12 @@ describe("Lapor kejadian / Minta bantuan", () => {
       new Response(JSON.stringify({ ok: true, incidentId: "i1", helpSent: true, helpReason: null }), { status: 201 }))
     render(<MemoryRouter><IncidentPage /></MemoryRouter>)
     fireEvent.click(screen.getByText("Angin kencang di laut"))
-    fireEvent.click(screen.getByText("Ya"))
     fireEvent.click(screen.getByRole("switch"))
     expect(screen.getAllByRole("link", { name: /115/ }).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
     await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
     const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
-    expect(body).toMatchObject({ type: "angin_kencang", detectedBySign: true, needHelp: true, lat: 5.49, lon: 95.24, contactPhone: "6281234567890" })
+    expect(body).toMatchObject({ type: "angin_kencang", needHelp: true, lat: 5.49, lon: 95.24, contactPhone: "6281234567890" })
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/incidents")
   })
 
@@ -70,7 +69,8 @@ describe("Lapor kejadian / Minta bantuan", () => {
     await waitFor(() => expect(screen.getByText("Kejadian tercatat")).toBeTruthy())
     const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
     expect(body.needHelp).toBe(false)
-    expect(body.detectedBySign).toBe(false) // not answered: not counted as detected by a sign
+    expect(body.detectedBySign).toBeUndefined() // not asked: the server reads it from his own sign reports
+    expect(screen.queryByText(/tanda alam sebelum/)).toBeNull()
     expect(body.contactPhone).toBeUndefined()
   })
 })

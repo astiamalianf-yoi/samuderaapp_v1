@@ -31,6 +31,15 @@ class TestTrustTiers:
         assert tiers["Wn-1"] == ("High", True)
         assert tiers["Wn-10"] == ("Low", False)
 
+    def test_live_trust_tiers_from_backend_are_used(self, engine):
+        # Re-estimated Trust Index (app data): Wn-13 moved up, Wn-7 moved down, Wn-10 now ranked.
+        tiers = {"high": ["Wn-3", "Wn-8", "Wn-1", "Wn-2", "Wn-13"], "low": ["Wn-7", "Wn-10"]}
+        r = engine.predict({"lik_codes": ["wn-13", "wn-7", "wn-10"], "active_warning": [],
+                            "rules": engine.beach_rules["pantai_lampuuk"], "fisherman_profile": None,
+                            "trust_tiers": tiers})
+        got = {s["code"]: (s["trust_tier"], s["ranked"]) for s in r["signs"]}
+        assert got == {"Wn-7": ("Low", True), "Wn-10": ("Low", True), "Wn-13": ("High", True)}
+
     def test_unknown_codes_are_dropped(self, engine):
         assert run(engine, ["wn-99", "xx", "wn-3"])["triggered_lik_codes"] == ["Wn-3"]
 

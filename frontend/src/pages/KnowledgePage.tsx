@@ -1,11 +1,12 @@
 import { useState } from "react"
 import { AppShell } from "../components/layout/AppShell"
-import { SIGNS, TIER_LABEL, type TrustTier } from "../constants/signs"
+import { TIER_LABEL, type TrustTier } from "../constants/signs"
+import { liveSigns, useTrustIndex } from "../hooks/useTrustIndex"
 
 const TIER_INFO: Record<TrustTier, { title: string; text: string; style: string }> = {
   High: {
     title: "Sangat dipercaya",
-    text: "Tanda ini paling sering terbukti benar menurut nelayan Aceh. Jika terlihat, segera lakukan tindakan yang dianjurkan.",
+    text: "Tanda ini paling sering terbukti benar menurut nelayan. Jika terlihat, segera lakukan tindakan yang dianjurkan.",
     style: "bg-sky-900 text-white",
   },
   Low: {
@@ -20,17 +21,27 @@ const TIER_INFO: Record<TrustTier, { title: string; text: string; style: string 
   },
 }
 
-/** Pengetahuan Nelayan: the local-knowledge signs, grouped by how trusted they are. */
+const num = (v: number, d = 0) => v.toLocaleString("id-ID", { maximumFractionDigits: d, minimumFractionDigits: d })
+
+/** Pengetahuan Nelayan: the local-knowledge signs, grouped by the live Trust Index. */
 export function KnowledgePage() {
   const [open, setOpen] = useState<string | null>(null)
+  const trust = useTrustIndex()
+  const signs = liveSigns(trust)
+  const appReports = trust?.signs.reduce((n, s) => n + s.appReports, 0) ?? 0
   return (
     <AppShell title="Tanda Alam">
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-black">Pengetahuan nelayan</h1>
           <p className="text-base text-gray-700">
-            Tanda-tanda angin kencang dari pengalaman nelayan. Kepercayaan dinilai dari survei 245 nelayan di Aceh.
+            Tanda-tanda angin kencang dari pengalaman nelayan. Kepercayaan dinilai dari survei 245 nelayan di Aceh,
+            lalu diperbarui dari laporan di aplikasi: tanda yang sering dilaporkan, dan yang kemudian diikuti laporan
+            angin kencang dari nelayan lain, makin dipercaya.
           </p>
+          {trust?.mode === "adaptive" && appReports > 0 && (
+            <p className="text-sm text-gray-500 mt-1">Termasuk {num(appReports)} laporan tanda dari aplikasi.</p>
+          )}
         </div>
         {(["High", "Low", "Unranked"] as TrustTier[]).map((tier) => (
           <section key={tier} className="space-y-3">
@@ -39,7 +50,7 @@ export function KnowledgePage() {
               <p className="text-base mt-1">{TIER_INFO[tier].text}</p>
             </div>
             <ul className="space-y-2">
-              {SIGNS.filter((s) => s.tier === tier).map((s) => (
+              {signs.filter((s) => s.tier === tier).map((s) => (
                 <li key={s.code}>
                   <button onClick={() => setOpen(open === s.code ? null : s.code)} aria-expanded={open === s.code}
                     className="w-full text-left rounded-2xl bg-white border border-gray-200 p-4 flex gap-3 items-start">
@@ -48,9 +59,16 @@ export function KnowledgePage() {
                       <span className="block text-lg font-bold">{s.short}</span>
                       <span className="block text-base text-gray-700">{s.description}</span>
                       {open === s.code && (
-                        <span className="block mt-2 text-base">
-                          {s.action ? <>Tindakan yang paling sering dilakukan: <b>{s.action}</b>. </> : null}
-                          <span className="text-gray-500">({TIER_LABEL[s.tier]} · {s.code})</span>
+                        <span className="block mt-2 text-base space-y-1">
+                          {s.action ? <span className="block">Tindakan yang paling sering dilakukan: <b>{s.action}</b>.</span> : null}
+                          {s.trust && (
+                            <span className="block text-sm text-gray-600">
+                              Indeks kepercayaan {num(s.trust.trustIndex, 1)} · terbukti {num(s.trust.accuracy)}% ·{" "}
+                              {num(s.trust.surveyRecords)} dari survei
+                              {s.trust.appReports > 0 && <>, {num(s.trust.appReports)} laporan aplikasi ({num(s.trust.appConfirmed)} diikuti angin kencang)</>}
+                            </span>
+                          )}
+                          <span className="block text-gray-500">({TIER_LABEL[s.tier]} · {s.code})</span>
                         </span>
                       )}
                     </span>

@@ -49,7 +49,6 @@ export function IncidentPage() {
   const [beach, setBeach] = useSelectedBeach()
   const [type, setType] = useState<IncidentType | null>(null)
   const [needHelp, setNeedHelp] = useState(false)
-  const [sawSign, setSawSign] = useState<boolean | null>(null)
   const [shareGps, setShareGps] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -123,7 +122,7 @@ export function IncidentPage() {
     try {
       const pos = needHelp && shareGps ? await getPosition() : null
       const res = await fishermenService.reportIncident(registration.token, {
-        beach, type, needHelp, detectedBySign: sawSign === true,
+        beach, type, needHelp,
         ...(pos ? { lat: pos.coords.latitude, lon: pos.coords.longitude } : {}),
         ...(needHelp && registration.phone ? { contactPhone: registration.phone } : {}),
       })
@@ -159,19 +158,6 @@ export function IncidentPage() {
                 </button>
               )
             })}
-          </div>
-        </fieldset>
-
-        <fieldset className="space-y-2">
-          <legend className="text-lg font-bold mb-2">Apakah Anda melihat tanda alam sebelum ini terjadi?</legend>
-          <div className="grid grid-cols-2 gap-2">
-            {([[true, "Ya"], [false, "Tidak"]] as const).map(([v, text]) => (
-              <button key={text} type="button" aria-pressed={sawSign === v} onClick={() => setSawSign(v)}
-                className={`min-h-14 rounded-xl border-2 text-lg font-bold ${
-                  sawSign === v ? "bg-sky-900 border-sky-900 text-white" : "bg-white border-gray-300"}`}>
-                {text}
-              </button>
-            ))}
           </div>
         </fieldset>
 

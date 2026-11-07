@@ -55,6 +55,16 @@ describe("Lapor kejadian / Minta bantuan", () => {
 		expect(sqlite.query("SELECT COUNT(*) AS n FROM incidents").get()).toEqual({ n: 1 });
 	});
 
+	test("'saw a sign before' is read from his own reports, not asked", async () => {
+		sqlite.run(`DELETE FROM incidents`);
+		await post({ beach: "pantai_lampuuk", type: "angin_kencang", needHelp: false, detectedBySign: true });
+		expect(sqlite.query("SELECT detected_by_sign AS d FROM incidents").get()).toEqual({ d: 0 });
+		sqlite.run(`INSERT INTO fisherman_reports (fisherman_id, beach, signs, channel, counted) VALUES ('f1','pantai_lampuuk','["Wn-3"]','PWA',1)`);
+		await post({ beach: "pantai_lampuuk", type: "badai", needHelp: false });
+		expect(sqlite.query("SELECT detected_by_sign AS d FROM incidents WHERE type = 'badai'").get()).toEqual({ d: 1 });
+		sqlite.run(`DELETE FROM fisherman_reports`);
+	});
+
 	test("help is sent once; tapping again within 10 minutes does not spam the group", async () => {
 		const a = await (await post({ beach: "pantai_lampuuk", type: "angin_kencang", needHelp: true, contactPhone: "0812" })).json() as { helpSent: boolean };
 		const b = await (await post({ beach: "pantai_lampuuk", type: "angin_kencang", needHelp: true })).json() as { helpSent: boolean; helpReason: string };

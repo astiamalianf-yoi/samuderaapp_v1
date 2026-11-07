@@ -59,7 +59,7 @@ export const fishermenService = {
   },
 
   async reportIncident(token: string, body: {
-    beach: BeachLocation; type: IncidentType; detectedBySign: boolean; needHelp: boolean; lat?: number; lon?: number; contactPhone?: string
+    beach: BeachLocation; type: IncidentType; needHelp: boolean; lat?: number; lon?: number; contactPhone?: string
   }) {
     const res = await fetch(`${API_BASE_URL}/api/incidents`, {
       method: "POST",

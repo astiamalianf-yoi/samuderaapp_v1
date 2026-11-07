@@ -47,6 +47,12 @@ class FishermanProfile(BaseModel):
     usage_frequency_avg: Optional[float] = Field(None, ge=0, le=60, description="Defaults to the mean of min and max")
 
 
+class TrustTiers(BaseModel):
+    """Live Trust Index tiers (Paper 2, Eq. 2-3, re-estimated with app data by the backend)."""
+    high: list[str]
+    low: list[str]
+
+
 class PredictRequest(BaseModel):
     lik_codes: list[str]
     beach_location: str
@@ -59,6 +65,7 @@ class PredictRequest(BaseModel):
     bmkg_wind_speed: Optional[float] = None
     bmkg_wave_height: Optional[float] = None
     bmkg_rainfall: Optional[float] = None
+    trust_tiers: Optional[TrustTiers] = None
 
 
 @app.post("/predict")
@@ -76,6 +83,7 @@ async def predict(req: PredictRequest):
             "active_warning": req.active_warning,
             "rules": rules,
             "fisherman_profile": profile,
+            "trust_tiers": req.trust_tiers.model_dump() if req.trust_tiers else None,
         })
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

@@ -1,3 +1,4 @@
+import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
 import { riskLabelFor } from "../lib/whatsapp-commands";
 import { redis } from "../lib/redis";
@@ -124,6 +125,7 @@ route.get("/report/submit", async (c) => {
 		beach_location: beachLocation,
 		is_active_warning: existingWarning !== null,
 		active_warning: existingWarning?.codes ?? [],
+		trust_tiers: trustTiersFor(beachLocation),
 	};
 
 	const mlRes = await fetch(`${ML_BASE_URL}/predict`, {

@@ -110,6 +110,7 @@ export const JWT_PUBLIC_PATHS = parseCsvEnv(process.env.JWT_PUBLIC_PATHS, [
 	"/api/fishermen",
 	"/api/incidents",
 	"/api/research",
+	"/api/trust-index",
 ]);
 export const AUTH_USER_KEY_PREFIX = process.env.AUTH_USER_KEY_PREFIX ?? "auth:user";
 export const AUTH_USER_EMAIL_KEY_PREFIX =

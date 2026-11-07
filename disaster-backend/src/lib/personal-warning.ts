@@ -1,3 +1,4 @@
+import { trustTiersFor } from "./trust-index";
 import { createHash } from "node:crypto";
 import { ML_BASE_URL } from "../config";
 import { redis } from "./redis";
@@ -77,7 +78,7 @@ export async function computePersonalWarning(
 	const res = await fetch(`${ML_BASE_URL}/predict`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ beach_location: beachLocation, lik_codes: codes, fisherman_profile: profile }),
+		body: JSON.stringify({ beach_location: beachLocation, lik_codes: codes, fisherman_profile: profile, trust_tiers: trustTiersFor(beachLocation) }),
 		signal: AbortSignal.timeout(5000),
 	});
 	if (!res.ok) return null;

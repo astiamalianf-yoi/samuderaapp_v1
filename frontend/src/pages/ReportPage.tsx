@@ -1,9 +1,10 @@
+import { liveSigns, useTrustIndex } from "../hooks/useTrustIndex"
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { CheckCircle2, Send, UserPlus, WifiOff } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BeachPicker } from "../components/BeachPicker"
-import { SIGNS, SIGN_GROUPS, type Sign } from "../constants/signs"
+import { SIGN_GROUPS, type Sign } from "../constants/signs"
 import { getBeachMeta } from "../constants/observationData"
 import { useRegistration, useSelectedBeach } from "../hooks/useAppState"
 import { ApiError, reportService } from "../services/reportService"
@@ -28,8 +29,11 @@ export function ReportPage() {
   const [result, setResult] = useState<Result | null>(null)
   const [showAll, setShowAll] = useState(false)
 
-  const common = useMemo(() => SIGNS.filter((s) => s.tier !== "Unranked"), [])
-  const rare = useMemo(() => SIGNS.filter((s) => s.tier === "Unranked"), [])
+  // Live Trust Index: trusted signs first; a sign moves up when it reaches enough records.
+  const trust = useTrustIndex()
+  const signs = useMemo(() => liveSigns(trust), [trust])
+  const common = useMemo(() => signs.filter((s) => s.tier !== "Unranked"), [signs])
+  const rare = useMemo(() => signs.filter((s) => s.tier === "Unranked"), [signs])
 
   const toggle = (code: string) =>
     setSelected((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]))

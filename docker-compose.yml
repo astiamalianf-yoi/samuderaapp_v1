@@ -50,6 +50,9 @@ services:
       FISHERMAN_HASH_SECRET: ${FISHERMAN_HASH_SECRET:-}
       # Researcher endpoints (/api/research/*) are off unless this is set.
       RESEARCH_API_KEY: ${RESEARCH_API_KEY:-}
+      # Trust Index: adaptive (survey + app reports) or paper (Table 2 fixed); confirmation window in hours
+      TRUST_INDEX_MODE: ${TRUST_INDEX_MODE:-adaptive}
+      TRUST_CONFIRM_WINDOW_HOURS: ${TRUST_CONFIRM_WINDOW_HOURS:-24}
       OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}
       OPENCLAW_HOOK_TOKEN: ${OPENCLAW_HOOK_TOKEN:-}
       OPENCLAW_BROADCAST_GROUPS: ${OPENCLAW_BROADCAST_GROUPS:-}

@@ -52,6 +52,9 @@ services:
       JWT_AUTH_ENABLED: "false"
       # Local testing only: researcher endpoints with a simple key.
       RESEARCH_API_KEY: ${RESEARCH_API_KEY:-local-research-key}
+      # Trust Index: adaptive (survey + app reports) or paper (Table 2 fixed); confirmation window in hours
+      TRUST_INDEX_MODE: ${TRUST_INDEX_MODE:-adaptive}
+      TRUST_CONFIRM_WINDOW_HOURS: ${TRUST_CONFIRM_WINDOW_HOURS:-24}
       ENABLE_IOT_MQTT_DELIVERY: "true"
       MQTT_BROKER_URL: mqtt://mosquitto:1883
       MQTT_TOPIC_PREFIX: alert
