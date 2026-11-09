@@ -17,6 +17,8 @@ export type ClassSnapshot = {
 	behaviouralClass: number | null;
 	perSign: Record<string, number | null>;
 	source: string | null;
+	/** SHAP of his answers; null when the model gave none (no location model, or not available) */
+	explanation: Record<string, unknown> | null;
 };
 
 /**
@@ -35,6 +37,7 @@ export async function computeClass(f: Fisherman, fetchImpl: typeof fetch = fetch
 		signal: AbortSignal.timeout(8000),
 	}).catch(() => null);
 	const body = res?.ok ? ((await res.json().catch(() => null)) as MlBody | null) : null;
+	const explanation = body ? await explainProfile(f, profile, fetchImpl) : null;
 	const signs = body?.signs ?? [];
 	const perSign: Record<string, number | null> = {};
 	for (const s of signs) perSign[s.code] = s.probability_actionable ?? null;
@@ -46,7 +49,20 @@ export async function computeClass(f: Fisherman, fetchImpl: typeof fetch = fetch
 		behaviouralClass: classes.length ? (classes.filter((c) => c === 1).length * 2 >= classes.length ? 1 : 0) : null,
 		perSign,
 		source: body ? (signs.some((s) => s.probability_actionable == null) ? "no_location_model" : "random_forest") : "model_unavailable",
+		explanation,
 	};
+}
+
+/** Per-fisherman SHAP from the model service; null when not given. Never throws. */
+async function explainProfile(f: Fisherman, profile: unknown, fetchImpl: typeof fetch): Promise<Record<string, unknown> | null> {
+	const res = await fetchImpl(`${ML_BASE_URL}/explain-profile`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ beach_location: f.homeBeach, fisherman_profile: profile }),
+		signal: AbortSignal.timeout(8000),
+	}).catch(() => null);
+	const body = res?.ok ? ((await res.json().catch(() => null)) as { available?: boolean; base_value?: number; contributions?: Record<string, number> } | null) : null;
+	return body?.available && body.contributions ? { base_value: body.base_value ?? null, contributions: body.contributions } : null;
 }
 
 /**
@@ -65,7 +81,13 @@ export async function recordClass(f: Fisherman, reason: string, fetchImpl: typeo
 			.orderBy(desc(fishermanClassHistory.id))
 			.limit(1)
 			.get();
-		if (last && JSON.stringify(last.effectiveProfile) === JSON.stringify(snap.effectiveProfile) && last.source === snap.source) return;
+		if (
+			last &&
+			JSON.stringify(last.effectiveProfile) === JSON.stringify(snap.effectiveProfile) &&
+			last.source === snap.source &&
+			(last.explanation != null || snap.explanation == null)
+		)
+			return;
 		db.insert(fishermanClassHistory)
 			.values({
 				fishermanId: f.id,
@@ -76,6 +98,7 @@ export async function recordClass(f: Fisherman, reason: string, fetchImpl: typeo
 				behaviouralClass: snap.behaviouralClass,
 				perSign: snap.perSign,
 				source: snap.source,
+				explanation: snap.explanation,
 			})
 			.run();
 	} catch (err) {

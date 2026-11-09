@@ -127,5 +127,7 @@ export const fishermanClassHistory = sqliteTable("fisherman_class_history", {
 	behaviouralClass: integer("behavioural_class"),
 	perSign: text("per_sign", { mode: "json" }).$type<Record<string, number | null>>(),
 	source: text("source"),
+	/** per-fisherman SHAP of his answers ({ base_value, contributions }) for "Profil Anda" */
+	explanation: text("explanation", { mode: "json" }).$type<Record<string, unknown>>(),
 	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 });

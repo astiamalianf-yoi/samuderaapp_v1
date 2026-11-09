@@ -142,9 +142,13 @@ function createTablesIfNotExist(sqlite: Database) {
 			behavioural_class INTEGER,
 			per_sign TEXT,
 			source TEXT,
+			explanation TEXT,
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
 	`);
+	// Columns added after a table already existed on a server.
+	const cols = (sqlite.query("PRAGMA table_info(fisherman_class_history)").all() as { name: string }[]).map((c) => c.name);
+	if (!cols.includes("explanation")) sqlite.exec("ALTER TABLE fisherman_class_history ADD COLUMN explanation TEXT");
 	console.log("[db] Tables ensured");
 }
 

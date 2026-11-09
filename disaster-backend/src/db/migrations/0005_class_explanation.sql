@@ -1,0 +1,1 @@
+ALTER TABLE `fisherman_class_history` ADD `explanation` text;

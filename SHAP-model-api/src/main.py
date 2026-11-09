@@ -96,6 +96,23 @@ async def predict(req: PredictRequest):
     return result
 
 
+class ExplainProfileRequest(BaseModel):
+    fisherman_profile: FishermanProfile
+    beach_location: Optional[str] = None
+
+
+@app.post("/explain-profile")
+async def explain_profile(req: ExplainProfileRequest):
+    """SHAP of one fisherman's answers ("Profil Anda"). Beaches without a location model get no
+    explanation: their fishermen are Inaction whatever their answers."""
+    if req.beach_location and engine.beach_rules.get(req.beach_location, {}).get("location_model") is False:
+        return {"available": False, "reason": "no_location_model"}
+    try:
+        return {"available": True, **engine.explain_profile(req.fisherman_profile.model_dump())}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
 @app.get("/model/info")
 async def model_info():
     cfg = engine.config

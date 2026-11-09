@@ -14,7 +14,10 @@ export interface ProfileView {
   overall: "actionable" | "inaction" | null
   /** "no_location_model": his home beach has no local model yet, so he is treated as Inaction */
   basis?: "random_forest" | "no_location_model" | null
-  features: { key: string; value: number; side: "actionable" | "inaction" }[]
+  /** up to three answers that moved his result most (per-fisherman SHAP); up = towards "mendukung" */
+  top: { key: string; push: "up" | "down" }[]
+  /** all his answers (registration answers raised by his activity) */
+  answers: { key: string; value: number; min?: number; max?: number }[]
 }
 
 export interface Activity {

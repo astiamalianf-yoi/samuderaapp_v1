@@ -222,6 +222,51 @@ class InferenceEngine:
         X = pd.DataFrame([row], columns=cfg["features"])
         return float(model.predict_proba(X)[0, list(model.classes_).index(1)])
 
+    # Profile answers as the fisherman sees them; the three usage-frequency features are one answer.
+    PROFILE_ANSWER_FEATURES = {
+        "age": ["Age"],
+        "fishing_experience": ["Fishing Experience"],
+        "fishing_role": ["Fishing Role"],
+        "head_of_community": ["Experience as Head of Communities"],
+        "fishing_duration": ["Fishing Duration"],
+        "disaster_experience_count": ["Number of Experience with Disaster"],
+        "disaster_interaction": ["Level of Interaction with Disaster"],
+        "lik_combination_count": ["Number of LIK Combination"],
+        "usage_duration": ["Usage Duration"],
+        "usage_frequency": ["Frequency of Usage (min) (in month)", "Frequency of Usage (max) (in month)",
+                            "Average Frequency of Usage (in month)"],
+    }
+    _explainer = None
+
+    def explain_profile(self, profile: dict, signs: Optional[list] = None) -> dict:
+        """Per-fisherman SHAP (TreeExplainer, P(Actionable)) of his own answers, averaged over the
+        ranked signs: the same method as Paper 2, applied to one person. Positive = pushes him
+        towards Actionable. Sign indicator columns are left out (they are not about him)."""
+        import shap  # loaded only when an explanation is asked for
+        model, cfg = self._load_model()
+        if InferenceEngine._explainer is None:
+            InferenceEngine._explainer = shap.TreeExplainer(model)
+        feats = self.profile_to_features(profile)
+        rows = []
+        for sign in (signs or RANKED_SIGNS):
+            row = {f: 0.0 for f in cfg["features"]}
+            row.update(feats)
+            if sign in ALL_SIGNS:
+                row[sign] = 1.0
+            rows.append(row)
+        X = pd.DataFrame(rows, columns=cfg["features"])
+        sv = InferenceEngine._explainer.shap_values(X)
+        k = list(model.classes_).index(1)
+        sv = np.asarray(sv[k] if isinstance(sv, list) else (sv[:, :, k] if np.ndim(sv) == 3 else sv))
+        mean = dict(zip(cfg["features"], sv.mean(axis=0)))
+        contributions = {
+            key: round(float(sum(mean[c] for c in cols)), 4)
+            for key, cols in self.PROFILE_ANSWER_FEATURES.items()
+        }
+        ev = InferenceEngine._explainer.expected_value
+        base = float(np.ravel(ev)[k]) if np.ndim(ev) else float(ev)
+        return {"base_value": round(base, 4), "contributions": contributions, "method": "shap_tree_mean_over_ranked_signs"}
+
     def behavioral_class(self, sign: str, profile: dict | None, rules: dict, community: dict | None = None) -> dict:
         if rules.get('location_model') is False:
             return {"class": 0, "probability": None, "threshold": None, "source": "no_location_model"}

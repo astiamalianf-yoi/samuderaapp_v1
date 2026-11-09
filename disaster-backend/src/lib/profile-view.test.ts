@@ -1,30 +1,36 @@
 import { describe, expect, test } from "bun:test";
-import { profileFeatures, profileViewEnabled } from "./profile-view";
+import { profileAnswers, profileViewEnabled, topReasons } from "./profile-view";
 import type { FishermanProfile } from "./personal-warning";
 
-const base = {
-	fishing_experience: 10, fishing_role: 2, head_of_community: 1, fishing_duration: 1, lik_combination_count: 2,
-} as const;
-// P-A and P-I presets from the UAT plan (year 2026)
-const PA = { ...base, age: 30, disaster_interaction: 6, usage_frequency_min: 12, usage_frequency_max: 20, usage_duration: 25, disaster_experience_count: 1 } as FishermanProfile;
-const PI = { ...base, age: 55, disaster_interaction: 1, usage_frequency_min: 2, usage_frequency_max: 4, usage_duration: 8, disaster_experience_count: 4 } as FishermanProfile;
+const P = {
+	age: 40, fishing_experience: 18, fishing_role: 1, head_of_community: 0, fishing_duration: 1,
+	disaster_experience_count: 1, disaster_interaction: 3, lik_combination_count: 5, usage_duration: 18,
+	usage_frequency_min: 8, usage_frequency_max: 12,
+} as FishermanProfile;
 
-describe("Profil Anda: the five tipping points", () => {
-	test("P-A is on the actionable side of all five", () => {
-		const f = profileFeatures(PA);
-		expect(f.map((x) => x.key)).toEqual(["disaster_interaction", "usage_frequency_avg", "age", "usage_duration", "disaster_experience_count"]);
-		expect(f.every((x) => x.side === "actionable")).toBe(true);
-		expect(f.find((x) => x.key === "usage_frequency_avg")!.value).toBe(16);
+describe("Profil Anda", () => {
+	test("top reasons: the three largest SHAP values, with their direction", () => {
+		const top = topReasons({
+			base_value: 0.5,
+			contributions: { usage_frequency: 0.098, lik_combination_count: -0.092, disaster_interaction: 0.015, age: 0.012, fishing_role: -0.001 },
+		});
+		expect(top).toEqual([
+			{ key: "usage_frequency", push: "up" },
+			{ key: "lik_combination_count", push: "down" },
+			{ key: "disaster_interaction", push: "up" },
+		]);
 	});
 
-	test("P-I is on the inaction side of all five", () => {
-		expect(profileFeatures(PI).every((x) => x.side === "inaction")).toBe(true);
+	test("tiny contributions are not given as a reason; no explanation gives none", () => {
+		expect(topReasons({ base_value: 0.5, contributions: { age: 0.001, fishing_role: -0.002 } })).toEqual([]);
+		expect(topReasons(null)).toEqual([]);
 	});
 
-	test("values exactly at a threshold follow the paper (<= / >= is the inaction side)", () => {
-		const atLimit = { ...PA, age: 45, disaster_experience_count: 2, disaster_interaction: 1.5, usage_frequency_min: 4.75, usage_frequency_max: 4.75, usage_duration: 17.5 } as FishermanProfile;
-		const s = Object.fromEntries(profileFeatures(atLimit).map((x) => [x.key, x.side]));
-		expect(s).toEqual({ disaster_interaction: "inaction", usage_frequency_avg: "inaction", age: "actionable", usage_duration: "inaction", disaster_experience_count: "actionable" });
+	test("all answers: usage frequency is one answer with its min and max", () => {
+		const a = profileAnswers(P);
+		expect(a).toHaveLength(10);
+		expect(a[0]).toEqual({ key: "usage_frequency", value: 10, min: 8, max: 12 });
+		expect(a.find((x) => x.key === "lik_combination_count")!.value).toBe(5);
 	});
 
 	test("shown by default, hidden only with PROFILE_CLASS_VISIBLE=false", () => {

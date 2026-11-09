@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, Navigate } from "react-router-dom"
-import { Activity as ActivityIcon, ArrowLeft, Home, Minus, Pencil, Phone, Plus, ShieldCheck, UserRound } from "lucide-react"
+import { Activity as ActivityIcon, ArrowDown, ArrowLeft, ArrowUp, Home, Minus, Pencil, Phone, Plus, ShieldCheck, UserRound } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BEACH_LOCATIONS } from "../constants/observationData"
 import { useHomeBeach, useRegistration } from "../hooks/useAppState"
@@ -321,26 +321,36 @@ function ActivityCard({ token }: { token: string }) {
   )
 }
 
-const FEATURE_TEXT: Record<string, { label: string; unit: string }> = {
-  disaster_interaction: { label: "Pernah menghadapi kejadian bahaya di laut", unit: "kali" },
-  usage_frequency_avg: { label: "Memakai tanda alam", unit: "kali per bulan" },
-  age: { label: "Usia", unit: "tahun" },
-  usage_duration: { label: "Lama memakai tanda alam", unit: "tahun" },
-  disaster_experience_count: { label: "Jenis bahaya yang pernah dialami", unit: "jenis" },
+/** His answers as he sees them (labels follow the Ubah profil form). */
+const ROLE = { 1: "Pemilik perahu", 2: "Tekong / nakhoda", 3: "ABK / awak" } as Record<number, string>
+const TRIP = { 1: "Kurang dari 1 hari", 2: "Beberapa hari", 3: "Beberapa minggu" } as Record<number, string>
+const num = (v: number) => v.toLocaleString("id-ID", { maximumFractionDigits: 1 })
+const ANSWER_TEXT: Record<string, { label: string; show: (a: ProfileView["answers"][number]) => string }> = {
+  usage_frequency: { label: "Memakai tanda alam", show: (a) => `${num(a.value)} kali per bulan` },
+  lik_combination_count: { label: "Jumlah tanda alam yang dipakai", show: (a) => `${num(a.value)} tanda` },
+  usage_duration: { label: "Lama memakai tanda alam", show: (a) => `${num(a.value)} tahun` },
+  disaster_interaction: { label: "Pernah menghadapi kejadian bahaya di laut", show: (a) => `${num(a.value)} kali` },
+  disaster_experience_count: { label: "Jenis bahaya yang pernah dialami", show: (a) => `${num(a.value)} jenis` },
+  age: { label: "Usia", show: (a) => `${num(a.value)} tahun` },
+  fishing_experience: { label: "Lama menjadi nelayan", show: (a) => `${num(a.value)} tahun` },
+  fishing_role: { label: "Peran di perahu", show: (a) => ROLE[a.value] ?? String(a.value) },
+  fishing_duration: { label: "Lama sekali melaut", show: (a) => TRIP[a.value] ?? String(a.value) },
+  head_of_community: { label: "Pernah menjadi ketua kelompok", show: (a) => (a.value ? "Ya" : "Tidak") },
 }
 const SIDE = {
-  actionable: { dot: "bg-teal-600", box: "bg-teal-50 border-teal-500", pill: "bg-teal-600 text-white", word: "mendukung" },
-  inaction: { dot: "bg-amber-500", box: "bg-amber-50 border-amber-500", pill: "bg-amber-500 text-white", word: "perlu perhatian" },
+  actionable: { box: "bg-teal-50 border-teal-500", pill: "bg-teal-600 text-white", word: "mendukung" },
+  inaction: { box: "bg-amber-50 border-amber-500", pill: "bg-amber-500 text-white", word: "perlu perhatian" },
 } as const
 
 /**
- * "Profil Anda": the five Paper 2 tipping points with his own values. Colours only: the box takes the
- * colour of his overall model class and each row the side of its tipping point; the words
- * Actionable/Inaction are never shown. Present only when the server enables it.
+ * "Profil Anda": the overall model class as colour and plain words (never Actionable/Inaction), the
+ * three answers that moved HIS result most (per-fisherman SHAP of the Random Forest) and, folded,
+ * all his answers. Present only when the server enables it.
  */
 function ProfileViewCard({ view }: { view: ProfileView }) {
   const box = view.overall ? SIDE[view.overall].box : "bg-slate-50 border-slate-300"
-  const num = (v: number) => v.toLocaleString("id-ID", { maximumFractionDigits: 1 })
+  const byKey = Object.fromEntries((view.answers ?? []).map((a) => [a.key, a]))
+  const top = (view.top ?? []).filter((t) => byKey[t.key])
   return (
     <section className={`rounded-2xl border-2 p-4 space-y-3 ${box}`} aria-label="Profil Anda" data-overall={view.overall ?? "unknown"}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -352,27 +362,57 @@ function ProfileViewCard({ view }: { view: ProfileView }) {
           </span>
         )}
       </div>
-      <p className="text-sm text-gray-700">Lima hal dari jawaban dan aktivitas Anda yang paling memengaruhi peringatan untuk Anda.</p>
-      <ul className="space-y-2">
-        {view.features.map((f) => (
-          <li key={f.key} className="flex items-center gap-3 rounded-xl bg-white border border-gray-200 p-3" data-side={f.side}>
-            <span className={`w-3 h-3 rounded-full shrink-0 ${SIDE[f.side].dot}`} aria-hidden />
-            <span className="sr-only">{f.side === "actionable" ? "mendukung:" : "perlu perhatian:"}</span>
-            <span className="flex-1 text-base text-gray-800">{FEATURE_TEXT[f.key]?.label ?? f.key}</span>
-            <span className="text-base font-bold text-gray-900 whitespace-nowrap">{num(f.value)} {FEATURE_TEXT[f.key]?.unit ?? ""}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-teal-600" aria-hidden /> mendukung</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500" aria-hidden /> perlu perhatian</span>
-      </p>
-      {view.basis === "no_location_model" && (
+
+      {view.basis === "no_location_model" ? (
         <p className="rounded-xl bg-white border border-amber-300 p-3 text-sm text-gray-800" data-testid="profile-no-model">
           Model untuk pantai asal Anda belum tersedia. Sampai model itu ada, peringatan untuk Anda memakai sisi yang paling hati-hati, apa pun jawaban Anda.
         </p>
+      ) : top.length > 0 ? (
+        <>
+          <p className="text-sm font-semibold text-gray-800">Yang paling memengaruhi hasil Anda:</p>
+          <ul className="space-y-2" data-testid="profile-top">
+            {top.map((t) => {
+              const a = byKey[t.key]
+              const up = t.push === "up"
+              return (
+                <li key={t.key} className="flex items-center gap-3 rounded-xl bg-white border border-gray-200 p-3" data-push={t.push}>
+                  <span className={`shrink-0 rounded-full p-1 ${up ? "bg-teal-100 text-teal-700" : "bg-amber-100 text-amber-700"}`} aria-hidden>
+                    {up ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+                  </span>
+                  <span className="sr-only">{up ? "mendorong ke mendukung:" : "mendorong ke perlu perhatian:"}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-base text-gray-800 leading-snug">{ANSWER_TEXT[t.key]?.label ?? t.key}</span>
+                    <span className="block text-base font-bold text-gray-900">{ANSWER_TEXT[t.key]?.show(a) ?? num(a.value)}</span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+            <span className="inline-flex items-center gap-1"><ArrowUp className="w-4 h-4 text-teal-700" aria-hidden /> mendorong ke mendukung</span>
+            <span className="inline-flex items-center gap-1"><ArrowDown className="w-4 h-4 text-amber-700" aria-hidden /> mendorong ke perlu perhatian</span>
+          </p>
+        </>
+      ) : (
+        <p className="text-sm text-gray-700">Penjelasan hasil Anda belum tersedia. Buka halaman ini lagi nanti.</p>
       )}
-      <p className="text-sm text-gray-600">Warna kotak dan label "Keseluruhan" dihitung dari gabungan semua jawaban dan aktivitas Anda, bukan dari jumlah titik di atas. Peringatan untuk Anda mengikuti warna kotak ini, dan bisa berubah sendiri saat Anda melapor.</p>
+
+      {view.answers?.length > 0 && (
+        <details className="rounded-xl bg-white/70 border border-gray-200 p-3" data-testid="profile-answers">
+          <summary className="cursor-pointer text-sm font-semibold text-sky-900">Lihat semua jawaban Anda ({view.answers.length})</summary>
+          <dl className="mt-2 divide-y divide-gray-100">
+            {view.answers.map((a) => (
+              <div key={a.key} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <dt className="text-gray-700">{ANSWER_TEXT[a.key]?.label ?? a.key}</dt>
+                <dd className="font-semibold text-gray-900 text-right whitespace-nowrap">{ANSWER_TEXT[a.key]?.show(a) ?? num(a.value)}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-2 text-xs text-gray-600">Ada yang salah? Perbaiki lewat tombol Ubah profil di bawah.</p>
+        </details>
+      )}
+
+      <p className="text-sm text-gray-600">Hasil ini dihitung dari gabungan semua jawaban dan aktivitas Anda. Peringatan untuk Anda mengikuti warna kotak ini, dan bisa berubah sendiri saat Anda melapor.</p>
     </section>
   )
 }

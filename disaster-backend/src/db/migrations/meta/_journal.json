@@ -36,6 +36,13 @@
       "when": 1794048543723,
       "tag": "0004_wa_held",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794221521257,
+      "tag": "0005_class_explanation",
+      "breakpoints": true
     }
   ]
 }
