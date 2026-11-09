@@ -54,7 +54,8 @@ export function useTrustIndex(): TrustIndex | null {
   return value
 }
 
-export type LiveSign = Sign & { trust?: SignTrust }
+/** paperTier = the tier in Paper 2 Table 2 (the survey), to show how the live index has moved. */
+export type LiveSign = Sign & { trust?: SignTrust; paperTier?: TrustTier }
 
 /** The 17 signs with their live tier, ordered by Trust Index (paper order when unknown). */
 export function liveSigns(ti: TrustIndex | null): LiveSign[] {
@@ -63,6 +64,15 @@ export function liveSigns(ti: TrustIndex | null): LiveSign[] {
   const order = new Map(ti.signs.map((s, i) => [s.code, i]))
   return SIGNS.map((s) => {
     const t = by.get(s.code)
-    return t ? { ...s, tier: t.tier, trust: t } : s
+    return t ? { ...s, tier: t.tier, trust: t, paperTier: s.tier } : s
   }).sort((a, b) => (order.get(a.code) ?? 99) - (order.get(b.code) ?? 99))
+}
+
+const TIER_RANK: Record<TrustTier, number> = { High: 2, Low: 1, Unranked: 0 }
+
+/** How a sign's tier moved since the survey (Paper 2 Table 2): up, down or same. */
+export function tierMove(s: LiveSign): "up" | "down" | "same" {
+  if (!s.paperTier) return "same"
+  const d = TIER_RANK[s.tier] - TIER_RANK[s.paperTier]
+  return d > 0 ? "up" : d < 0 ? "down" : "same"
 }
