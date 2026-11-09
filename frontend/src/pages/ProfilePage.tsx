@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { Activity as ActivityIcon, Home, Minus, Phone, Plus, ShieldCheck } from "lucide-react"
+import { Activity as ActivityIcon, Home, Minus, Phone, Plus, ShieldCheck, UserRound } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BEACH_LOCATIONS } from "../constants/observationData"
 import { useHomeBeach, useRegistration } from "../hooks/useAppState"
 import { normalizePhone, saveRegistration } from "../lib/registration"
-import { fishermenService, type Activity } from "../services/fishermenService"
+import { fishermenService, type Activity, type ProfileView } from "../services/fishermenService"
 import {
   currentYear, HAZARD_OPTIONS, loadAnswers, saveAnswers, validateAnswers, type HazardKey, type ProfileAnswers,
 } from "../lib/profile"
@@ -222,12 +222,65 @@ export function ProfilePage() {
  */
 function ActivityCard({ token }: { token: string }) {
   const [act, setAct] = useState<Activity | null>(null)
+  const [view, setView] = useState<ProfileView | null>(null)
   useEffect(() => {
     let live = true
-    fishermenService.me(token).then((r) => { if (live) setAct(r.activity) }).catch(() => {})
+    fishermenService.me(token).then((r) => { if (live) { setAct(r.activity); setView(r.profile_view ?? null) } }).catch(() => {})
     return () => { live = false }
   }, [token])
   if (!act) return null
+  return (
+    <>
+      {view && <ProfileViewCard view={view} />}
+      <ActivitySection act={act} />
+    </>
+  )
+}
+
+const FEATURE_TEXT: Record<string, { label: string; unit: string }> = {
+  disaster_interaction: { label: "Pernah menghadapi kejadian bahaya di laut", unit: "kali" },
+  usage_frequency_avg: { label: "Memakai tanda alam", unit: "kali per bulan" },
+  age: { label: "Usia", unit: "tahun" },
+  usage_duration: { label: "Lama memakai tanda alam", unit: "tahun" },
+  disaster_experience_count: { label: "Jenis bahaya yang pernah dialami", unit: "jenis" },
+}
+const SIDE = {
+  actionable: { dot: "bg-teal-600", box: "bg-teal-50 border-teal-300" },
+  inaction: { dot: "bg-amber-500", box: "bg-amber-50 border-amber-300" },
+} as const
+
+/**
+ * "Profil Anda": the five Paper 2 tipping points with his own values. Colours only: the box takes the
+ * colour of his overall model class and each row the side of its tipping point; the words
+ * Actionable/Inaction are never shown. Present only when the server enables it.
+ */
+function ProfileViewCard({ view }: { view: ProfileView }) {
+  const box = view.overall ? SIDE[view.overall].box : "bg-slate-50 border-slate-300"
+  const num = (v: number) => v.toLocaleString("id-ID", { maximumFractionDigits: 1 })
+  return (
+    <section className={`rounded-2xl border-2 p-4 space-y-3 ${box}`} aria-label="Profil Anda" data-overall={view.overall ?? "unknown"}>
+      <p className="flex items-center gap-2 text-lg font-bold"><UserRound className="w-5 h-5 text-sky-800" aria-hidden /> Profil Anda</p>
+      <p className="text-sm text-gray-700">Lima hal dari jawaban dan aktivitas Anda yang paling memengaruhi peringatan untuk Anda.</p>
+      <ul className="space-y-2">
+        {view.features.map((f) => (
+          <li key={f.key} className="flex items-center gap-3 rounded-xl bg-white border border-gray-200 p-3" data-side={f.side}>
+            <span className={`w-3 h-3 rounded-full shrink-0 ${SIDE[f.side].dot}`} aria-hidden />
+            <span className="sr-only">{f.side === "actionable" ? "mendukung:" : "perlu perhatian:"}</span>
+            <span className="flex-1 text-base text-gray-800">{FEATURE_TEXT[f.key]?.label ?? f.key}</span>
+            <span className="text-base font-bold text-gray-900 whitespace-nowrap">{num(f.value)} {FEATURE_TEXT[f.key]?.unit ?? ""}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-teal-600" aria-hidden /> mendukung</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500" aria-hidden /> perlu perhatian</span>
+      </p>
+      <p className="text-sm text-gray-600">Warna kotak mengikuti gabungan semua jawaban dan aktivitas Anda, dan berubah sendiri saat Anda melapor.</p>
+    </section>
+  )
+}
+
+function ActivitySection({ act }: { act: Activity }) {
   const Row = ({ label, value }: { label: string; value: number }) => (
     <div className="rounded-xl bg-white border border-sky-100 p-3 text-center">
       <p className="text-3xl font-black text-sky-900">{value}</p>

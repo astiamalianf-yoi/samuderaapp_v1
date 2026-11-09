@@ -9,6 +9,12 @@ export interface PublicFisherman {
   profile: ProfileAnswers | null
 }
 
+/** Shown only when the server has PROFILE_CLASS_VISIBLE=true: the five tipping points, colours only. */
+export interface ProfileView {
+  overall: "actionable" | "inaction" | null
+  features: { key: string; value: number; side: "actionable" | "inaction" }[]
+}
+
 export interface Activity {
   reports_30d: number
   reports_min_3m: number
@@ -57,7 +63,7 @@ export const fishermenService = {
 
   async me(token: string) {
     const res = await fetch(`${API_BASE_URL}/api/fishermen/me`, { headers: { "X-Fisherman-Token": token } })
-    return json<{ ok: true; fisherman: PublicFisherman; activity: Activity }>(res)
+    return json<{ ok: true; fisherman: PublicFisherman; activity: Activity; profile_view?: ProfileView }>(res)
   },
 
   async reportIncident(token: string, body: {

@@ -3,7 +3,8 @@ import { initDb as getDb } from "../db";
 import { fishermanReports } from "../db/schema";
 import { Hono } from "hono";
 import { findFishermanByToken, registerFisherman, toPublic, updateFisherman } from "../lib/fishermen";
-import { loadActivity } from "../lib/adaptive-profile";
+import { currentEffectiveProfile, loadActivity } from "../lib/adaptive-profile";
+import { profileView } from "../lib/profile-view";
 import { recordClass } from "../lib/class-history";
 
 const route = new Hono();
@@ -38,7 +39,8 @@ route.post("/fishermen/register", async (c) => {
 route.get("/fishermen/me", (c) => {
 	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
 	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
-	// His own activity is shown to him; the model category is not (researchers only).
+	// His own activity is shown to him. The model category is shown only as colours, and only when
+	// PROFILE_CLASS_VISIBLE=true (off by default: researchers only).
 	// Where his reports of the last 30 days came from, so he can see WhatsApp reports count too.
 	const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 19).replace("T", " ");
 	const channels = getDb()
@@ -49,7 +51,13 @@ route.get("/fishermen/me", (c) => {
 		.all();
 	const whatsapp = channels.filter((r) => r.channel === "WHATSAPP").reduce((n, r) => n + Number(r.n), 0);
 	const app = channels.filter((r) => r.channel !== "WHATSAPP").reduce((n, r) => n + Number(r.n), 0);
-	return c.json({ ok: true, fisherman: toPublic(f), activity: { ...loadActivity(f.id), channels_30d: { app, whatsapp } } });
+	const view = profileView(f.id, currentEffectiveProfile(f));
+	return c.json({
+		ok: true,
+		fisherman: toPublic(f),
+		activity: { ...loadActivity(f.id), channels_30d: { app, whatsapp } },
+		...(view ? { profile_view: view } : {}),
+	});
 });
 
 /** PUT /api/fishermen/me { homeBeach?, profile? } (X-Fisherman-Token) */
