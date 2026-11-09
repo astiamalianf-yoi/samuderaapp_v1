@@ -5,7 +5,7 @@ import { AlertDetailPage } from "./pages/AlertDetailPage"
 import { ReportPage } from "./pages/ReportPage"
 import { MapPage } from "./pages/MapPage"
 import { KnowledgePage } from "./pages/KnowledgePage"
-import { ProfilePage } from "./pages/ProfilePage"
+import { ProfileEditPage, ProfilePage } from "./pages/ProfilePage"
 import { OnboardingPage } from "./pages/OnboardingPage"
 import { IncidentPage } from "./pages/IncidentPage"
 import { PWABadge } from "./components/PWABadge"
@@ -48,6 +48,7 @@ export default function App() {
         <Route path="/peta" element={<MapPage />} />
         <Route path="/pengetahuan" element={<KnowledgePage />} />
         <Route path="/profil" element={<ProfilePage />} />
+        <Route path="/profil/ubah" element={<ProfileEditPage />} />
         <Route path="/alerts/:id" element={<AlertDetailPage />} />
         <Route path="/forecast" element={<ForecastPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

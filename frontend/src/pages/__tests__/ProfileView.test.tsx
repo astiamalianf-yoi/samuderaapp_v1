@@ -52,3 +52,24 @@ describe("Profil Anda", () => {
     expect(screen.queryByLabelText("Profil Anda")).toBeNull()
   })
 })
+
+describe("Profil: view and edit are separate pages", () => {
+  it("a registered fisherman sees his profile and an Ubah profil button, not the form", async () => {
+    mockMe({ profile_view: { overall: "actionable", features } })
+    render(<MemoryRouter><ProfilePage /></MemoryRouter>)
+    await screen.findByLabelText("Aktivitas Anda")
+    expect(screen.queryByLabelText(/Nomor WhatsApp Anda/)).toBeNull()
+    expect(screen.getByRole("link", { name: /Ubah profil/ }).getAttribute("href")).toBe("/profil/ubah")
+    expect(screen.getByRole("button", { name: /Keluar dan hapus profil/ })).toBeTruthy()
+  })
+
+  it("/profil/ubah holds the form with a way back", async () => {
+    mockMe({})
+    const { ProfileEditPage } = await import("../ProfilePage")
+    render(<MemoryRouter><ProfileEditPage /></MemoryRouter>)
+    expect(screen.getByRole("heading", { name: "Ubah profil" })).toBeTruthy()
+    expect(screen.getByLabelText(/Nomor WhatsApp Anda/)).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Simpan perubahan" })).toBeTruthy()
+    expect(screen.getByRole("link", { name: /Kembali ke profil/ }).getAttribute("href")).toBe("/profil")
+  })
+})

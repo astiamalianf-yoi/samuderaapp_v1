@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
-import { Activity as ActivityIcon, Home, Minus, Phone, Plus, ShieldCheck, UserRound } from "lucide-react"
+import { Link, Navigate } from "react-router-dom"
+import { Activity as ActivityIcon, ArrowLeft, Home, Minus, Pencil, Phone, Plus, ShieldCheck, UserRound } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BEACH_LOCATIONS } from "../constants/observationData"
 import { useHomeBeach, useRegistration } from "../hooks/useAppState"
@@ -25,7 +25,65 @@ type QuestionId = keyof ProfileAnswers | "phone" | "home" | "consent"
  * After registration the server raises the answers with his activity (reports, signs used,
  * incidents); the category (Actionable / Inaction) is for researchers only and is not shown here.
  */
+/** /profil: registered = a read-only view (Profil Anda, Aktivitas Anda) with an "Ubah profil" button;
+ *  not registered = the registration form. */
 export function ProfilePage() {
+  const registration = useRegistration()
+  // Keep the form (and its "Anda sudah terdaftar" screen) for a fisherman who registers on this visit.
+  const [registering] = useState(!registration)
+  return registration && !registering ? <ProfileOverview /> : <ProfileForm />
+}
+
+/** /profil/ubah: the same form, for changing number, home beach or answers. */
+export function ProfileEditPage() {
+  const registration = useRegistration()
+  return registration ? <ProfileForm /> : <Navigate to="/profil" replace />
+}
+
+const PRIVACY_NOTE = (
+  <p className="mt-2 text-sm text-gray-600 bg-white rounded-xl border border-gray-200 p-3">
+    🔒 Nomor WhatsApp dipakai agar laporan Anda dari aplikasi dan dari grup WhatsApp dikenali sebagai laporan
+    Anda. Server tidak menyimpan nomor lengkap, hanya kode acak dan 4 angka terakhir. Tidak ada nama yang diminta.
+  </p>
+)
+
+function ProfileOverview() {
+  const registration = useRegistration()!
+  const home = BEACH_LOCATIONS.find((b) => b.value === registration.homeBeach)
+  return (
+    <AppShell title="Profil">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-black">Profil nelayan</h1>
+          <p className="text-base text-gray-700">
+            Terdaftar dengan nomor WhatsApp ••••{registration.phoneLast4}
+            {home ? <>, pantai asal <b>{home.label.replace("Pantai ", "")}</b></> : null}.
+          </p>
+          {PRIVACY_NOTE}
+        </div>
+
+        <ActivityCard token={registration.token} />
+
+        <Link to="/profil/ubah"
+          className="w-full min-h-16 flex items-center justify-center gap-2 rounded-2xl bg-sky-900 text-white text-xl font-extrabold">
+          <Pencil className="w-6 h-6" aria-hidden /> Ubah profil
+        </Link>
+        <p className="-mt-3 text-center text-sm text-gray-600">Nomor WhatsApp, pantai asal dan jawaban pertanyaan.</p>
+
+        <button onClick={() => { saveAnswers(null); saveRegistration(null) }}
+          className="w-full min-h-12 rounded-xl border-2 border-gray-300 text-base font-semibold text-gray-700">
+          Keluar dan hapus profil dari HP ini
+        </button>
+
+        <Link to="/mulai" className="block text-center min-h-12 py-3 text-base font-semibold text-sky-800">
+          Lihat pengenalan aplikasi lagi
+        </Link>
+      </div>
+    </AppShell>
+  )
+}
+
+function ProfileForm() {
   const savedAnswers = loadAnswers()
   const registration = useRegistration()
   const [home] = useHomeBeach()
@@ -36,6 +94,22 @@ export function ProfilePage() {
   const [consent, setConsent] = useState(Boolean(registration))
   const [sending, setSending] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
+  // The form opened from "Ubah profil" (already registered) rather than a first registration.
+  const [editing] = useState(Boolean(registration))
+
+  useEffect(() => {
+    if (!editing) return
+    window.scrollTo?.(0, 0)
+    // Answers saved on another phone (or before this phone kept them): take them from the server,
+    // so saving here never overwrites his real answers with the defaults.
+    if (savedAnswers || !registration) return
+    let live = true
+    fishermenService.me(registration.token)
+      .then((r) => { if (live && r.fisherman.profile) setA(r.fisherman.profile as Partial<ProfileAnswers>) })
+      .catch(() => {})
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const set = <K extends keyof ProfileAnswers>(k: K, v: ProfileAnswers[K]) => setA((cur) => ({ ...cur, [k]: v }))
 
@@ -78,6 +152,19 @@ export function ProfilePage() {
     }
   }
 
+  if (done && editing) {
+    return (
+      <AppShell title="Profil">
+        <div className="flex flex-col items-center text-center gap-4 pt-10">
+          <ShieldCheck className="w-20 h-20 text-emerald-600" aria-hidden />
+          <h1 className="text-3xl font-black">Profil diperbarui</h1>
+          <p className="text-lg max-w-sm">Perubahan Anda sudah disimpan, dan peringatan untuk Anda ikut menyesuaikan.</p>
+          <Link to="/profil" className="w-full max-w-sm min-h-14 flex items-center justify-center rounded-2xl bg-sky-900 text-white text-lg font-bold">Kembali ke profil</Link>
+        </div>
+      </AppShell>
+    )
+  }
+
   if (done) {
     return (
       <AppShell title="Profil">
@@ -103,19 +190,19 @@ export function ProfilePage() {
     <AppShell title="Profil">
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-black">{registration ? "Profil nelayan" : "Daftar sebagai nelayan"}</h1>
+          {editing && (
+            <Link to="/profil" className="inline-flex items-center gap-1 min-h-11 mb-1 text-base font-semibold text-sky-800">
+              <ArrowLeft className="w-5 h-5" aria-hidden /> Kembali ke profil
+            </Link>
+          )}
+          <h1 className="text-2xl font-black">{editing ? "Ubah profil" : "Daftar sebagai nelayan"}</h1>
           <p className="text-base text-gray-700">
-            {registration
-              ? `Terdaftar dengan nomor WhatsApp ••••${registration.phoneLast4}. Anda bisa mengubah jawaban kapan saja.`
+            {editing
+              ? `Terdaftar dengan nomor WhatsApp ••••${registration?.phoneLast4}. Ubah yang perlu, lalu tekan Simpan perubahan.`
               : "Daftar sekali untuk bisa melapor tanda alam. Peringatan tetap bisa dilihat tanpa mendaftar."}
           </p>
-          <p className="mt-2 text-sm text-gray-600 bg-white rounded-xl border border-gray-200 p-3">
-            🔒 Nomor WhatsApp dipakai agar laporan Anda dari aplikasi dan dari grup WhatsApp dikenali sebagai laporan
-            Anda. Server tidak menyimpan nomor lengkap, hanya kode acak dan 4 angka terakhir. Tidak ada nama yang diminta.
-          </p>
+          {PRIVACY_NOTE}
         </div>
-
-        {registration && <ActivityCard token={registration.token} />}
 
         <div id="q-phone" className={`rounded-2xl p-3 ${err("phone") ? "bg-red-50 ring-2 ring-red-500" : ""}`}>
           <label htmlFor="in-phone" className="flex items-center gap-2 text-lg font-bold mb-2">
@@ -201,16 +288,13 @@ export function ProfilePage() {
           className="w-full min-h-16 rounded-2xl bg-sky-900 text-white text-xl font-extrabold disabled:opacity-60">
           {sending ? "Mengirim…" : registration ? "Simpan perubahan" : "Daftar"}
         </button>
-        {(savedAnswers || registration) && (
-          <button onClick={() => { saveAnswers(null); saveRegistration(null); setA(DEFAULTS); setConsent(false) }}
-            className="w-full min-h-12 rounded-xl border-2 border-gray-300 text-base font-semibold text-gray-700">
-            Keluar dan hapus profil dari HP ini
-          </button>
+        {editing ? (
+          <Link to="/profil" className="block text-center min-h-12 py-3 text-base font-semibold text-sky-800">Batal</Link>
+        ) : (
+          <Link to="/mulai" className="block text-center min-h-12 py-3 text-base font-semibold text-sky-800">
+            Lihat pengenalan aplikasi lagi
+          </Link>
         )}
-
-        <Link to="/mulai" className="block text-center min-h-12 py-3 text-base font-semibold text-sky-800">
-          Lihat pengenalan aplikasi lagi
-        </Link>
       </div>
     </AppShell>
   )
