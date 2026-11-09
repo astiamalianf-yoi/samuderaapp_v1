@@ -60,7 +60,7 @@ services:
       # WhatsApp group class by majority of registered fishermen (3 locally, so a few test numbers reach it)
       GROUP_CLASS_MODE: ${GROUP_CLASS_MODE:-majority}
       GROUP_MAJORITY_MIN: ${GROUP_MAJORITY_MIN:-3}
-      # Local testing: show the "Profil Anda" box (off by default on the server)
+      # "Profil Anda" box (shown by default; false hides it)
       PROFILE_CLASS_VISIBLE: ${PROFILE_CLASS_VISIBLE:-true}
       ENABLE_IOT_MQTT_DELIVERY: "true"
       MQTT_BROKER_URL: mqtt://mosquitto:1883

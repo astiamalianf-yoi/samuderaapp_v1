@@ -39,8 +39,8 @@ route.post("/fishermen/register", async (c) => {
 route.get("/fishermen/me", (c) => {
 	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
 	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
-	// His own activity is shown to him. The model category is shown only as colours, and only when
-	// PROFILE_CLASS_VISIBLE=true (off by default: researchers only).
+	// His own activity is shown to him. The model category is shown only as colours ("Profil Anda"),
+	// unless PROFILE_CLASS_VISIBLE=false.
 	// Where his reports of the last 30 days came from, so he can see WhatsApp reports count too.
 	const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 19).replace("T", " ");
 	const channels = getDb()

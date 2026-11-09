@@ -6,10 +6,10 @@ import type { FishermanProfile } from "./personal-warning";
 /**
  * "Profil Anda" on the Profil page: the five Paper 2 tipping points (Table 8) with the fisherman's
  * own effective values, and the overall class as a colour only (never the words Actionable/Inaction).
- * Off by default: a fisherman does not see his class unless PROFILE_CLASS_VISIBLE=true, so the field
- * study can keep it hidden (or use it as a condition).
+ * On by default for now; PROFILE_CLASS_VISIBLE=false hides it (no class data is sent), so the field
+ * study can still keep it hidden or use it as a condition.
  */
-export const profileViewEnabled = () => process.env.PROFILE_CLASS_VISIBLE === "true";
+export const profileViewEnabled = () => process.env.PROFILE_CLASS_VISIBLE !== "false";
 
 type Tip = { key: string; threshold: number; actionableAbove: boolean; value: (p: FishermanProfile) => number };
 

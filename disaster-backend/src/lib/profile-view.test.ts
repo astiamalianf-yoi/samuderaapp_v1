@@ -27,12 +27,12 @@ describe("Profil Anda: the five tipping points", () => {
 		expect(s).toEqual({ disaster_interaction: "inaction", usage_frequency_avg: "inaction", age: "actionable", usage_duration: "inaction", disaster_experience_count: "actionable" });
 	});
 
-	test("hidden unless PROFILE_CLASS_VISIBLE=true", () => {
+	test("shown by default, hidden only with PROFILE_CLASS_VISIBLE=false", () => {
 		const old = process.env.PROFILE_CLASS_VISIBLE;
 		delete process.env.PROFILE_CLASS_VISIBLE;
-		expect(profileViewEnabled()).toBe(false);
-		process.env.PROFILE_CLASS_VISIBLE = "true";
 		expect(profileViewEnabled()).toBe(true);
+		process.env.PROFILE_CLASS_VISIBLE = "false";
+		expect(profileViewEnabled()).toBe(false);
 		if (old === undefined) delete process.env.PROFILE_CLASS_VISIBLE; else process.env.PROFILE_CLASS_VISIBLE = old;
 	});
 });

@@ -9,7 +9,7 @@ export interface PublicFisherman {
   profile: ProfileAnswers | null
 }
 
-/** Shown only when the server has PROFILE_CLASS_VISIBLE=true: the five tipping points, colours only. */
+/** Sent unless the server has PROFILE_CLASS_VISIBLE=false: the five tipping points, colours only. */
 export interface ProfileView {
   overall: "actionable" | "inaction" | null
   features: { key: string; value: number; side: "actionable" | "inaction" }[]

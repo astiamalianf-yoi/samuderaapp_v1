@@ -71,9 +71,9 @@ services:
       # GROUP_MAJORITY_MIN have a profile (else the survey profile); "survey" keeps the survey profile always.
       GROUP_CLASS_MODE: ${GROUP_CLASS_MODE:-majority}
       GROUP_MAJORITY_MIN: ${GROUP_MAJORITY_MIN:-10}
-      # "Profil Anda" box on the Profil page (five tipping points, colours only). Off = the fisherman
-      # never sees his class (default, and the field-study setting unless you decide otherwise).
-      PROFILE_CLASS_VISIBLE: ${PROFILE_CLASS_VISIBLE:-false}
+      # "Profil Anda" box on the Profil page (five tipping points, colours only). Shown by default;
+      # set false to hide it (the fisherman then never sees his class).
+      PROFILE_CLASS_VISIBLE: ${PROFILE_CLASS_VISIBLE:-true}
       OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}
       OPENCLAW_HOOK_TOKEN: ${OPENCLAW_HOOK_TOKEN:-}
       OPENCLAW_BROADCAST_GROUPS: ${OPENCLAW_BROADCAST_GROUPS:-}
