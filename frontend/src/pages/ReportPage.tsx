@@ -94,7 +94,7 @@ export function ReportPage() {
           <p className="text-base text-gray-700">Sentuh satu atau lebih tanda, lalu tekan <b>Kirim</b>.</p>
         </div>
 
-        <BeachPicker value={beach} onChange={setBeach} />
+        <BeachPicker value={beach} onChange={setBeach} homeBeach={registration.homeBeach as typeof beach} />
 
         <SignGrid signs={common} selected={selected} onToggle={toggle} />
 
