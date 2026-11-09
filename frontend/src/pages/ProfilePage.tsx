@@ -329,8 +329,8 @@ const FEATURE_TEXT: Record<string, { label: string; unit: string }> = {
   disaster_experience_count: { label: "Jenis bahaya yang pernah dialami", unit: "jenis" },
 }
 const SIDE = {
-  actionable: { dot: "bg-teal-600", box: "bg-teal-50 border-teal-300" },
-  inaction: { dot: "bg-amber-500", box: "bg-amber-50 border-amber-300" },
+  actionable: { dot: "bg-teal-600", box: "bg-teal-50 border-teal-500", pill: "bg-teal-600 text-white", word: "mendukung" },
+  inaction: { dot: "bg-amber-500", box: "bg-amber-50 border-amber-500", pill: "bg-amber-500 text-white", word: "perlu perhatian" },
 } as const
 
 /**
@@ -343,7 +343,15 @@ function ProfileViewCard({ view }: { view: ProfileView }) {
   const num = (v: number) => v.toLocaleString("id-ID", { maximumFractionDigits: 1 })
   return (
     <section className={`rounded-2xl border-2 p-4 space-y-3 ${box}`} aria-label="Profil Anda" data-overall={view.overall ?? "unknown"}>
-      <p className="flex items-center gap-2 text-lg font-bold"><UserRound className="w-5 h-5 text-sky-800" aria-hidden /> Profil Anda</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-lg font-bold"><UserRound className="w-5 h-5 text-sky-800" aria-hidden /> Profil Anda</p>
+        {view.overall && (
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${SIDE[view.overall].pill}`} data-testid="profile-overall">
+            <span className="w-2.5 h-2.5 rounded-full bg-white" aria-hidden />
+            Keseluruhan: {SIDE[view.overall].word}
+          </span>
+        )}
+      </div>
       <p className="text-sm text-gray-700">Lima hal dari jawaban dan aktivitas Anda yang paling memengaruhi peringatan untuk Anda.</p>
       <ul className="space-y-2">
         {view.features.map((f) => (
@@ -359,7 +367,7 @@ function ProfileViewCard({ view }: { view: ProfileView }) {
         <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-teal-600" aria-hidden /> mendukung</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500" aria-hidden /> perlu perhatian</span>
       </p>
-      <p className="text-sm text-gray-600">Warna kotak mengikuti gabungan semua jawaban dan aktivitas Anda, dan berubah sendiri saat Anda melapor.</p>
+      <p className="text-sm text-gray-600">Warna kotak dan label "Keseluruhan" dihitung dari gabungan semua jawaban dan aktivitas Anda, bukan dari jumlah titik di atas. Peringatan untuk Anda mengikuti warna kotak ini, dan bisa berubah sendiri saat Anda melapor.</p>
     </section>
   )
 }

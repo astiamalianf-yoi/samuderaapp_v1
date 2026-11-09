@@ -37,6 +37,7 @@ describe("Profil Anda", () => {
     const box = await screen.findByLabelText("Profil Anda")
     expect(box.getAttribute("data-overall")).toBe("inaction")
     expect(box.className).toContain("bg-amber-50")
+    expect(screen.getByTestId("profile-overall").textContent).toContain("Keseluruhan: perlu perhatian")
     expect(box.querySelectorAll("li")).toHaveLength(5)
     expect(box.querySelector("[data-side='actionable']")!.textContent).toContain("Lama memakai tanda alam")
     expect(box.textContent).toContain("55 tahun")
