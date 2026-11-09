@@ -4,7 +4,7 @@ import { fishermanReports } from "../db/schema";
 import { Hono } from "hono";
 import { findFishermanByToken, registerFisherman, toPublic, updateFisherman } from "../lib/fishermen";
 import { currentEffectiveProfile, loadActivity } from "../lib/adaptive-profile";
-import { profileView } from "../lib/profile-view";
+import { classIsStale, profileView, profileViewEnabled } from "../lib/profile-view";
 import { recordClass } from "../lib/class-history";
 
 const route = new Hono();
@@ -31,12 +31,12 @@ route.post("/fishermen/register", async (c) => {
 	const res = await registerFisherman(body);
 	if (!res.ok) return c.json({ ok: false, error: res.error, message: ERRORS[res.error] }, 422);
 	const row = findFishermanByToken(res.token);
-	if (row) void recordClass(row, res.created ? "registration" : "re-registration");
+	if (row) await recordClass(row, res.created ? "registration" : "re-registration");
 	return c.json({ ok: true, fisherman: res.fisherman, token: res.token, created: res.created }, res.created ? 201 : 200);
 });
 
 /** GET /api/fishermen/me (X-Fisherman-Token) */
-route.get("/fishermen/me", (c) => {
+route.get("/fishermen/me", async (c) => {
 	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
 	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
 	// His own activity is shown to him. The model category is shown only as colours ("Profil Anda"),
@@ -51,7 +51,11 @@ route.get("/fishermen/me", (c) => {
 		.all();
 	const whatsapp = channels.filter((r) => r.channel === "WHATSAPP").reduce((n, r) => n + Number(r.n), 0);
 	const app = channels.filter((r) => r.channel !== "WHATSAPP").reduce((n, r) => n + Number(r.n), 0);
-	const view = profileView(f.id, currentEffectiveProfile(f));
+	const effective = currentEffectiveProfile(f);
+	// Catch up a class that is behind his current profile, but never keep the page waiting long.
+	if (profileViewEnabled() && classIsStale(f.id, effective))
+		await Promise.race([recordClass(f, "catch-up"), new Promise((r) => setTimeout(r, 3000))]);
+	const view = profileView(f.id, effective);
 	return c.json({
 		ok: true,
 		fisherman: toPublic(f),
@@ -69,7 +73,8 @@ route.put("/fishermen/me", async (c) => {
 	const res = updateFisherman(f, body);
 	if (!res.ok) return c.json({ ok: false, error: res.error, message: ERRORS[res.error] }, 422);
 	const row = findFishermanByToken(c.req.header("X-Fisherman-Token"));
-	if (row) void recordClass(row, "profile-update");
+	// Awaited, so the Profil page opened right after saving shows the new class, not the old one.
+	if (row) await recordClass(row, "profile-update");
 	return c.json({ ok: true, fisherman: res.fisherman });
 });
 

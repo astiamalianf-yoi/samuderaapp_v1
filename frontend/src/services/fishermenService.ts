@@ -12,6 +12,8 @@ export interface PublicFisherman {
 /** Sent unless the server has PROFILE_CLASS_VISIBLE=false: the five tipping points, colours only. */
 export interface ProfileView {
   overall: "actionable" | "inaction" | null
+  /** "no_location_model": his home beach has no local model yet, so he is treated as Inaction */
+  basis?: "random_forest" | "no_location_model" | null
   features: { key: string; value: number; side: "actionable" | "inaction" }[]
 }
 

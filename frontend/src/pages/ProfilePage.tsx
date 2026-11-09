@@ -367,6 +367,11 @@ function ProfileViewCard({ view }: { view: ProfileView }) {
         <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-teal-600" aria-hidden /> mendukung</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500" aria-hidden /> perlu perhatian</span>
       </p>
+      {view.basis === "no_location_model" && (
+        <p className="rounded-xl bg-white border border-amber-300 p-3 text-sm text-gray-800" data-testid="profile-no-model">
+          Model untuk pantai asal Anda belum tersedia. Sampai model itu ada, peringatan untuk Anda memakai sisi yang paling hati-hati, apa pun jawaban Anda.
+        </p>
+      )}
       <p className="text-sm text-gray-600">Warna kotak dan label "Keseluruhan" dihitung dari gabungan semua jawaban dan aktivitas Anda, bukan dari jumlah titik di atas. Peringatan untuk Anda mengikuti warna kotak ini, dan bisa berubah sendiri saat Anda melapor.</p>
     </section>
   )

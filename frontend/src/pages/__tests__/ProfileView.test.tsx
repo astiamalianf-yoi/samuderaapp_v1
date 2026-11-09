@@ -46,6 +46,12 @@ describe("Profil Anda", () => {
     expect(all.indexOf("Profil Anda")).toBeLessThan(all.indexOf("Aktivitas Anda"))
   })
 
+  it("explains when the home beach has no model yet", async () => {
+    mockMe({ profile_view: { overall: "inaction", basis: "no_location_model", features } })
+    render(<MemoryRouter><ProfilePage /></MemoryRouter>)
+    expect((await screen.findByTestId("profile-no-model")).textContent).toContain("belum tersedia")
+  })
+
   it("is not shown when the server keeps it hidden", async () => {
     mockMe({})
     render(<MemoryRouter><ProfilePage /></MemoryRouter>)
