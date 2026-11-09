@@ -58,7 +58,7 @@ services:
       # Local testing: BMKG test switch on (POST /api/research/uat/bmkg with X-Research-Key)
       BMKG_SIM_ENABLED: ${BMKG_SIM_ENABLED:-true}
       # WhatsApp group class by majority of registered fishermen (3 locally, so a few test numbers reach it)
-      # Reports of the same sign at a beach that raise a community warning (1 = one report is enough);
+      # Reports of the same sign at a beach that raise a community warning (1 for local testing; production 3);
       # per beach: REPORT_THRESHOLD_BEACHES="pantai_lampuuk=3,pantai_lhoknga=5"
       REPORT_THRESHOLD: ${REPORT_THRESHOLD:-1}
       REPORT_THRESHOLD_BEACHES: ${REPORT_THRESHOLD_BEACHES:-}
