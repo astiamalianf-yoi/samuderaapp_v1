@@ -139,7 +139,7 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 
 		const duplicates: string[] = Array.isArray(data.duplicateCodes) ? data.duplicateCodes : [];
 		const counts: Record<string, number> = data.reportCounts ?? {};
-		const threshold = Number(data.threshold) || 5;
+		const threshold = Number(data.threshold) || 1;
 		const countedCodes = result.likCodes.filter((code) => !duplicates.includes(code));
 
 		if (countedCodes.length === 0) {

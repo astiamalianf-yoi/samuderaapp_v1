@@ -76,7 +76,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     const pending = counts.length > 0 && (
       <p className="mt-3 text-base">
         Laporan masuk: {counts.map(([c, v]) => `${getSign(c)?.short ?? c} (${v.count})`).join(", ")}.
-        {" "}Peringatan keluar jika {data?.threshold ?? 5} nelayan melaporkan tanda yang sama.
+        {(data?.threshold ?? 1) > 1 && <>{" "}Peringatan keluar jika {data?.threshold} nelayan melaporkan tanda yang sama.</>}
       </p>
     )
 

@@ -75,7 +75,7 @@ export function ReportPage() {
           <p className="text-lg max-w-sm">
             {result.kind === "offline"
               ? "Belum ada sinyal. Laporan akan terkirim otomatis saat HP tersambung lagi."
-              : `Laporan Anda dari ${getBeachMeta(beach)?.label} sudah diterima. Peringatan keluar jika beberapa nelayan melaporkan tanda yang sama.`}
+              : `Laporan Anda dari ${getBeachMeta(beach)?.label} sudah diterima. Lihat status pantai untuk peringatan terbaru.`}
           </p>
           <Link to="/" className="w-full max-w-sm min-h-14 flex items-center justify-center rounded-2xl bg-sky-900 text-white text-lg font-bold">
             Lihat status pantai

@@ -24,22 +24,22 @@ export const ACKS_STREAM = process.env.ACKS_STREAM ?? "alerts:acks";
 export const REPORT_SYNC_STREAM = process.env.REPORT_SYNC_STREAM ?? "reports:sync";
 export const REPORT_DEDUPE_PREFIX = process.env.REPORT_DEDUPE_PREFIX ?? "reports:dedupe";
 export const REPORT_WINDOW_MS = Number(process.env.REPORT_WINDOW_MS ?? 24 * 60 * 60 * 1000);
-export const REPORT_THRESHOLD = Number(process.env.REPORT_THRESHOLD ?? 5);
+// Reports of the same sign at one beach (from different fishermen, 24 h) that raise a community
+// warning. 1 for now: one report is enough. Raise it with REPORT_THRESHOLD (all beaches) or per beach
+// with REPORT_THRESHOLD_BEACHES, e.g. "pantai_lampuuk=3,pantai_lhoknga=5".
+export const REPORT_THRESHOLD = Math.max(1, Number(process.env.REPORT_THRESHOLD ?? 1) || 1);
 // Same reporter + same sign + same beach within this window counts as one report (app and WhatsApp alike).
 // App reports need a registered fisherman (X-Fisherman-Token). WhatsApp reports are identified by the number.
 export const REPORT_REQUIRE_REGISTRATION = (process.env.REPORT_REQUIRE_REGISTRATION ?? "true") !== "false";
 export const REPORT_REPEAT_WINDOW_MS = Number(process.env.REPORT_REPEAT_WINDOW_MS ?? 5 * 60 * 1000);
 
-export const BEACH_THRESHOLDS: Record<string, number> = {
-	pantai_lampuuk: 5,
-	pantai_ulee_lheue: 5,
-	pantai_depok: 5,
-	pantai_samas: 5,
-	pantai_pangandaran: 5,
-	pantai_batu_karas: 5,
-	pantai_bojongsalawe: 5,
-	pantai_lhoknga: 5,
-};
+export const BEACH_THRESHOLDS: Record<string, number> = Object.fromEntries(
+	(process.env.REPORT_THRESHOLD_BEACHES ?? "")
+		.split(",")
+		.map((pair) => pair.split("=").map((x) => x.trim()))
+		.filter(([beach, n]) => beach && Number(n) >= 1)
+		.map(([beach, n]) => [beach, Math.floor(Number(n))]),
+);
 export const ACTIVE_WARNING_TTL_SECONDS = Number(process.env.ACTIVE_WARNING_TTL_SECONDS ?? 12 * 60 * 60); // 12 hours
 
 // Anonymous flood guard for /report (no auth required): max requests per IP per window.
