@@ -260,6 +260,7 @@ route.get("/report/submit", async (c) => {
 			`Tanda: ${triggeredCodes.join(", ")}`,
 			`Rekomendasi: ${alertEvent.ml?.action_recommendation ?? "Tidak ada rekomendasi"}`,
 			"Peringatan sedang dikirim ke semua nelayan.",
+			"📱 Buka aplikasi SAMUDRA untuk peringatan khusus Anda.",
 		].join("\n");
 		await sendOpenClawBeachAlert(beachLocation, alertText);
 		console.log("[report-submit] sent WhatsApp alert broadcast");
