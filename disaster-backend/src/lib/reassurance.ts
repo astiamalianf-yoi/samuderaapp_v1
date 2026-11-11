@@ -27,6 +27,7 @@ type ReassuranceResult = {
  *   MEDIUM (-> WASPADA) wind >= 30 km/h, or a bad-weather forecast (rain/thunderstorm codes)
  *   LOW                 otherwise
  * A forecast alone never reaches SIAGA; only a real warning or strong wind does.
+ * Final level: see fuseLevels (BAHAYA when both sides are at SIAGA).
  */
 export function determineBmkgRisk(
 	weather: { windSpeed: number | null; isSafe?: boolean | null } | null,
@@ -70,14 +71,24 @@ const LEVEL_MAP: Record<number, FinalLevel> = {
 	3: "EKSTREM",
 };
 
-function fusionDecision(
+/**
+ * Fusion of the two sources (0 NORMAL, 1 WASPADA, 2 SIAGA, 3 EKSTREM/BAHAYA):
+ * the higher of the two, and one step higher (BAHAYA) when both the fishermen's signs
+ * and BMKG are at SIAGA, i.e. both sources independently point to danger.
+ */
+export function fuseLevels(likLevel: number, bmkgLevel: number): number {
+	if (likLevel >= 2 && bmkgLevel >= 2) return 3;
+	return Math.max(likLevel, bmkgLevel);
+}
+
+export function fusionDecision(
 	shapRisk: string,
 	bmkgRisk: string,
 ): { finalLevel: FinalLevel; finalLevelNumeric: number; agreed: boolean } {
 	const likLevel = LIK_LEVEL_MAP[shapRisk.toUpperCase()] ?? 0;
 	const bmkgLevel = BMKG_LEVEL_MAP[bmkgRisk.toUpperCase()] ?? 0;
 
-	const score = Math.max(likLevel, bmkgLevel);
+	const score = fuseLevels(likLevel, bmkgLevel);
 
 	const agreed = likLevel === bmkgLevel;
 

@@ -101,12 +101,14 @@ export function WhyPanel({ event }: { event: ActiveWarningEvent }) {
           <div className={`rounded-xl border p-3 ${re.agreed ? "bg-emerald-50 border-emerald-300" : "bg-amber-50 border-amber-300"} text-gray-900`}>
             <p className="flex items-center gap-2 font-semibold">
               {re.agreed ? <CheckCircle2 className="w-5 h-5 text-emerald-700" /> : <AlertTriangle className="w-5 h-5 text-amber-700" />}
-              {re.agreed ? "Tanda alam dan BMKG sejalan" : "Tanda alam dan BMKG berbeda — level tertinggi dipakai"}
+              {String(re.finalLevel).toUpperCase() === "EKSTREM"
+                ? "Tanda alam dan BMKG sama-sama menunjukkan bahaya — level dinaikkan menjadi BAHAYA"
+                : re.agreed ? "Tanda alam dan BMKG sejalan" : "Tanda alam dan BMKG berbeda — level tertinggi dipakai"}
             </p>
             <div className="grid grid-cols-3 gap-2 text-center mt-3 text-sm">
               <div><p className="opacity-70">Tanda alam</p><p className="font-bold">{re.shapRisk}</p></div>
               <div><p className="opacity-70">BMKG</p><p className="font-bold">{re.bmkgRisk}</p></div>
-              <div><p className="opacity-70">Hasil</p><p className="font-bold">{re.finalLevel}</p></div>
+              <div><p className="opacity-70">Hasil</p><p className="font-bold">{String(re.finalLevel).toUpperCase() === "EKSTREM" ? "BAHAYA" : re.finalLevel}</p></div>
             </div>
             {re.details?.weather && (
               <p className="mt-2 text-sm opacity-80">

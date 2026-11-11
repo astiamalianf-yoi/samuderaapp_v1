@@ -64,6 +64,21 @@ describe("broadcast content", () => {
 		expect(ev.ml.action_recommendation).toContain("Tunda melaut");
 		expect(buildNowcastAlertEvent(w, "pantai_lhoknga", 0).alertId).not.toBe(ev.alertId);
 	});
+	test("with an active fishermen's warning at SIAGA, the BMKG event is BAHAYA (EKSTREM)", () => {
+		const ev = buildNowcastAlertEvent(w, "pantai_lampuuk", 0, "SIAGA");
+		expect(ev.riskLevel).toBe("ekstrem");
+		expect(ev.decision.final_risk_level).toBe("EKSTREM");
+		expect(ev.ml.action_recommendation).toContain("Jangan melaut");
+		expect(buildNowcastAlertEvent(w, "pantai_lampuuk", 0, "WASPADA").riskLevel).toBe("siaga");
+	});
+	test("the WhatsApp message says BAHAYA only for the beaches where fishermen also reported", () => {
+		const one = formatNowcastWhatsApp(w, ["pantai_lampuuk", "pantai_lhoknga"], ["pantai_lampuuk"]);
+		expect(one).toContain("PERINGATAN BMKG — SIAGA");
+		expect(one).toContain("BAHAYA* di Pantai Lampuuk");
+		const all = formatNowcastWhatsApp(w, ["pantai_lampuuk"], ["pantai_lampuuk"]);
+		expect(all).toContain("PERINGATAN BMKG — BAHAYA");
+		expect(all).toContain("Jangan melaut");
+	});
 	test("one WhatsApp message lists every covered beach", () => {
 		const text = formatNowcastWhatsApp(w, ["pantai_lampuuk", "pantai_lhoknga"]);
 		expect(text).toContain("Pantai Lampuuk, Pantai Lhoknga");

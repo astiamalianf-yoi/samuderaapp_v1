@@ -1,3 +1,4 @@
+import { riskLabelFor } from "../lib/whatsapp-commands";
 import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
@@ -64,6 +65,8 @@ function formatWhatsAppAlert(params: {
 	lastReportAt: number;
 	activeWarningTtlSeconds: number;
 	warningStrategy?: WarningStrategy | null;
+	/** Fused level (NORMAL/WASPADA/SIAGA/EKSTREM); EKSTREM = BAHAYA, both sources point to danger. */
+	finalLevel?: string;
 }): string {
 	const {
 		beachLocation,
@@ -77,6 +80,7 @@ function formatWhatsAppAlert(params: {
 		lastReportAt,
 		activeWarningTtlSeconds,
 		warningStrategy,
+		finalLevel,
 	} = params;
 
 	const beachName = BEACH_DISPLAY_NAMES[beachLocation] ?? beachLocation;
@@ -120,6 +124,9 @@ function formatWhatsAppAlert(params: {
 
 	const lines = [
 		`⚠️ *Rekomendasi Aksi Prakiraan ${dangerLabel} di ${beachName}*`,
+		...(finalLevel ? [String(finalLevel).toUpperCase() === "EKSTREM"
+			? `🔴 *BAHAYA* — nelayan dan BMKG sama-sama memberi peringatan. Jangan melaut.`
+			: `Level: ${riskLabelFor(finalLevel)}`] : []),
 		``,
 		`📅 ${dateStr}`,
 		`👥 Dilaporkan oleh ${reporterCount} nelayan`,
@@ -488,6 +495,7 @@ route.post("/report", async (c) => {
 				lastReportAt: timeRange.lastReportAt,
 				activeWarningTtlSeconds: ACTIVE_WARNING_TTL_SECONDS,
 				warningStrategy: result.warning_strategy,
+				finalLevel: reassuranceFinalLevel,
 			});
 			await sendOpenClawBeachAlert(beachLocation, alertText);
 		}

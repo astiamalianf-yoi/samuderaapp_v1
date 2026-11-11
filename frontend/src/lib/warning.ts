@@ -70,6 +70,16 @@ export const LEVEL_ORDER: RiskLevel[] = ["NORMAL", "WASPADA", "SIAGA", "EKSTREM"
 export const maxLevel = (...levels: RiskLevel[]): RiskLevel =>
   levels.reduce((a, b) => (LEVEL_ORDER.indexOf(b) > LEVEL_ORDER.indexOf(a) ? b : a), "NORMAL" as RiskLevel)
 
+/**
+ * Fusion of the fishermen's side (LIK) and the BMKG side, same rule as the backend
+ * (reassurance.ts, fuseLevels): the higher of the two, and BAHAYA (EKSTREM) when both are at SIAGA.
+ */
+export function fuseLevels(lik: RiskLevel, bmkg: RiskLevel): RiskLevel {
+  const rank = (l: RiskLevel) => LEVEL_ORDER.indexOf(l)
+  if (rank(lik) >= rank("SIAGA") && rank(bmkg) >= rank("SIAGA")) return "EKSTREM"
+  return maxLevel(lik, bmkg)
+}
+
 export interface BmkgAssessment {
   level: RiskLevel
   /** Active BMKG nowcast warnings that cover this beach. */

@@ -30,7 +30,8 @@ const BEACH_ALIASES: Record<string, string> = {
  */
 export function riskLabelFor(level: unknown): string {
 	const v = String(level ?? "").toLowerCase();
-	if (v === "ekstrem" || v === "siaga" || v === "unsafe-high" || v === "high") return "🔴 BAHAYA";
+	if (v === "ekstrem" || v === "bahaya") return "🔴 BAHAYA";
+	if (v === "siaga" || v === "unsafe-high" || v === "high") return "🟠 SIAGA";
 	if (v === "waspada" || v === "unsafe" || v === "medium") return "🟡 WASPADA";
 	return "✅ Aman";
 }

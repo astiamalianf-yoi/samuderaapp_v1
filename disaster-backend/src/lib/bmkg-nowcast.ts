@@ -12,6 +12,7 @@ import { listSimWarnings, simWarningCap } from "./bmkg-sim";
 import { beachesByGroup } from "./openclaw";
 import { createHash } from "node:crypto";
 import { redis } from "./redis";
+import { getActiveWarning } from "./crowdsource";
 import {
 	ALERTS_CHANNEL,
 	ALERTS_STREAM,
@@ -193,32 +194,47 @@ const timeWib = (ms: number | null) =>
 		? "-"
 		: new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }).format(ms) + " WIB";
 
-export function formatNowcastWhatsApp(w: NowcastWarning, beaches: string[]): string {
-	const names = beaches.map((b) => BEACH_AREA[b]?.label ?? b).join(", ");
+export function formatNowcastWhatsApp(w: NowcastWarning, beaches: string[], escalated: string[] = []): string {
+	const label = (b: string) => BEACH_AREA[b]?.label ?? b;
+	const names = beaches.map(label).join(", ");
 	const desc = w.description.length > 280 ? `${w.description.slice(0, 277)}...` : w.description;
+	const esc = beaches.filter((b) => escalated.includes(b));
+	const allEsc = esc.length > 0 && esc.length === beaches.length;
 	return [
-		`⚠️ *PERINGATAN BMKG — SIAGA*`,
+		allEsc ? `🔴 *PERINGATAN BMKG — BAHAYA*` : `⚠️ *PERINGATAN BMKG — SIAGA*`,
 		`📍 ${names}`,
 		`🌩️ ${w.event}`,
 		`🕒 Berlaku sampai ${timeWib(w.expires)}`,
+		...(esc.length ? [`🔴 *BAHAYA* di ${esc.map(label).join(", ")}: nelayan juga melaporkan tanda alam bahaya.`] : []),
 		"",
 		desc,
 		"",
-		`👉 *Tunda melaut sampai peringatan berakhir.* Jika sudah di laut, segera menepi.`,
-		`Sumber: BMKG (peringatan dini cuaca)`,
+		esc.length
+			? `👉 *Jangan melaut sampai peringatan berakhir.* Jika sudah di laut, segera menepi.`
+			: `👉 *Tunda melaut sampai peringatan berakhir.* Jika sudah di laut, segera menepi.`,
+		`Sumber: BMKG (peringatan dini cuaca)${esc.length ? " dan laporan nelayan" : ""}`,
 	].join("\n");
 }
 
-export function buildNowcastAlertEvent(w: NowcastWarning, beach: string, now = Date.now()) {
-	const action = `Peringatan BMKG: ${w.event} sampai ${timeWib(w.expires)}. Tunda melaut sampai peringatan berakhir.`;
+/**
+ * One alert event per beach. When the fishermen of that beach already have an active
+ * warning at SIAGA (LIK side), both sources point to danger and the event is BAHAYA (EKSTREM),
+ * the same rule as reassurance.ts fuseLevels.
+ */
+export function buildNowcastAlertEvent(w: NowcastWarning, beach: string, now = Date.now(), likLevel: string | null = null) {
+	const bahaya = String(likLevel ?? "").toUpperCase() === "SIAGA" || String(likLevel ?? "").toUpperCase() === "EKSTREM";
+	const action = bahaya
+		? `BAHAYA: BMKG mengeluarkan peringatan (${w.event}) sampai ${timeWib(w.expires)} dan nelayan juga melaporkan tanda alam bahaya. Jangan melaut.`
+		: `Peringatan BMKG: ${w.event} sampai ${timeWib(w.expires)}. Tunda melaut sampai peringatan berakhir.`;
 	return {
 		alertId: `bmkg-${createHash("sha1").update(`${w.id}|${beach}`).digest("hex").slice(0, 20)}`,
 		source: "BMKG",
 		beachLocation: beach,
-		riskLevel: "siaga",
+		riskLevel: bahaya ? "ekstrem" : "siaga",
 		serverTimestamp: now,
 		reporterCount: 0,
-		decision: { is_actionable: true, shouldDistribute: true, final_risk_level: "SIAGA", community_characteristics: "Actionable" },
+		decision: { is_actionable: true, shouldDistribute: true, final_risk_level: bahaya ? "EKSTREM" : "SIAGA", community_characteristics: "Actionable" },
+		reassurance: { shapRisk: likLevel ? String(likLevel).toUpperCase() : "NORMAL", bmkgRisk: "HIGH", agreed: bahaya, finalLevel: bahaya ? "EKSTREM" : "SIAGA" },
 		ml: { action_recommendation: action, active_warning: [], triggered_lik_codes: [], sign_description: w.event },
 		input: { lik_codes: [], beach_location: beach },
 		bmkg: { id: w.id, event: w.event, headline: w.headline, effective: w.effective, expires: w.expires },
@@ -232,7 +248,15 @@ type Deps = {
 	/** Group -> the beaches it covers (default: OPENCLAW_BEACH_GROUPS / OPENCLAW_BROADCAST_GROUPS). */
 	groupsFor?: (beaches: string[]) => Map<string, string[]>;
 	publishIot?: (event: unknown) => Promise<unknown>;
+	/** LIK level of the active fishermen's warning at a beach (default: the stored active warning). */
+	likLevelFor?: (beach: string) => Promise<string | null>;
 };
+
+async function storedLikLevel(beach: string): Promise<string | null> {
+	const active = await getActiveWarning(beach).catch(() => null);
+	const ev = active?.alertEvent as { ml?: { lik_risk_level?: string } } | undefined;
+	return ev?.ml?.lik_risk_level ?? null;
+}
 
 /**
  * One monitor pass: store active warnings per beach, then broadcast each warning
@@ -265,9 +289,13 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 	}
 
 	let events = 0;
+	const likFor = deps.likLevelFor ?? storedLikLevel;
 	for (const { warning, beaches } of fresh.values()) {
+		const escalated: string[] = [];
 		for (const beach of beaches) {
-			const event = buildNowcastAlertEvent(warning, beach, now);
+			const lik = await likFor(beach).catch(() => null);
+			const event = buildNowcastAlertEvent(warning, beach, now, lik);
+			if (event.riskLevel === "ekstrem") escalated.push(beach);
 			const json = JSON.stringify(event);
 			await redis.xAdd(ALERTS_STREAM, "*", { json });
 			await redis.publish(ALERTS_CHANNEL, json);
@@ -276,7 +304,7 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 		}
 		// Each beach group gets the warning only if it covers its beach, naming only its beaches.
 		for (const [group, own] of (deps.groupsFor ?? beachesByGroup)(beaches)) {
-			await deps.sendWhatsApp?.(group, formatNowcastWhatsApp(warning, own)).catch(() => undefined);
+			await deps.sendWhatsApp?.(group, formatNowcastWhatsApp(warning, own, escalated)).catch(() => undefined);
 		}
 	}
 	return { warnings: fresh.size, events };

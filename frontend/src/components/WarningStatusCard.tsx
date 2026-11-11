@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { ChevronDown, RefreshCw, UserRound } from "lucide-react"
 import type { BeachLocation } from "../types/api"
 import { useActiveWarning, usePersonalWarning, useProfile } from "../hooks/useAppState"
-import { LEVELS, STRATEGY_HEADLINE, assessBmkg, eventLevel, mainAction, maxLevel, toLevel } from "../lib/warning"
+import { LEVELS, STRATEGY_HEADLINE, assessBmkg, eventLevel, fuseLevels, mainAction, maxLevel, toLevel } from "../lib/warning"
 import type { BmkgData } from "../services/reportService"
 import type { WeatherAlertProps } from "./WeatherAlertCard"
 import { getSign } from "../constants/signs"
@@ -117,11 +117,12 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
   }
 
   // ---- Active warning
-  const level = maxLevel(
-    eventLevel(event),
+  // Fishermen's side: the personal strategy level, or the level of the community warning.
+  const likLevel = maxLevel(
     personal?.lik_risk_level ? toLevel(personal.lik_risk_level) : "NORMAL",
-    bmkgState.level,
+    event?.ml?.lik_risk_level ? toLevel(event.ml.lik_risk_level) : "NORMAL",
   )
+  const level = maxLevel(eventLevel(event), fuseLevels(likLevel, bmkgState.level))
   const s = LEVELS[level === "NORMAL" ? "WASPADA" : level]
   const strategy = personal?.warning_strategy ?? event?.ml?.warning_strategy ?? null
   const head = strategy ? STRATEGY_HEADLINE[strategy.code] : null
@@ -131,7 +132,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
   return (
     <section className={`rounded-3xl border-2 p-5 shadow-lg ${s.card}`} role="alert">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">Peringatan dari nelayan</p>
+        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">{level === "EKSTREM" ? "Peringatan dari nelayan dan BMKG" : "Peringatan dari nelayan"}</p>
         {personal?.warning_strategy && (
           <span className={`flex items-center gap-1 text-xs font-bold rounded-full px-2 py-1 ${s.badge}`}>
             <UserRound className="w-3.5 h-3.5" /> Untuk Anda
@@ -170,6 +171,11 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
         {active.triggeredAt && <p className="mt-2 text-sm opacity-80">Dimulai {timeAgo(active.triggeredAt)}</p>}
       </div>
 
+      {level === "EKSTREM" && (
+        <p className="mt-4 rounded-xl bg-white text-red-800 p-3 text-base font-bold border-2 border-red-700">
+          🛑 Nelayan dan BMKG sama-sama memberi peringatan bahaya. Jangan melaut.
+        </p>
+      )}
       {bmkgState.warnings.length > 0 && (
         <p className="mt-4 rounded-xl bg-white/80 text-gray-950 p-3 text-base border border-red-300">
           ⚠️ BMKG juga mengeluarkan peringatan: <b>{bmkgState.warnings[0].condition}</b> sampai pukul {bmkgState.warnings[0].end}.
