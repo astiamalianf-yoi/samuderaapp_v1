@@ -3,7 +3,7 @@ import { redis } from "../lib/redis";
 import { ALERTS_STREAM } from "../config";
 import { beachesByGroup, sendOpenClawToGroups } from "../lib/openclaw";
 import { BEACH_DISPLAY_NAMES } from "./report";
-import { riskLabelFor } from "../lib/whatsapp-commands";
+import { currentAlerts, formatAlertsResponse, riskLabelFor } from "../lib/whatsapp-commands";
 
 const route = new Hono();
 
@@ -51,9 +51,13 @@ type AlertData = {
 	signDescription: string;
 	triggeredCodes: string[];
 	communityCharacteristics: string;
+	source?: string;
+	bmkg?: Record<string, unknown>;
 };
 
 function formatAlert(alert: AlertData): string {
+	// BMKG warnings have no reporters or natural signs: use the "!peringatan" BMKG format.
+	if (alert.source === "BMKG") return formatAlertsResponse([alert], alert.beachLocation);
 	const beachName = BEACH_DISPLAY_NAMES[alert.beachLocation] ?? alert.beachLocation;
 	const label = riskLabelFor(alert.riskLevel);
 
@@ -121,10 +125,13 @@ async function fetchAlerts(): Promise<AlertData[]> {
 				signDescription: (ml?.sign_description as string) ?? "",
 				triggeredCodes: ((ml?.triggered_lik_codes as string[]) ?? (input?.lik_codes as string[]) ?? []),
 				communityCharacteristics: (decision?.community_characteristics as string) ?? "",
+				source: (parsed.source as string) ?? "LIK",
+				bmkg: parsed.bmkg as Record<string, unknown> | undefined,
 			};
 		});
 
-		return alerts.reverse().slice(0, 20);
+		// Newest first, one per alertId, no expired BMKG warning.
+		return currentAlerts(alerts.reverse()).slice(0, 20);
 	} catch (err) {
 		console.error("[broadcast-morning] Failed to fetch alerts:", err);
 		return [];

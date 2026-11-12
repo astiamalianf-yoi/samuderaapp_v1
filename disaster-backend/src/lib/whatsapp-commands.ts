@@ -230,10 +230,34 @@ export function getMissingSignsMessage(): string {
 	return "Tanda alamnya apa, Bang? Contoh: ombak besar, ada kilat, awan turun, awan bergumpal, langit mendung, hujan, bintang tidak terlihat, peralihan angin, camar ribut, lumba-lumba mendekat.";
 }
 
-export function formatAlertsResponse(alerts: any[], beachFilter?: string | null): string {
-	const filtered = beachFilter
-		? alerts.filter((a: any) => a.beachLocation === beachFilter)
-		: alerts;
+function wibTime(ms: unknown): string | null {
+	if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return null;
+	return new Date(ms).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * Alerts worth showing for "!peringatan": one per alertId (the newest; the alerts arrive newest
+ * first), and no BMKG warning that has already expired.
+ */
+export function currentAlerts(alerts: any[], now = Date.now()): any[] {
+	const seen = new Set<string>();
+	return alerts.filter((a: any) => {
+		const expires = a?.bmkg?.expires;
+		if (a?.source === "BMKG" && typeof expires === "number" && expires > 0 && expires <= now) return false;
+		const key = a?.alertId || "";
+		if (key) {
+			if (seen.has(key)) return false;
+			seen.add(key);
+		}
+		return true;
+	});
+}
+
+export function formatAlertsResponse(alerts: any[], beachFilter?: string | null, now = Date.now()): string {
+	const filtered = currentAlerts(
+		beachFilter ? alerts.filter((a: any) => a.beachLocation === beachFilter) : alerts,
+		now,
+	);
 
 	if (filtered.length === 0) {
 		const beachName = beachFilter ? BEACH_DISPLAY[beachFilter] || beachFilter : null;
@@ -255,18 +279,26 @@ export function formatAlertsResponse(alerts: any[], beachFilter?: string | null)
 			hour: "2-digit",
 			minute: "2-digit",
 		});
+		const recommendation = alert.actionRecommendation || "Tidak ada rekomendasi";
 
-		const firstReport = new Date(alert.firstReportAt).toLocaleTimeString("id-ID", {
-			timeZone: "Asia/Jakarta",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
-		const lastReport = new Date(alert.lastReportAt).toLocaleTimeString("id-ID", {
-			timeZone: "Asia/Jakarta",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
+		// A BMKG warning: no fishermen, no natural signs; show what BMKG warns of and until when.
+		if (alert.source === "BMKG") {
+			const until = wibTime(alert.bmkg?.expires);
+			return [
+				`⚠️ PERINGATAN BMKG — ${riskLabel} di ${beachName}`,
+				date,
+				"",
+				`📡 Sumber: BMKG (peringatan dini cuaca)`,
+				...(alert.bmkg?.event || alert.signDescription ? [`🌧️ ${alert.bmkg?.event || alert.signDescription}`] : []),
+				...(until ? [`🕐 Berlaku sampai ${until} WIB`] : []),
+				"",
+				"Rekomendasi Aksi:",
+				recommendation,
+			].join("\n");
+		}
 
+		const firstReport = wibTime(alert.firstReportAt);
+		const lastReport = wibTime(alert.lastReportAt);
 		const signLabels = (alert.triggeredCodes || [])
 			.map((code: string) => LIK_LABELS[code.toUpperCase()] || code)
 			.join(", ");
@@ -276,13 +308,11 @@ export function formatAlertsResponse(alerts: any[], beachFilter?: string | null)
 			date,
 			"",
 			`👥 Dilaporkan oleh ${alert.reporterCount} nelayan`,
-			`🕐 Mulai: ${firstReport} WIB | Berakhir: ${lastReport} WIB`,
-			"",
-			"Tanda Alam Terdeteksi:",
-			`- ${signLabels}`,
+			...(firstReport && lastReport ? [`🕐 Mulai: ${firstReport} WIB | Berakhir: ${lastReport} WIB`] : []),
+			...(signLabels ? ["", "Tanda Alam Terdeteksi:", `- ${signLabels}`] : []),
 			"",
 			"Rekomendasi Aksi:",
-			alert.actionRecommendation || "Tidak ada rekomendasi",
+			recommendation,
 		].join("\n");
 	});
 
