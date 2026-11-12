@@ -236,15 +236,17 @@ function wibTime(ms: unknown): string | null {
 }
 
 /**
- * Alerts worth showing for "!peringatan": one per alertId (the newest; the alerts arrive newest
- * first), and no BMKG warning that has already expired.
+ * Alerts worth showing for "!peringatan" (the alerts arrive newest first): one per alertId, no
+ * BMKG warning that has already expired, and only the newest BMKG warning per beach. BMKG
+ * re-issues an ongoing nowcast with a new identifier at each update, so older issues of the same
+ * warning would otherwise be listed again.
  */
 export function currentAlerts(alerts: any[], now = Date.now()): any[] {
 	const seen = new Set<string>();
 	return alerts.filter((a: any) => {
 		const expires = a?.bmkg?.expires;
 		if (a?.source === "BMKG" && typeof expires === "number" && expires > 0 && expires <= now) return false;
-		const key = a?.alertId || "";
+		const key = a?.source === "BMKG" ? `bmkg|${a?.beachLocation ?? ""}` : a?.alertId || "";
 		if (key) {
 			if (seen.has(key)) return false;
 			seen.add(key);

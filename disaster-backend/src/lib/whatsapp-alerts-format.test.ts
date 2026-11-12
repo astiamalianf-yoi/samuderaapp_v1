@@ -21,6 +21,14 @@ describe("!peringatan reply", () => {
 		expect(text.split("PERINGATAN BMKG").length - 1).toBe(1);
 	});
 
+	test("BMKG re-issues of the same warning (new ids) show only the newest", () => {
+		const a = { ...bmkg(now - 60_000), alertId: "bmkg-new" };
+		const b = { ...bmkg(now - 3_600_000), alertId: "bmkg-old", actionRecommendation: "OLD" };
+		const text = formatAlertsResponse([a, b], "pantai_lampuuk", now);
+		expect(text.split("PERINGATAN BMKG").length - 1).toBe(1);
+		expect(text).not.toContain("OLD");
+	});
+
 	test("an expired BMKG warning is not shown", () => {
 		const text = formatAlertsResponse([bmkg(now - 60_000)], "pantai_lampuuk", Date.UTC(2026, 10, 12, 18, 0));
 		expect(text).toContain("Kondisi Aman di");
