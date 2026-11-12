@@ -14,7 +14,7 @@
           "dmPolicy": "disabled",
           "allowFrom": ["*"],
           "groupPolicy": "open",
-          "groups": { "*": { "requireMention": true } }
+          "groups": { "*": { "requireMention": false } }
         }
       }
     }
