@@ -1,6 +1,25 @@
-const BACKEND_URL = process.env.BACKEND_WEBHOOK_URL || "http://backend:3000/api/openclaw/webhook";
+import { readFileSync } from "node:fs";
+
+/**
+ * A setting of this hook: process.env first, then hooks.internal.entries["webhook-relay"].env in
+ * openclaw.json. Some OpenClaw versions (2026.5.x) do not put a hook's env into process.env, so
+ * without the fallback the relay posts without the token and the backend refuses it (401).
+ */
+function hookSetting(name: string): string {
+  if (process.env[name]) return process.env[name] as string;
+  try {
+    const path = process.env.OPENCLAW_CONFIG_PATH || `${process.env.HOME || "/home/node"}/.openclaw/openclaw.json`;
+    const cfg = JSON.parse(readFileSync(path, "utf8"));
+    const value = cfg?.hooks?.internal?.entries?.["webhook-relay"]?.env?.[name];
+    return typeof value === "string" ? value : "";
+  } catch {
+    return "";
+  }
+}
+
+const BACKEND_URL = hookSetting("BACKEND_WEBHOOK_URL") || "http://backend:3000/api/openclaw/webhook";
 // Same value as OPENCLAW_HOOK_TOKEN in the backend's .env (set in openclaw.json, hook env).
-const HOOK_TOKEN = process.env.BACKEND_WEBHOOK_TOKEN || "";
+const HOOK_TOKEN = hookSetting("BACKEND_WEBHOOK_TOKEN");
 const SESSION_KEY = process.env.SESSION_KEY || "agent:main:whatsapp:group:120363406080394106@g.us";
 
 function extractGroupIdFromSessionKey(key) {
