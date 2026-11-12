@@ -18,7 +18,10 @@ async function handler(event) {
   const metadata = ctx.metadata || {};
   const chatId = extractGroupIdFromSessionKey(event.sessionKey) || channelId;
 
-  if (!content) return;
+  if (!content) {
+    console.log(`[webhook-relay] skipped: message without text (${chatId || "unknown chat"})`);
+    return;
+  }
 
   // The person who wrote the message. In a group, `from` is the group id; the sender's number is
   // in metadata.senderE164 (OpenClaw hook context). It links his WhatsApp reports to his app
@@ -41,11 +44,13 @@ async function handler(event) {
   };
 
   try {
-    await fetch(BACKEND_URL, {
+    const res = await fetch(BACKEND_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(HOOK_TOKEN ? { "X-Hook-Token": HOOK_TOKEN } : {}) },
       body: JSON.stringify(payload),
     });
+    // One line per message: shows the hook ran, whether it had the token, and what the backend said.
+    console.log(`[webhook-relay] ${chatId || from} -> backend ${res.status}${HOOK_TOKEN ? "" : " (no BACKEND_WEBHOOK_TOKEN in hook env)"}`);
   } catch (err) {
     console.error(`[webhook-relay] forward failed: ${err.message}`);
   }

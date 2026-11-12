@@ -202,7 +202,12 @@ export function hookTokenOk(headers: { get(name: string): string | null }, expec
 if (!OPENCLAW_HOOK_TOKEN) console.warn("[openclaw-webhook] OPENCLAW_HOOK_TOKEN is not set: the webhook accepts posts from anyone");
 
 route.post("/openclaw/webhook", async (c) => {
-	if (!hookTokenOk(c.req.raw.headers)) return c.json({ success: false, error: "unauthorized" }, 401);
+	if (!hookTokenOk(c.req.raw.headers)) {
+		// Say why (never the token itself), so a relay posting without or with the wrong token is visible.
+		const sent = c.req.raw.headers.get("x-hook-token") ?? c.req.raw.headers.get("authorization");
+		console.warn(`[openclaw-webhook] Refused post: ${sent ? "wrong hook token" : "no hook token"} (check BACKEND_WEBHOOK_TOKEN in openclaw.json)`);
+		return c.json({ success: false, error: "unauthorized" }, 401);
+	}
 	try {
 		const body = await c.req.json<OpenClawWebhookEvent>().catch(() => null);
 		if (!body) {
