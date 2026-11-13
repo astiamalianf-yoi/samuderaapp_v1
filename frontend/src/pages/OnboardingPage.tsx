@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import {
-  ArrowLeft, ArrowRight, BellRing, CloudLightning, LifeBuoy, Megaphone, ShieldAlert, UserPlus, UserRound, WifiOff,
+  ArrowLeft, ArrowRight, BellRing, LifeBuoy, Megaphone, ShieldAlert, UserPlus, UserRound, WifiOff,
 } from "lucide-react"
 import { markOnboardingDone } from "../lib/onboarding"
 
@@ -41,10 +41,10 @@ const SLIDES: Slide[] = [
     title: "Yang bisa Anda lakukan",
     art: (
       <div className="grid grid-cols-4 gap-1.5 w-full max-w-xs" aria-hidden>
-        <span className="rounded-2xl bg-emerald-600 text-white text-xs font-black py-3 text-center">AMAN</span>
-        <span className="rounded-2xl bg-amber-400 text-black text-[11px] tracking-tight font-black py-3 text-center">WASPADA</span>
-        <span className="rounded-2xl bg-orange-500 text-white text-xs font-black py-3 text-center">SIAGA</span>
-        <span className="rounded-2xl bg-red-700 text-white text-xs font-black py-3 text-center">BAHAYA</span>
+        <span className="rounded-2xl bg-emerald-600 text-white text-[10px] font-extrabold tracking-normal h-11 flex items-center justify-center">AMAN</span>
+        <span className="rounded-2xl bg-amber-400 text-black text-[10px] font-extrabold tracking-normal h-11 flex items-center justify-center">WASPADA</span>
+        <span className="rounded-2xl bg-orange-500 text-white text-[10px] font-extrabold tracking-normal h-11 flex items-center justify-center">SIAGA</span>
+        <span className="rounded-2xl bg-red-700 text-white text-[10px] font-extrabold tracking-normal h-11 flex items-center justify-center">BAHAYA</span>
       </div>
     ),
     body: (
@@ -53,7 +53,6 @@ const SLIDES: Slide[] = [
         <Feature icon={<UserRound className="w-5 h-5" aria-hidden />} text="Peringatan khusus untuk Anda, sesuai pengalaman dan laporan Anda" />
         <Feature icon={<Megaphone className="w-5 h-5" aria-hidden />} text="Lapor tanda alam dengan 2 sentuhan, atau !lapor di grup WhatsApp" />
         <Feature icon={<LifeBuoy className="w-5 h-5" aria-hidden />} text="Minta bantuan dalam kondisi bahaya dengan mengirimkan koordinat di grup WhatsApp" />
-        <Feature icon={<CloudLightning className="w-5 h-5" aria-hidden />} text="Peringatan resmi dan prakiraan cuaca BMKG" />
         <Feature icon={<BellRing className="w-5 h-5" aria-hidden />} text="Notifikasi di HP untuk pantai asal Anda" />
         <Feature icon={<WifiOff className="w-5 h-5" aria-hidden />} text="Tetap bisa dipakai saat sinyal lemah" />
       </ul>
