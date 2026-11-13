@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import { Link, Navigate } from "react-router-dom"
-import { Activity as ActivityIcon, ArrowDown, ArrowLeft, ArrowUp, Home, Minus, Pencil, Phone, Plus, ShieldCheck, UserRound } from "lucide-react"
+import { Activity as ActivityIcon, ArrowLeft, Home, Minus, Pencil, Phone, Plus, ShieldCheck, UserRound } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
+import { TopReasons } from "../components/ProfileReasons"
+import { ANSWER_TEXT, SIDE, num } from "../lib/profileText"
 import { BEACH_LOCATIONS } from "../constants/observationData"
 import { useHomeBeach, useRegistration } from "../hooks/useAppState"
 import { normalizePhone, saveRegistration } from "../lib/registration"
@@ -387,27 +389,6 @@ function ActivityCard({ token }: { token: string }) {
   )
 }
 
-/** His answers as he sees them (labels follow the Ubah profil form). */
-const ROLE = { 1: "Pemilik perahu", 2: "Tekong / nakhoda", 3: "ABK / awak" } as Record<number, string>
-const TRIP = { 1: "Kurang dari 1 hari", 2: "Beberapa hari", 3: "Beberapa minggu" } as Record<number, string>
-const num = (v: number) => v.toLocaleString("id-ID", { maximumFractionDigits: 1 })
-const ANSWER_TEXT: Record<string, { label: string; show: (a: ProfileView["answers"][number]) => string }> = {
-  usage_frequency: { label: "Memakai tanda alam", show: (a) => `${num(a.value)} kali per bulan` },
-  lik_combination_count: { label: "Jumlah tanda alam yang dipakai", show: (a) => `${num(a.value)} tanda` },
-  usage_duration: { label: "Lama memakai tanda alam", show: (a) => `${num(a.value)} tahun` },
-  disaster_interaction: { label: "Menghadapi kejadian angin kencang di laut", show: (a) => `${num(a.value)} kali` },
-  disaster_experience_count: { label: "Jenis bencana yang pernah dialami dan dikenali dari tanda alam", show: (a) => `${num(a.value)} jenis` },
-  age: { label: "Usia", show: (a) => `${num(a.value)} tahun` },
-  fishing_experience: { label: "Lama menjadi nelayan", show: (a) => `${num(a.value)} tahun` },
-  fishing_role: { label: "Peran di perahu", show: (a) => ROLE[a.value] ?? String(a.value) },
-  fishing_duration: { label: "Lama sekali melaut", show: (a) => TRIP[a.value] ?? String(a.value) },
-  head_of_community: { label: "Pernah menjadi ketua kelompok", show: (a) => (a.value ? "Ya" : "Tidak") },
-}
-const SIDE = {
-  actionable: { box: "bg-teal-50 border-teal-500", pill: "bg-teal-600 text-white", word: "mendukung" },
-  inaction: { box: "bg-amber-50 border-amber-500", pill: "bg-amber-500 text-white", word: "perlu perhatian" },
-} as const
-
 /**
  * "Profil Anda": the overall model class as colour and plain words (never Actionable/Inaction), the
  * three answers that moved HIS result most (per-fisherman SHAP of the Random Forest) and, folded,
@@ -435,29 +416,7 @@ function ProfileViewCard({ view }: { view: ProfileView }) {
         </p>
       ) : top.length > 0 ? (
         <>
-          <p className="text-sm font-semibold text-gray-800">Yang paling memengaruhi hasil Anda:</p>
-          <ul className="space-y-2" data-testid="profile-top">
-            {top.map((t) => {
-              const a = byKey[t.key]
-              const up = t.push === "up"
-              return (
-                <li key={t.key} className="flex items-center gap-3 rounded-xl bg-white border border-gray-200 p-3" data-push={t.push}>
-                  <span className={`shrink-0 rounded-full p-1 ${up ? "bg-teal-100 text-teal-700" : "bg-amber-100 text-amber-700"}`} aria-hidden>
-                    {up ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-                  </span>
-                  <span className="sr-only">{up ? "mendorong ke mendukung:" : "mendorong ke perlu perhatian:"}</span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-base text-gray-800 leading-snug">{ANSWER_TEXT[t.key]?.label ?? t.key}</span>
-                    <span className="block text-base font-bold text-gray-900">{ANSWER_TEXT[t.key]?.show(a) ?? num(a.value)}</span>
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-            <span className="inline-flex items-center gap-1"><ArrowUp className="w-4 h-4 text-teal-700" aria-hidden /> mendorong ke mendukung</span>
-            <span className="inline-flex items-center gap-1"><ArrowDown className="w-4 h-4 text-amber-700" aria-hidden /> mendorong ke perlu perhatian</span>
-          </p>
+          <TopReasons view={view} />
         </>
       ) : (
         <p className="text-sm text-gray-700">Penjelasan hasil Anda belum tersedia. Buka halaman ini lagi nanti.</p>

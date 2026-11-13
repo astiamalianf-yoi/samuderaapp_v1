@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { ChevronDown, RefreshCw, UserRound } from "lucide-react"
 import type { BeachLocation } from "../types/api"
-import { useActiveWarning, usePersonalWarning, useProfile } from "../hooks/useAppState"
+import { useActiveWarning, usePersonalWarning, useProfile, useRegistration } from "../hooks/useAppState"
 import { LEVELS, STRATEGY_HEADLINE, assessBmkg, eventLevel, fuseLevels, mainAction, maxLevel, toLevel } from "../lib/warning"
 import type { BmkgData } from "../services/reportService"
 import type { WeatherAlertProps } from "./WeatherAlertCard"
@@ -28,6 +28,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
 }) {
   const { data, loading, error, updatedAt, refresh } = useActiveWarning(beach)
   const profile = useProfile()
+  const registration = useRegistration()
   const active = data?.active_warning
   const event = active?.alertEvent
   const distributed = event?.decision?.shouldDistribute ?? !!active
@@ -204,7 +205,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
             Mengapa ada peringatan ini?
             <ChevronDown className={`w-5 h-5 transition-transform ${open ? "rotate-180" : ""}`} />
           </button>
-          {open && <div className="mt-3 rounded-2xl bg-white/80 text-gray-950 p-4"><WhyPanel event={event} /></div>}
+          {open && <div className="mt-3 rounded-2xl bg-white/80 text-gray-950 p-4"><WhyPanel event={event} personal={personal} token={registration?.token ?? null} /></div>}
         </div>
       )}
 

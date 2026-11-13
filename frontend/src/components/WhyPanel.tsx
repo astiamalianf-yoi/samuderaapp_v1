@@ -1,5 +1,9 @@
+import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { CheckCircle2, AlertTriangle } from "lucide-react"
-import type { ActiveWarningEvent } from "../types/api"
+import type { ActiveWarningEvent, PersonalWarningResponse } from "../types/api"
+import { fishermenService, type ProfileView } from "../services/fishermenService"
+import { TopReasons } from "./ProfileReasons"
 import { getSign, TIER_LABEL } from "../constants/signs"
 import { getBeachMeta } from "../constants/observationData"
 import type { BeachLocation } from "../types/api"
@@ -9,17 +13,40 @@ const STATUS_TEXT: Record<string, string> = {
   Unsafe: "Perlu perhatian",
 }
 
-/** "Mengapa peringatan ini?" — signs and their trust, community profile, BMKG cross-check. */
-export function WhyPanel({ event }: { event: ActiveWarningEvent }) {
+/** BMKG and fused levels as the app names them (the backend logs LOW / MEDIUM / HIGH). */
+const LEVEL_WORD: Record<string, string> = {
+  LOW: "AMAN", NORMAL: "AMAN", MEDIUM: "WASPADA", WASPADA: "WASPADA", HIGH: "SIAGA", SIAGA: "SIAGA", EKSTREM: "BAHAYA", BAHAYA: "BAHAYA",
+}
+const levelWord = (v: unknown) => LEVEL_WORD[String(v ?? "").toUpperCase()] ?? String(v ?? "")
+
+/**
+ * "Mengapa peringatan ini?" — signs and their trust, how the warning was chosen, BMKG cross-check.
+ * When the card shows his personal warning ("Untuk Anda"), the panel explains that one: his strategy
+ * and the answers that matter most in his profile (as on Profil), not the beach's survey profile,
+ * so card and explanation never disagree (UAT 14 Nov 2026). Otherwise: the beach warning.
+ */
+export function WhyPanel({ event, personal = null, token = null }: {
+  event: ActiveWarningEvent
+  personal?: PersonalWarningResponse | null
+  token?: string | null
+}) {
   const signs = event.ml?.signs ?? []
-  const contributions = event.ml?.explanation?.contributions ?? []
-  const profile = event.ml?.explanation?.community_profile
+  const isPersonal = Boolean(personal?.warning_strategy)
+  const contributions = isPersonal ? [] : event.ml?.explanation?.contributions ?? []
+  const profile = isPersonal ? undefined : event.ml?.explanation?.community_profile
   const re = event.reassurance
-  const strategy = event.ml?.warning_strategy
+  const strategy = personal?.warning_strategy ?? event.ml?.warning_strategy
+  const [view, setView] = useState<ProfileView | null>(null)
+  useEffect(() => {
+    if (!isPersonal || !token) return
+    let cancelled = false
+    fishermenService.me(token).then((r) => { if (!cancelled) setView(r.profile_view ?? null) }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [isPersonal, token])
 
   return (
     <div className="space-y-5 text-base">
-      {event.ml?.explanation?.summary_id && <p className="leading-relaxed">{event.ml.explanation.summary_id}</p>}
+      {!isPersonal && event.ml?.explanation?.summary_id && <p className="leading-relaxed">{event.ml.explanation.summary_id}</p>}
 
       {signs.length > 0 && (
         <section>
@@ -49,13 +76,25 @@ export function WhyPanel({ event }: { event: ActiveWarningEvent }) {
       {strategy && (
         <section className="bg-white/70 rounded-xl p-3 border border-black/10">
           <h4 className="font-bold mb-1">Cara peringatan dipilih</h4>
-          <p className="text-sm leading-relaxed">
-            Tanda: <b>{strategy.trust_tier === "High" ? "sangat dipercaya" : "kurang dipercaya"}</b>. Kebiasaan bertindak{" "}
-            {strategy.behavioral_source === "random_forest" ? "Anda"
-              : strategy.behavioral_source === "community_majority" ? "sebagian besar nelayan terdaftar di pantai ini"
-              : "komunitas pantai ini"}:{" "}
-            <b>{strategy.behavioral_class === 1 ? "biasanya bertindak" : "sering tidak bertindak"}</b>. Maka peringatan: <b>{strategy.label_id}</b>.
-          </p>
+          {isPersonal ? (
+            <p className="text-sm leading-relaxed">
+              Tanda: <b>{strategy.trust_tier === "High" ? "sangat dipercaya" : "kurang dipercaya"}</b>. Untuk tanda ini, profil Anda:{" "}
+              <b>{strategy.behavioral_class === 1 ? "mendukung" : "perlu perhatian"}</b>. Maka peringatan untuk Anda: <b>{strategy.label_id}</b>.
+            </p>
+          ) : (
+            <p className="text-sm leading-relaxed">
+              Tanda: <b>{strategy.trust_tier === "High" ? "sangat dipercaya" : "kurang dipercaya"}</b>. Kebiasaan bertindak{" "}
+              {strategy.behavioral_source === "community_majority" ? "sebagian besar nelayan terdaftar di pantai ini" : "komunitas pantai ini"}:{" "}
+              <b>{strategy.behavioral_class === 1 ? "biasanya bertindak" : "sering tidak bertindak"}</b>. Maka peringatan: <b>{strategy.label_id}</b>.
+            </p>
+          )}
+        </section>
+      )}
+
+      {isPersonal && (
+        <section className="space-y-2" data-testid="why-personal">
+          {view && <TopReasons view={view} title="Yang paling memengaruhi profil Anda:" />}
+          <Link to="/profil" className="inline-block text-sm font-semibold text-sky-800 underline">Lihat profil Anda</Link>
         </section>
       )}
 
@@ -106,9 +145,9 @@ export function WhyPanel({ event }: { event: ActiveWarningEvent }) {
                 : re.agreed ? "Tanda alam dan BMKG sejalan" : "Tanda alam dan BMKG berbeda — level tertinggi dipakai"}
             </p>
             <div className="grid grid-cols-3 gap-2 text-center mt-3 text-sm">
-              <div><p className="opacity-70">Tanda alam</p><p className="font-bold">{re.shapRisk}</p></div>
-              <div><p className="opacity-70">BMKG</p><p className="font-bold">{re.bmkgRisk}</p></div>
-              <div><p className="opacity-70">Hasil</p><p className="font-bold">{String(re.finalLevel).toUpperCase() === "EKSTREM" ? "BAHAYA" : re.finalLevel}</p></div>
+              <div><p className="opacity-70">Tanda alam</p><p className="font-bold">{levelWord(re.shapRisk)}</p></div>
+              <div><p className="opacity-70">BMKG</p><p className="font-bold">{levelWord(re.bmkgRisk)}</p></div>
+              <div><p className="opacity-70">Hasil</p><p className="font-bold">{levelWord(re.finalLevel)}</p></div>
             </div>
             {re.details?.weather && (
               <p className="mt-2 text-sm opacity-80">
