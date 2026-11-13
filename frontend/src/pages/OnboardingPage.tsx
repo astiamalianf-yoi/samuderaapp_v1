@@ -34,10 +34,6 @@ const SLIDES: Slide[] = [
           <b>tanda alam</b> yang dilihat nelayan dengan <b>informasi resmi BMKG</b>, supaya Anda tahu kapan aman
           melaut dan apa yang harus dilakukan.
         </p>
-        <p className="mt-3">
-          Peringatan juga <b>menyesuaikan dengan pengalaman Anda</b>: makin sering Anda melapor tanda alam dan
-          kejadian di laut, makin tepat peringatan untuk Anda.
-        </p>
       </>
     ),
   },
