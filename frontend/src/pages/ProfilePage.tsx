@@ -270,7 +270,7 @@ function ProfileForm() {
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1 w-7 h-7 shrink-0" />
           <span className="text-base">
             Saya setuju nomor WhatsApp, pantai asal, jawaban profil, laporan dan kejadian yang saya laporkan dipakai
-            untuk sistem peringatan Samudra dan untuk penelitian. Saya bisa berhenti kapan saja.
+            untuk sistem peringatan Samudra dan untuk penelitian. Saya bisa menghapus data dari profil kapan saja.
           </span>
         </label>
 
