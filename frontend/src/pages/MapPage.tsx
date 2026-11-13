@@ -11,20 +11,24 @@ import { getSign } from "../constants/signs"
 import { useSelectedBeach } from "../hooks/useAppState"
 import type { BeachLocation, RiskLevel } from "../types/api"
 
+/**
+ * On the beach itself (checked 14 Nov 2026 against public map coordinates); the earlier values for
+ * the Aceh and Bantul beaches lay 2-10 km out at sea.
+ */
 const BEACH_COORDS: Record<BeachLocation, [number, number]> = {
-  pantai_lampuuk: [5.4833, 95.1333],
-  pantai_lhoknga: [5.4667, 95.1167],
-  pantai_ulee_lheue: [5.55, 95.3167],
-  pantai_depok: [-8.0225, 110.33],
-  pantai_samas: [-8.04, 110.31],
-  pantai_pangandaran: [-7.6955, 108.653],
+  pantai_lampuuk: [5.4906, 95.2275],
+  pantai_lhoknga: [5.4794, 95.2316],
+  pantai_ulee_lheue: [5.5598, 95.2853],
+  pantai_depok: [-8.0140, 110.2924],
+  pantai_samas: [-8.0030, 110.2620],
+  pantai_pangandaran: [-7.6961, 108.6536],
   pantai_batu_karas: [-7.7486, 108.4966],
   pantai_bojongsalawe: [-7.7033, 108.5275],
 }
 
 const REGIONS = [
-  { label: "Yogyakarta", center: [-8.03, 110.32] as [number, number], zoom: 12 },
-  { label: "Aceh", center: [5.5, 95.2] as [number, number], zoom: 11 },
+  { label: "Yogyakarta", center: [-8.01, 110.28] as [number, number], zoom: 12 },
+  { label: "Aceh", center: [5.52, 95.26] as [number, number], zoom: 11 },
   { label: "Jawa Barat", center: [-7.72, 108.57] as [number, number], zoom: 11 },
 ]
 
