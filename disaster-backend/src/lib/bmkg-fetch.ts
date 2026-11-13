@@ -1,4 +1,5 @@
 import { redis } from "../lib/redis";
+import { getSimWeather, simulatedBmkgData } from "./bmkg-sim";
 import { BMKG_CACHE_TTL_SECONDS } from "../config";
 
 export type BmkgData = {
@@ -24,12 +25,16 @@ const BMKG_WEATHER_UNSAFE_CODES = new Set([
 	95, 96, 99,
 ]);
 
+// BMKG village (adm4) per beach; keep equal to frontend/src/constants/observationData.ts.
 const BEACH_ADM4_CODES: Record<string, string> = {
-	pantai_lampuuk: "11.06.02.2003",
+	pantai_lampuuk: "11.06.02.2023", // Meunasah Mesjid Lampuuk, Lhoknga (was Weuraya)
 	pantai_lhoknga: "11.06.02.2001",
 	pantai_ulee_lheue: "11.71.03.2002",
 	pantai_depok: "34.02.03.2002",
-	pantai_samas: "34.02.03.2003",
+	pantai_samas: "34.02.02.2003", // Srigading, Sanden (was a village in Kretek)
+	pantai_pangandaran: "32.18.09.2004", // Desa Pangandaran, Kec. Pangandaran
+	pantai_batu_karas: "32.18.02.2001", // Desa Batukaras, Kec. Cijulang
+	pantai_bojongsalawe: "32.18.01.2007", // Desa Karangjaladri, Kec. Parigi
 };
 
 const ALLOWED_BEACHES = Object.keys(BEACH_ADM4_CODES) as (keyof typeof BEACH_ADM4_CODES)[];
@@ -112,6 +117,10 @@ async function fetchFreshBmkgData(beach: string): Promise<BmkgData | null> {
 export async function getBmkgData(beach: string): Promise<BmkgData | null> {
 	if (!isBeachValid(beach)) return null;
 
+	// UAT test switch: a simulated forecast replaces BMKG's for up to one hour.
+	const sim = await getSimWeather(beach);
+	if (sim) return sim.unavailable ? null : (simulatedBmkgData(beach, sim) as BmkgData);
+
 	const cacheKey = `bmkg:data:${beach}`;
 	const cached = await redis.get(cacheKey);
 	if (cached) {
@@ -139,3 +148,28 @@ export async function getAllBmkgData(): Promise<BmkgData[]> {
 }
 
 export { ALLOWED_BEACHES, isBeachValid };
+
+/**
+ * BMKG's full forecast (every time slot) for a beach's village, for the "Per jam" page. The phone
+ * cannot call api.bmkg.go.id itself (no CORS for browsers), so it comes through the backend,
+ * cached like the current-slot data.
+ */
+export async function getBmkgForecastSlots(beach: string): Promise<unknown[][] | null> {
+	if (!isBeachValid(beach)) return null;
+	const cacheKey = `bmkg:forecast:${beach}`;
+	const cached = await redis.get(cacheKey).catch(() => null);
+	if (cached) {
+		try {
+			return JSON.parse(cached) as unknown[][];
+		} catch {
+			await redis.del(cacheKey).catch(() => undefined);
+		}
+	}
+	const json = await fetchJson<{ data?: { cuaca?: unknown[][] }[] }>(
+		`https://api.bmkg.go.id/publik/prakiraan-cuaca?adm4=${BEACH_ADM4_CODES[beach]}`,
+	);
+	const cuaca = json?.data?.[0]?.cuaca;
+	if (!Array.isArray(cuaca)) return null;
+	await redis.set(cacheKey, JSON.stringify(cuaca), { EX: BMKG_CACHE_TTL_SECONDS }).catch(() => undefined);
+	return cuaca;
+}

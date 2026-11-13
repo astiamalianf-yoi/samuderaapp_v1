@@ -1,7 +1,14 @@
+import { likWarningTtlSeconds } from "../lib/lik-duration";
+import { holdForRegistration } from "../lib/wa-sync";
+import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
+import { riskLabelFor } from "../lib/whatsapp-commands";
 import { redis } from "../lib/redis";
-import { sendOpenClawAlert } from "../lib/openclaw";
-import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues } from "../lib/crowdsource";
+import { sendOpenClawBeachAlert } from "../lib/openclaw";
+import { findFishermanByPhone, fishermanReporterKey } from "../lib/fishermen";
+import { logFishermanReport } from "../lib/adaptive-profile";
+import { recordClass } from "../lib/class-history";
+import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
 import { publishIotAlertForEvent } from "../lib/iot-mqtt";
@@ -9,8 +16,10 @@ import {
 	ALERTS_CHANNEL,
 	ALERTS_STREAM,
 	ML_BASE_URL,
+	INTERNAL_REQUEST_SECRET,
 	REPORT_SYNC_STREAM,
 	REPORT_WINDOW_MS,
+	REPORT_REPEAT_WINDOW_MS,
 	REPORT_THRESHOLD,
 	BEACH_THRESHOLDS,
 	ACTIVE_WARNING_TTL_SECONDS,
@@ -25,6 +34,11 @@ route.get("/report/submit", async (c) => {
 	const likCodesStr = c.req.query("lik_codes")?.trim();
 	const createdAtClientRaw = c.req.query("created_at_client");
 	const channel = c.req.query("channel") || "PWA";
+	// Who sent it: WhatsApp sender number (channel=WA) or the app's device id.
+	// The WhatsApp number is trusted only from our own webhook (internal header); from the public
+	// URL it is ignored, so nobody can file reports in a registered fisherman's name.
+	const trustedSender = c.req.header("X-Internal-Key") === INTERNAL_REQUEST_SECRET;
+	const reporterRaw = trustedSender ? c.req.query("reporter")?.trim().slice(0, 100) || null : null;
 
 	if (!beachLocation) {
 		return c.json({ ok: false, error: "beach_location query parameter required" }, 400);
@@ -65,12 +79,28 @@ route.get("/report/submit", async (c) => {
 	const reportId = crypto.randomUUID();
 	const threshold = BEACH_THRESHOLDS[beachLocation] ?? REPORT_THRESHOLD;
 
-	const { triggeredCodes, codeCounts } = await processReport(
+	// A registered WhatsApp number is the same person as his app reports ("fisher:<id>").
+	const registered = isWA ? findFishermanByPhone(reporterRaw) : null;
+	const reporterKey = registered
+		? fishermanReporterKey(registered)
+		: reporterKeyFor(isWA ? { waSender: reporterRaw } : { deviceId: reporterRaw });
+	const { triggeredCodes, codeCounts, duplicateCodes } = await processReport(
 		beachLocation,
 		lik_codes,
 		REPORT_WINDOW_MS,
 		threshold,
+		reporterKey,
+		REPORT_REPEAT_WINDOW_MS,
 	);
+	const counted = (duplicateCodes ?? []).length < lik_codes.length;
+	let heldForRegistration = false;
+	if (registered) {
+		logFishermanReport(registered.id, beachLocation, lik_codes, isWA ? "WHATSAPP" : channel, counted);
+		void recordClass(registered, "report");
+	} else if (isWA) {
+		// Not registered yet: kept under his hashed number and added to his history when he registers.
+		heldForRegistration = holdForRegistration(reporterRaw, "report", beachLocation, { signs: lik_codes, counted });
+	}
 
 	await redis.xAdd(REPORT_SYNC_STREAM, "*", {
 		json: JSON.stringify({
@@ -81,6 +111,8 @@ route.get("/report/submit", async (c) => {
 			createdAtClient: createdAtClient ?? null,
 			receivedAtServer: serverTimestamp,
 			reportId,
+			reporterKey,
+			duplicateCodes,
 		}),
 	});
 
@@ -92,6 +124,10 @@ route.get("/report/submit", async (c) => {
 			status: "queued",
 			message: "Laporan diterima. Menunggu laporan lain untuk mencapai threshold.",
 			reportCounts: codeCounts,
+			threshold,
+			duplicateCodes,
+			registered: Boolean(registered),
+			heldForRegistration,
 		});
 	}
 
@@ -102,6 +138,7 @@ route.get("/report/submit", async (c) => {
 		beach_location: beachLocation,
 		is_active_warning: existingWarning !== null,
 		active_warning: existingWarning?.codes ?? [],
+		trust_tiers: trustTiersFor(beachLocation),
 	};
 
 	const mlRes = await fetch(`${ML_BASE_URL}/predict`, {
@@ -124,7 +161,7 @@ route.get("/report/submit", async (c) => {
 	try {
 		const savedReport = await persistReport({
 			beachLocation,
-			reporterId: null,
+			reporterId: registered?.id ?? null,
 			source: normalizedChannel,
 			naturalSigns: triggeredCodes,
 			rawBody: { beach_location: beachLocation, lik_codes, createdAtClient, _channel: channel },
@@ -157,7 +194,7 @@ route.get("/report/submit", async (c) => {
 		(reassuranceResult?.finalLevel as string) ??
 		likRiskLevel(result, isMultisign);
 	const riskLevel = reassuranceFinalLevel.toLowerCase();
-	const reporterCount = Object.values(codeCounts).reduce((sum, count) => sum + count, 0);
+	const reporterCount = await countReporters(beachLocation, triggeredCodes);
 	const timeRange = await getReportTimeRange(beachLocation, triggeredCodes);
 
 	const alertEvent = {
@@ -193,7 +230,7 @@ route.get("/report/submit", async (c) => {
 		...(existingWarning?.codes ?? []),
 		...result.active_warning,
 	])];
-	await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, ACTIVE_WARNING_TTL_SECONDS, alertEvent);
+	await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, await likWarningTtlSeconds(beachLocation), alertEvent);
 
 	const alertJson = JSON.stringify(alertEvent);
 
@@ -217,20 +254,16 @@ route.get("/report/submit", async (c) => {
 	}
 
 	if (isWA) {
-		const riskLabel =
-			alertEvent.riskLevel === "siaga" || alertEvent.riskLevel === "ekstrem"
-				? "🔴 BAHAYA"
-				: alertEvent.riskLevel === "waspada"
-					? "🟡 WASPADA"
-					: "✅ Aman";
+		const riskLabel = riskLabelFor(alertEvent.riskLevel);
 		const alertText = [
 			`⚠️ PERINGATAN — ${riskLabel} di ${beachLocation.replace(/_/g, " ")}`,
 			`👥 Dilaporkan oleh ${alertEvent.reporterCount} nelayan`,
 			`Tanda: ${triggeredCodes.join(", ")}`,
 			`Rekomendasi: ${alertEvent.ml?.action_recommendation ?? "Tidak ada rekomendasi"}`,
 			"Peringatan sedang dikirim ke semua nelayan.",
+			"📱 Buka aplikasi SAMUDRA untuk peringatan khusus Anda.",
 		].join("\n");
-		await sendOpenClawAlert(alertText);
+		await sendOpenClawBeachAlert(beachLocation, alertText);
 		console.log("[report-submit] sent WhatsApp alert broadcast");
 	}
 
@@ -245,6 +278,8 @@ route.get("/report/submit", async (c) => {
 		shouldDistribute: true,
 		alertEvent,
 		reportCounts: codeCounts,
+		registered: Boolean(registered),
+		heldForRegistration,
 	});
 });
 

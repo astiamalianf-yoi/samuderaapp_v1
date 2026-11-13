@@ -18,6 +18,7 @@ Coupling - Warning Strategy Matrix (paper Eq. 5 / Table 10):
     High tier    Standard EWS Notification        Extra Warning + Action Guide
     Low tier     Enhanced Sign Monitoring         Maximum Alert + Intervention
 """
+from typing import Optional
 import json
 from pathlib import Path
 
@@ -33,7 +34,14 @@ LOW_TRUST_SIGNS = ["Wn-13", "Wn-4", "Wn-9", "Wn-6", "Wn-5"]
 RANKED_SIGNS = HIGH_TRUST_SIGNS + LOW_TRUST_SIGNS
 ALL_SIGNS = [f"Wn-{i}" for i in range(1, 18)]
 
-BEACH_SLUGS = ["pantai_lampuuk", "pantai_lhoknga", "pantai_ulee_lheue", "pantai_depok", "pantai_samas"]
+# Beaches with a community profile (community_rule_categorization.csv) for the model in this service.
+PROFILED_BEACHES = ["pantai_lampuuk", "pantai_lhoknga", "pantai_ulee_lheue", "pantai_depok", "pantai_samas"]
+# West Java (Pangandaran) beaches: no location model loaded yet. Paper 3 shows the Aceh model is
+# repeatable but not transportable, so the Aceh Random Forest is NOT applied here; until the
+# Pangandaran export is loaded, every recipient is treated as Inaction (0), the cautious side of
+# the matrix (Extra Warning / Maximum Alert). Results carry source="no_location_model".
+NO_MODEL_BEACHES = ["pantai_pangandaran", "pantai_batu_karas", "pantai_bojongsalawe"]
+BEACH_SLUGS = PROFILED_BEACHES + NO_MODEL_BEACHES
 
 # Strategy -> LIK hazard level passed to the backend fusion (max with BMKG).
 # Low-trust + Actionable is "Enhanced Sign Monitoring" rather than a direct alert (paper IV.D),
@@ -89,8 +97,18 @@ FISHERMAN_FEATURE_KEYS = {
 }
 
 
-def tier_of(code: str) -> str:
-    return "High" if code in HIGH_TRUST_SIGNS else "Low"
+def tier_of(code: str, high: Optional[list] = None) -> str:
+    return "High" if code in (HIGH_TRUST_SIGNS if high is None else high) else "Low"
+
+
+def tiers_from(data: dict):
+    """(high, ranked) from a live Trust Index sent by the backend, else Paper 2 Table 2."""
+    t = data.get('trust_tiers') or None
+    if not t or not isinstance(t.get('high'), list) or not t['high']:
+        return HIGH_TRUST_SIGNS, RANKED_SIGNS
+    high = [normalize_code(c) for c in t['high']]
+    low = [normalize_code(c) for c in t.get('low') or []]
+    return high, high + low
 
 
 def normalize_code(code) -> str:
@@ -106,7 +124,17 @@ class InferenceEngine:
     def __init__(self):
         self.df_community = pd.read_csv(ENGINE_DIR / 'community_rule_categorization.csv')
         self.beach_rules = {}
-        for slug in BEACH_SLUGS:
+        for slug in NO_MODEL_BEACHES:
+            self.beach_rules[slug] = {
+                'Overall Category': "Unknown",
+                'Level of Interaction with Disaster Status': "Unknown",
+                'Frequency of Usage Status': "Unknown",
+                'Usage Duration Status': "Unknown",
+                'Number of Known LIK Status': "Unknown",
+                'Number of Experience with Disaster Status': "Unknown",
+                'location_model': False,
+            }
+        for slug in PROFILED_BEACHES:
             row = self.df_community[self.df_community['Mapped Beach'] == slug.replace("_", " ")].iloc[0]
             rules = {
                 'Overall Category': row['Overall Category'],
@@ -194,11 +222,61 @@ class InferenceEngine:
         X = pd.DataFrame([row], columns=cfg["features"])
         return float(model.predict_proba(X)[0, list(model.classes_).index(1)])
 
-    def behavioral_class(self, sign: str, profile: dict | None, rules: dict) -> dict:
+    # Profile answers as the fisherman sees them; the three usage-frequency features are one answer.
+    PROFILE_ANSWER_FEATURES = {
+        "age": ["Age"],
+        "fishing_experience": ["Fishing Experience"],
+        "fishing_role": ["Fishing Role"],
+        "head_of_community": ["Experience as Head of Communities"],
+        "fishing_duration": ["Fishing Duration"],
+        "disaster_experience_count": ["Number of Experience with Disaster"],
+        "disaster_interaction": ["Level of Interaction with Disaster"],
+        "lik_combination_count": ["Number of LIK Combination"],
+        "usage_duration": ["Usage Duration"],
+        "usage_frequency": ["Frequency of Usage (min) (in month)", "Frequency of Usage (max) (in month)",
+                            "Average Frequency of Usage (in month)"],
+    }
+    _explainer = None
+
+    def explain_profile(self, profile: dict, signs: Optional[list] = None) -> dict:
+        """Per-fisherman SHAP (TreeExplainer, P(Actionable)) of his own answers, averaged over the
+        ranked signs: the same method as Paper 2, applied to one person. Positive = pushes him
+        towards Actionable. Sign indicator columns are left out (they are not about him)."""
+        import shap  # loaded only when an explanation is asked for
+        model, cfg = self._load_model()
+        if InferenceEngine._explainer is None:
+            InferenceEngine._explainer = shap.TreeExplainer(model)
+        feats = self.profile_to_features(profile)
+        rows = []
+        for sign in (signs or RANKED_SIGNS):
+            row = {f: 0.0 for f in cfg["features"]}
+            row.update(feats)
+            if sign in ALL_SIGNS:
+                row[sign] = 1.0
+            rows.append(row)
+        X = pd.DataFrame(rows, columns=cfg["features"])
+        sv = InferenceEngine._explainer.shap_values(X)
+        k = list(model.classes_).index(1)
+        sv = np.asarray(sv[k] if isinstance(sv, list) else (sv[:, :, k] if np.ndim(sv) == 3 else sv))
+        mean = dict(zip(cfg["features"], sv.mean(axis=0)))
+        contributions = {
+            key: round(float(sum(mean[c] for c in cols)), 4)
+            for key, cols in self.PROFILE_ANSWER_FEATURES.items()
+        }
+        ev = InferenceEngine._explainer.expected_value
+        base = float(np.ravel(ev)[k]) if np.ndim(ev) else float(ev)
+        return {"base_value": round(base, 4), "contributions": contributions, "method": "shap_tree_mean_over_ranked_signs"}
+
+    def behavioral_class(self, sign: str, profile: dict | None, rules: dict, community: dict | None = None) -> dict:
+        if rules.get('location_model') is False:
+            return {"class": 0, "probability": None, "threshold": None, "source": "no_location_model"}
         if profile:
             p = self.predict_proba_for_sign(self.profile_to_features(profile), sign)
             cls = 1 if p >= self.threshold else 0
             return {"class": cls, "probability": round(p, 4), "threshold": self.threshold, "source": "random_forest"}
+        if community and sign in community and community[sign] in (0, 1):
+            # Majority of the beach's registered fishermen (computed by the backend).
+            return {"class": int(community[sign]), "probability": None, "threshold": None, "source": "community_majority"}
         cls = 0 if rules.get('Overall Category') == "Unsafe" else 1
         return {"class": cls, "probability": None, "threshold": None, "source": "beach_profile"}
 
@@ -223,18 +301,21 @@ class InferenceEngine:
                                 key=lambda c: int(c.split('-')[1]))
 
         # ---- Per-sign decision: tier x behavioral class -> strategy
+        high, ranked = tiers_from(data)
+        community = {normalize_code(k): v for k, v in (data.get('community_classes') or {}).items()}
         signs = []
         for code in combined_codes:
-            beh = self.behavioral_class(code, profile, rules)
-            strategy = MATRIX[(tier_of(code), beh["class"])]
+            beh = self.behavioral_class(code, profile, rules, community)
+            strategy = MATRIX[(tier_of(code, high), beh["class"])]
             signs.append({
                 "code": code,
-                "trust_tier": tier_of(code),
-                "ranked": code in RANKED_SIGNS,
+                "trust_tier": tier_of(code, high),
+                "ranked": code in ranked,
                 "behavioral_class": beh["class"],
                 "probability_actionable": beh["probability"],
                 "strategy": strategy,
                 "dominant_action": dominant_action.get(code),
+                "behavioral_source": beh["source"],
             })
 
         # ---- Overall strategy for the beach alert.
@@ -302,7 +383,8 @@ class InferenceEngine:
                 "trust_tier": tier,
                 "behavioral_class": cls,
                 "behavioral_label": None if cls is None else ("Actionable" if cls == 1 else "Inaction"),
-                "behavioral_source": "random_forest" if profile else "beach_profile",
+                "behavioral_source": "random_forest" if profile
+                    else ("community_majority" if any(s["behavioral_source"] == "community_majority" for s in basis) else "beach_profile"),
             },
             "signs": signs,
         }

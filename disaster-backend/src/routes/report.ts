@@ -1,7 +1,15 @@
+import { likWarningTtlSeconds } from "../lib/lik-duration";
+import { riskLabelFor } from "../lib/whatsapp-commands";
+import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
-import { sendOpenClawAlert } from "../lib/openclaw";
-import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues } from "../lib/crowdsource";
+import { sendOpenClawBeachAlert } from "../lib/openclaw";
+import { communityBasisFor } from "../lib/community-class";
+import { findFishermanByToken, fishermanReporterKey } from "../lib/fishermen";
+import { logFishermanReport } from "../lib/adaptive-profile";
+import { recordClass } from "../lib/class-history";
+import { tokenFrom } from "./fishermen";
+import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
 import { publishIotAlertForEvent } from "../lib/iot-mqtt";
@@ -13,6 +21,8 @@ import {
 	REPORT_DEDUPE_PREFIX,
 	REPORT_SYNC_STREAM,
 	REPORT_WINDOW_MS,
+	REPORT_REPEAT_WINDOW_MS,
+	REPORT_REQUIRE_REGISTRATION,
 	REPORT_THRESHOLD,
 	BEACH_THRESHOLDS,
 	ACTIVE_WARNING_TTL_SECONDS,
@@ -26,6 +36,9 @@ export const BEACH_DISPLAY_NAMES: Record<string, string> = {
 	pantai_ulee_lheue: "Pantai Ulee Lheue",
 	pantai_depok: "Pantai Depok",
 	pantai_samas: "Pantai Samas",
+	pantai_pangandaran: "Pantai Pangandaran",
+	pantai_batu_karas: "Pantai Batu Karas",
+	pantai_bojongsalawe: "Pantai Bojongsalawe",
 };
 
 const DANGER_TYPE_MAP: Record<string, string> = {
@@ -53,6 +66,8 @@ function formatWhatsAppAlert(params: {
 	lastReportAt: number;
 	activeWarningTtlSeconds: number;
 	warningStrategy?: WarningStrategy | null;
+	/** Fused level (NORMAL/WASPADA/SIAGA/EKSTREM); EKSTREM = BAHAYA, both sources point to danger. */
+	finalLevel?: string;
 }): string {
 	const {
 		beachLocation,
@@ -66,6 +81,7 @@ function formatWhatsAppAlert(params: {
 		lastReportAt,
 		activeWarningTtlSeconds,
 		warningStrategy,
+		finalLevel,
 	} = params;
 
 	const beachName = BEACH_DISPLAY_NAMES[beachLocation] ?? beachLocation;
@@ -74,12 +90,14 @@ function formatWhatsAppAlert(params: {
 	const dangerLabel = dangerTypes.length > 0 ? dangerTypes.join(" & ") : "Bahaya";
 
 	const dateStr = new Date(serverTimestamp).toLocaleDateString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		day: "numeric",
 		month: "long",
 		year: "numeric",
 	});
 
 	const startStr = new Date(firstReportAt).toLocaleString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		day: "numeric",
 		month: "long",
 		year: "numeric",
@@ -88,6 +106,7 @@ function formatWhatsAppAlert(params: {
 	});
 
 	const endStr = new Date(lastReportAt).toLocaleString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		day: "numeric",
 		month: "long",
 		year: "numeric",
@@ -106,6 +125,9 @@ function formatWhatsAppAlert(params: {
 
 	const lines = [
 		`⚠️ *Rekomendasi Aksi Prakiraan ${dangerLabel} di ${beachName}*`,
+		...(finalLevel ? [String(finalLevel).toUpperCase() === "EKSTREM"
+			? `🔴 *BAHAYA* — nelayan dan BMKG sama-sama memberi peringatan. Jangan melaut.`
+			: `Level: ${riskLabelFor(finalLevel)}`] : []),
 		``,
 		`📅 ${dateStr}`,
 		`👥 Dilaporkan oleh ${reporterCount} nelayan`,
@@ -116,6 +138,8 @@ function formatWhatsAppAlert(params: {
 		``,
 		`📋 *Rekomendasi Aksi:*`,
 		`[${riskLabel}] ${actionRecommendation}`,
+		``,
+		`📱 Buka aplikasi SAMUDRA untuk peringatan khusus Anda.`,
 	];
 
 	return lines.join("\n");
@@ -158,11 +182,25 @@ route.post("/report", async (c) => {
 	}
 
 	const jwtPayload = c.get("jwtPayload") as { sub?: unknown; email?: unknown } | undefined;
-	const reporterUserId = typeof jwtPayload?.sub === "string" ? jwtPayload.sub : null;
+	const jwtUserId = typeof jwtPayload?.sub === "string" ? jwtPayload.sub : null;
 	const reporterEmail = typeof jwtPayload?.email === "string" ? jwtPayload.email : null;
 
 	const input = await c.req.json<PredictionInput>().catch(() => null);
 	if (!input) return c.json({ ok: false, error: "Invalid JSON" }, 400);
+
+	// Who reports: a registered fisherman (token from the app). The token is removed from the
+	// input so it is never stored with the report.
+	const fisherman = findFishermanByToken(
+		tokenFrom(c.req.header("X-Fisherman-Token"), input as unknown as Record<string, unknown>),
+	);
+	delete (input as unknown as Record<string, unknown>).fishermanToken;
+	if (!fisherman && !jwtUserId && REPORT_REQUIRE_REGISTRATION) {
+		return c.json(
+			{ ok: false, error: "registration_required", message: "Lengkapi profil dulu untuk melapor." },
+			401,
+		);
+	}
+	const reporterUserId = jwtUserId ?? fisherman?.id ?? null;
 
 	if (!Array.isArray(input.lik_codes) || input.lik_codes.length === 0) {
 		return c.json({ ok: false, error: "lik_codes required" }, 400);
@@ -257,12 +295,25 @@ route.post("/report", async (c) => {
 		const threshold = BEACH_THRESHOLDS[beachLocation] ?? REPORT_THRESHOLD;
 
 		// Crowdsource queue: accumulate reports per (beach, code) and check threshold
-		const { triggeredCodes, codeCounts } = await processReport(
+		const reporterKey = fisherman
+			? fishermanReporterKey(fisherman)
+			: reporterKeyFor({
+					userId: reporterUserId,
+					deviceId: typeof input.deviceId === "string" ? input.deviceId : null,
+				});
+		const { triggeredCodes, codeCounts, duplicateCodes } = await processReport(
 			beachLocation,
 			input.lik_codes,
 			REPORT_WINDOW_MS,
 			threshold,
+			reporterKey,
+			REPORT_REPEAT_WINDOW_MS,
 		);
+		if (fisherman) {
+			// His activity raises his profile (reports per month, signs used); see adaptive-profile.ts.
+			logFishermanReport(fisherman.id, beachLocation, input.lik_codes, "PWA", (duplicateCodes ?? []).length < input.lik_codes.length);
+			void recordClass(fisherman, "report");
+		}
 
 		if (triggeredCodes.length === 0) {
 			await logReportSyncEvent({
@@ -274,18 +325,23 @@ route.post("/report", async (c) => {
 				beachLocation,
 				lik_codes: input.lik_codes,
 			});
-			return c.json({ ok: true, reportId, serverTimestamp, status: "queued", reportCounts: codeCounts });
+			return c.json({ ok: true, reportId, serverTimestamp, status: "queued", reportCounts: codeCounts, threshold, duplicateCodes });
 		}
 
 		// Threshold hit — proceed to ML
 
 		const existingWarning = await getActiveWarning(beachLocation);
 
+		// The beach alert (and its WhatsApp group message) uses the beach's class: by majority of the
+		// registered fishermen at the beach when there are enough, else the survey profile.
+		const communityBasis = communityBasisFor(beachLocation);
 		const mlPayload = {
 			lik_codes: triggeredCodes,
 			beach_location: beachLocation,
 			is_active_warning: existingWarning !== null,
 			active_warning: existingWarning?.codes ?? [],
+			trust_tiers: trustTiersFor(beachLocation),
+			...(communityBasis ? { community_classes: communityBasis.classes } : {}),
 		};
 
 		const mlRes = await fetch(`${ML_BASE_URL}/predict`, {
@@ -356,7 +412,7 @@ route.post("/report", async (c) => {
 		const shouldDistribute = reassuranceFinalLevel !== "NORMAL";
 		const riskLevel = reassuranceFinalLevel.toLowerCase();
 
-		const reporterCount = Object.values(codeCounts).reduce((sum, c) => sum + c, 0);
+		const reporterCount = await countReporters(beachLocation, triggeredCodes);
 
 		const timeRange = await getReportTimeRange(beachLocation, triggeredCodes);
 
@@ -383,6 +439,9 @@ route.post("/report", async (c) => {
 				is_actionable: isActionable,
 				final_risk_level: reassuranceFinalLevel,
 				shouldDistribute,
+				community_basis: communityBasis
+					? { source: communityBasis.source, registered: communityBasis.registered, min: communityBasis.min, inaction_share: communityBasis.inactionShare }
+					: { source: "beach_profile" },
 			},
 			input: mlPayload,
 			ml: result,
@@ -394,7 +453,7 @@ route.post("/report", async (c) => {
 			...(existingWarning?.codes ?? []),
 			...result.active_warning,
 		])];
-		await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, ACTIVE_WARNING_TTL_SECONDS, alertEvent);
+		await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, await likWarningTtlSeconds(beachLocation), alertEvent);
 
 		const alertJson = JSON.stringify(alertEvent);
 
@@ -430,15 +489,16 @@ route.post("/report", async (c) => {
 				communityCharacteristics: result.community_characteristics,
 				actionRecommendation: result.action_recommendation,
 				signDescription: result.sign_description,
-				reporterCount: Object.values(codeCounts).reduce((sum, c) => sum + c, 0),
+				reporterCount,
 				triggeredCodes,
 				serverTimestamp,
 				firstReportAt: timeRange.firstReportAt,
 				lastReportAt: timeRange.lastReportAt,
 				activeWarningTtlSeconds: ACTIVE_WARNING_TTL_SECONDS,
 				warningStrategy: result.warning_strategy,
+				finalLevel: reassuranceFinalLevel,
 			});
-			await sendOpenClawAlert(alertText);
+			await sendOpenClawBeachAlert(beachLocation, alertText);
 		}
 
 		// Reset the crowdsource queue for the triggered codes so a fresh batch of

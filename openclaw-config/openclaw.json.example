@@ -1,0 +1,36 @@
+{
+  "gateway": {
+    "mode": "local",
+    "auth": { "mode": "token" }
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "selfChatMode": false,
+      "dmPolicy": "disabled",
+      "accounts": {
+        "default": {
+          "enabled": true,
+          "dmPolicy": "disabled",
+          "allowFrom": ["*"],
+          "groupPolicy": "open",
+          "groups": { "*": { "requireMention": false } }
+        }
+      }
+    }
+  },
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "webhook-relay": {
+          "enabled": true,
+          "env": {
+            "BACKEND_WEBHOOK_URL": "http://backend:3000/api/openclaw/webhook",
+            "BACKEND_WEBHOOK_TOKEN": "PUT-THE-SAME-VALUE-AS-OPENCLAW_HOOK_TOKEN-HERE"
+          }
+        }
+      }
+    }
+  }
+}

@@ -88,7 +88,67 @@ function createTablesIfNotExist(sqlite: Database) {
 			details TEXT,
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
+
+		CREATE TABLE IF NOT EXISTS fishermen (
+			id TEXT PRIMARY KEY NOT NULL,
+			phone_hash TEXT NOT NULL UNIQUE,
+			phone_last4 TEXT NOT NULL,
+			home_beach TEXT NOT NULL,
+			profile TEXT,
+			token_hash TEXT NOT NULL,
+			consent_at TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+
+		CREATE TABLE IF NOT EXISTS fisherman_reports (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			fisherman_id TEXT NOT NULL REFERENCES fishermen(id),
+			beach TEXT NOT NULL,
+			signs TEXT NOT NULL,
+			channel TEXT NOT NULL,
+			counted INTEGER NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+
+		CREATE TABLE IF NOT EXISTS wa_held (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			phone_hash TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			beach TEXT NOT NULL,
+			payload TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+
+		CREATE TABLE IF NOT EXISTS incidents (
+			id TEXT PRIMARY KEY NOT NULL,
+			fisherman_id TEXT NOT NULL REFERENCES fishermen(id),
+			beach TEXT NOT NULL,
+			type TEXT NOT NULL,
+			need_help INTEGER NOT NULL DEFAULT 0,
+			detected_by_sign INTEGER NOT NULL DEFAULT 0,
+			latitude REAL,
+			longitude REAL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+
+		CREATE TABLE IF NOT EXISTS fisherman_class_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			fisherman_id TEXT NOT NULL REFERENCES fishermen(id),
+			reason TEXT NOT NULL,
+			effective_profile TEXT NOT NULL,
+			activity TEXT,
+			mean_probability REAL,
+			behavioural_class INTEGER,
+			per_sign TEXT,
+			source TEXT,
+			explanation TEXT,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
 	`);
+	// Columns added after a table already existed on a server.
+	const cols = (sqlite.query("PRAGMA table_info(fisherman_class_history)").all() as { name: string }[]).map((c) => c.name);
+	if (!cols.includes("explanation")) sqlite.exec("ALTER TABLE fisherman_class_history ADD COLUMN explanation TEXT");
 	console.log("[db] Tables ensured");
 }
 

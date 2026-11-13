@@ -1,4 +1,25 @@
-const BACKEND_URL = process.env.BACKEND_WEBHOOK_URL || "http://peringatan-backend:3000/api/openclaw/webhook";
+import { readFileSync } from "node:fs";
+
+/**
+ * A setting of this hook: process.env first, then hooks.internal.entries["webhook-relay"].env in
+ * openclaw.json. Some OpenClaw versions (2026.5.x) do not put a hook's env into process.env, so
+ * without the fallback the relay posts without the token and the backend refuses it (401).
+ */
+function hookSetting(name: string): string {
+  if (process.env[name]) return process.env[name] as string;
+  try {
+    const path = process.env.OPENCLAW_CONFIG_PATH || `${process.env.HOME || "/home/node"}/.openclaw/openclaw.json`;
+    const cfg = JSON.parse(readFileSync(path, "utf8"));
+    const value = cfg?.hooks?.internal?.entries?.["webhook-relay"]?.env?.[name];
+    return typeof value === "string" ? value : "";
+  } catch {
+    return "";
+  }
+}
+
+const BACKEND_URL = hookSetting("BACKEND_WEBHOOK_URL") || "http://backend:3000/api/openclaw/webhook";
+// Same value as OPENCLAW_HOOK_TOKEN in the backend's .env (set in openclaw.json, hook env).
+const HOOK_TOKEN = hookSetting("BACKEND_WEBHOOK_TOKEN");
 const SESSION_KEY = process.env.SESSION_KEY || "agent:main:whatsapp:group:120363406080394106@g.us";
 
 function extractGroupIdFromSessionKey(key) {
@@ -16,13 +37,25 @@ async function handler(event) {
   const metadata = ctx.metadata || {};
   const chatId = extractGroupIdFromSessionKey(event.sessionKey) || channelId;
 
-  if (!content) return;
+  if (!content) {
+    console.log(`[webhook-relay] skipped: message without text (${chatId || "unknown chat"})`);
+    return;
+  }
+
+  // The person who wrote the message. In a group, `from` is the group id; the sender's number is
+  // in metadata.senderE164 (OpenClaw hook context). It links his WhatsApp reports to his app
+  // registration, so never send the group id as the sender.
+  const isGroupId = (v) => typeof v === "string" && /@g\.us$/i.test(v);
+  const sender =
+    [metadata.senderE164, ctx.senderE164, metadata.senderId, ctx.senderId, from]
+      .find((v) => typeof v === "string" && v.trim() && !isGroupId(v)) || "";
 
   const payload = {
-    messageId: event.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    messageId: ctx.messageId || event.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     sessionKey: event.sessionKey || SESSION_KEY,
     direction: "incoming",
     from: from || chatId,
+    sender,
     to: chatId,
     text: content,
     timestamp: event.timestamp || new Date().toISOString(),
@@ -30,11 +63,13 @@ async function handler(event) {
   };
 
   try {
-    await fetch(BACKEND_URL, {
+    const res = await fetch(BACKEND_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(HOOK_TOKEN ? { "X-Hook-Token": HOOK_TOKEN } : {}) },
       body: JSON.stringify(payload),
     });
+    // One line per message: shows the hook ran, whether it had the token, and what the backend said.
+    console.log(`[webhook-relay] ${chatId || from} -> backend ${res.status}${HOOK_TOKEN ? "" : " (no BACKEND_WEBHOOK_TOKEN in hook env)"}`);
   } catch (err) {
     console.error(`[webhook-relay] forward failed: ${err.message}`);
   }

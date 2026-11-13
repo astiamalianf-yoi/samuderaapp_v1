@@ -8,6 +8,41 @@
       "when": 1778378386859,
       "tag": "0000_fresh_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794043343249,
+      "tag": "0001_fishermen",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794044730726,
+      "tag": "0002_adaptive_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794046050138,
+      "tag": "0003_incident_detected_by_sign",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794048543723,
+      "tag": "0004_wa_held",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794221521257,
+      "tag": "0005_class_explanation",
+      "breakpoints": true
     }
   ]
 }

@@ -47,6 +47,10 @@ route.get("/alerts", async (c) => {
 			triggeredCodes: ((ml?.triggered_lik_codes as string[]) ?? (input?.lik_codes as string[]) ?? []),
 			explanation: ml?.explanation as Record<string, unknown> | undefined,
 			serverTimestamp: ts,
+			// BMKG nowcast events (bmkg-nowcast.ts) carry their source and validity, so "!peringatan"
+			// can show them as BMKG warnings instead of a fishermen's report with 0 reporters.
+			source: (parsed.source as string) ?? "LIK",
+			bmkg: parsed.bmkg as Record<string, unknown> | undefined,
 		};
 	}).filter(Boolean);
 

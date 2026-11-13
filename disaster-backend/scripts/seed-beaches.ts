@@ -7,6 +7,9 @@ const BEACHES = [
 	{ name: "Pantai Ulee Lheue", slug: "pantai_ulee_lheue", latitude: 5.5583, longitude: 95.3083 },
 	{ name: "Pantai Depok", slug: "pantai_depok", latitude: -8.0167, longitude: 110.3167 },
 	{ name: "Pantai Samas", slug: "pantai_samas", latitude: -8.025, longitude: 110.3 },
+	{ name: "Pantai Pangandaran", slug: "pantai_pangandaran", latitude: -7.6955, longitude: 108.653 },
+	{ name: "Pantai Batu Karas", slug: "pantai_batu_karas", latitude: -7.7486, longitude: 108.4966 },
+	{ name: "Pantai Bojongsalawe", slug: "pantai_bojongsalawe", latitude: -7.7033, longitude: 108.5275 },
 ];
 
 async function seed() {

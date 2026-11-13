@@ -4,6 +4,9 @@ export const ALLOWED_BEACH_LOCATIONS = [
 	"pantai_ulee_lheue",
 	"pantai_depok",
 	"pantai_samas",
+	"pantai_pangandaran",
+	"pantai_batu_karas",
+	"pantai_bojongsalawe",
 ] as const;
 
 export type BeachLocation = (typeof ALLOWED_BEACH_LOCATIONS)[number];
@@ -13,6 +16,8 @@ export type PredictionInput = {
 	beach_location: BeachLocation;
 	clientReportId?: string;
 	createdAtClient?: number;
+	/** Anonymous id kept on the phone, so repeated reports from one phone are recognised. */
+	deviceId?: string;
 	_experimentId?: string;
 	is_active_warning?: boolean;
 	active_warning?: string[];

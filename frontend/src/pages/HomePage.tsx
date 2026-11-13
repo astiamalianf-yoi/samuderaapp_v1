@@ -1,0 +1,70 @@
+import { Link } from "react-router-dom"
+import { ArrowRight, Megaphone, Siren } from "lucide-react"
+import { AppShell, WhatsAppGroupCard } from "../components/layout/AppShell"
+import { BeachPicker } from "../components/BeachPicker"
+import { WarningStatusCard } from "../components/WarningStatusCard"
+import { BmkgMarineCard } from "../components/BmkgMarineCard"
+import { PushNotificationCard } from "../components/PushNotificationCard"
+import { WeatherAlertList } from "../components/WeatherAlertList"
+import { useBmkg, useHomeBeach, useRegistration, useSelectedBeach } from "../hooks/useAppState"
+import { useWeatherAlerts } from "../hooks/useWeatherAlerts"
+import { BEACH_LOCATIONS } from "../constants/observationData"
+
+export function HomePage() {
+  const [beach, setBeach] = useSelectedBeach()
+  const [homeBeach] = useHomeBeach()
+  const registration = useRegistration()
+  const weather = useWeatherAlerts(beach)
+  const bmkg = useBmkg(beach)
+  const beachLabel = BEACH_LOCATIONS.find((b) => b.value === beach)?.label ?? beach
+
+  return (
+    <AppShell>
+      <div className="space-y-5">
+        <BeachPicker value={beach} onChange={setBeach} homeBeach={homeBeach} />
+
+        <WarningStatusCard beach={beach} bmkg={bmkg} weatherAlerts={weather.alerts} />
+
+        <Link to={registration ? "/lapor" : "/profil"}
+          className="flex items-center gap-4 rounded-2xl bg-orange-600 text-white p-4 shadow-md active:scale-[0.99]">
+          <span className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+            <Megaphone className="w-7 h-7" aria-hidden />
+          </span>
+          <span className="flex-1">
+            <span className="block text-xl font-extrabold">Lihat tanda alam?</span>
+            <span className="block text-base">
+              {registration ? "Lapor sekarang, cukup 2 sentuhan" : "Daftar sekali dulu, lalu lapor dengan 2 sentuhan"}
+            </span>
+          </span>
+          <ArrowRight className="w-6 h-6" aria-hidden />
+        </Link>
+
+        <Link to="/kejadian"
+          className="flex items-center gap-4 rounded-2xl border-2 border-red-500 bg-white text-red-700 p-4 active:scale-[0.99]">
+          <span className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+            <Siren className="w-7 h-7" aria-hidden />
+          </span>
+          <span className="flex-1">
+            <span className="block text-lg font-extrabold">Bahaya di laut?</span>
+            <span className="block text-base text-gray-700">Lapor kejadian bencana atau minta bantuan</span>
+          </span>
+          <ArrowRight className="w-6 h-6" aria-hidden />
+        </Link>
+
+        {/* Alerts follow the home beach, not the beach being looked at. */}
+        <PushNotificationCard selectedBeach={homeBeach ?? beach} />
+
+        <WhatsAppGroupCard />
+
+        {/* Both for this beach only: the forecast, then BMKG's official warnings that cover it. */}
+        <BmkgMarineCard data={bmkg} alerts={weather.alerts} beachLabel={beachLabel} />
+
+        <section className="space-y-3">
+          <h2 className="text-xl font-extrabold">Peringatan cuaca BMKG · {beachLabel}</h2>
+          <WeatherAlertList selectedBeach={beach} state={weather} onlyThisBeach beachLabel={beachLabel} />
+        </section>
+
+      </div>
+    </AppShell>
+  )
+}

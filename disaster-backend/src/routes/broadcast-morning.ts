@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { ALERTS_STREAM } from "../config";
-import { sendOpenClawAlert } from "../lib/openclaw";
+import { beachesByGroup, sendOpenClawToGroups } from "../lib/openclaw";
 import { BEACH_DISPLAY_NAMES } from "./report";
+import { currentAlerts, formatAlertsResponse, riskLabelFor } from "../lib/whatsapp-commands";
 
 const route = new Hono();
 
@@ -12,6 +13,9 @@ const BEACH_COORDS = [
 	{ slug: "pantai_ulee_lheue", name: "Pantai Ulee Lheue", lat: 5.5547, lon: 95.3172 },
 	{ slug: "pantai_depok", name: "Pantai Depok", lat: -7.8856, lon: 110.3319 },
 	{ slug: "pantai_samas", name: "Pantai Samas", lat: -8.0283, lon: 110.3275 },
+	{ slug: "pantai_pangandaran", name: "Pantai Pangandaran", lat: -7.6955, lon: 108.653 },
+	{ slug: "pantai_batu_karas", name: "Pantai Batu Karas", lat: -7.7486, lon: 108.4966 },
+	{ slug: "pantai_bojongsalawe", name: "Pantai Bojongsalawe", lat: -7.7033, lon: 108.5275 },
 ];
 
 const WMO_WEATHER: Record<number, string> = {
@@ -47,38 +51,30 @@ type AlertData = {
 	signDescription: string;
 	triggeredCodes: string[];
 	communityCharacteristics: string;
+	source?: string;
+	bmkg?: Record<string, unknown>;
 };
 
-function riskLabel(riskLevel: string): string {
-	const lower = riskLevel.toLowerCase();
-	if (lower.includes("unsafe-high")) return "BAHAYA";
-	if (lower.includes("unsafe")) return "WASPADA";
-	return "Aman";
-}
-
-function riskEmoji(riskLevel: string): string {
-	const lower = riskLevel.toLowerCase();
-	if (lower.includes("unsafe-high")) return "\u{1F534}";
-	if (lower.includes("unsafe")) return "\u{1F7E1}";
-	return "\u2705";
-}
-
 function formatAlert(alert: AlertData): string {
+	// BMKG warnings have no reporters or natural signs: use the "!peringatan" BMKG format.
+	if (alert.source === "BMKG") return formatAlertsResponse([alert], alert.beachLocation);
 	const beachName = BEACH_DISPLAY_NAMES[alert.beachLocation] ?? alert.beachLocation;
-	const emoji = riskEmoji(alert.riskLevel);
-	const label = riskLabel(alert.riskLevel);
+	const label = riskLabelFor(alert.riskLevel);
 
 	const dateStr = new Date(alert.serverTimestamp).toLocaleDateString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		day: "numeric",
 		month: "long",
 		year: "numeric",
 	});
 
 	const startTime = new Date(alert.firstReportAt).toLocaleTimeString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		hour: "2-digit",
 		minute: "2-digit",
 	});
 	const endTime = new Date(alert.lastReportAt).toLocaleTimeString("id-ID", {
+		timeZone: "Asia/Jakarta",
 		hour: "2-digit",
 		minute: "2-digit",
 	});
@@ -89,7 +85,7 @@ function formatAlert(alert: AlertData): string {
 		.map((s) => `- ${s.trim()}`);
 
 	return [
-		`${emoji} PERINGATAN \u2014 ${label} di ${beachName}`,
+		`\u26A0\uFE0F PERINGATAN \u2014 ${label} di ${beachName}`,
 		dateStr,
 		"",
 		`\u{1F465} Dilaporkan oleh ${alert.reporterCount} nelayan`,
@@ -129,10 +125,13 @@ async function fetchAlerts(): Promise<AlertData[]> {
 				signDescription: (ml?.sign_description as string) ?? "",
 				triggeredCodes: ((ml?.triggered_lik_codes as string[]) ?? (input?.lik_codes as string[]) ?? []),
 				communityCharacteristics: (decision?.community_characteristics as string) ?? "",
+				source: (parsed.source as string) ?? "LIK",
+				bmkg: parsed.bmkg as Record<string, unknown> | undefined,
 			};
 		});
 
-		return alerts.reverse().slice(0, 20);
+		// Newest first, one per alertId, no expired BMKG warning.
+		return currentAlerts(alerts.reverse()).slice(0, 20);
 	} catch (err) {
 		console.error("[broadcast-morning] Failed to fetch alerts:", err);
 		return [];
@@ -238,45 +237,38 @@ async function fetchAstronomy(): Promise<{
 	}
 }
 
-route.get("/broadcast/morning", async (c) => {
-	console.log("[broadcast-morning] Starting morning broadcast...");
+/** A warning level in either vocabulary (fusion: waspada/siaga/ekstrem; legacy: unsafe…). */
+export const isWarningLevel = (level: string) => /unsafe|waspada|siaga|ekstrem|awas/i.test(level);
 
-	const [alerts, weather, astronomy] = await Promise.all([
-		fetchAlerts(),
-		fetchWeather(),
-		fetchAstronomy(),
-	]);
+type Weather = { condition: string; windSpeed: number; waveHeight: number }[] | null;
+type Astronomy = { sunrise: string; sunset: string; moonPhase: string } | null;
 
+/** The morning message for the beaches of one group. */
+export function buildMorningMessage(beaches: string[], alerts: AlertData[], weather: Weather, astronomy: Astronomy): string {
 	const sections: string[] = [];
-
 	sections.push("\u{1F305} SELAMAT PAGI \u2014 Laporan Cuaca Laut");
 	sections.push("");
 
-	const unsafeAlerts = alerts.filter((a) => {
-		const lower = a.riskLevel.toLowerCase();
-		return lower.includes("unsafe");
-	});
-
+	const unsafeAlerts = alerts.filter((a) => beaches.includes(a.beachLocation) && isWarningLevel(a.riskLevel));
 	if (unsafeAlerts.length > 0) {
 		sections.push(unsafeAlerts.map(formatAlert).join("\n\n---\n\n"));
 	} else {
-		sections.push("\u2705 Cuaca aman di semua pantai hari ini.");
+		const where = beaches.length === 1 ? `di ${BEACH_DISPLAY_NAMES[beaches[0]!] ?? beaches[0]}` : "di pantai Anda";
+		sections.push(`\u2705 Cuaca aman ${where} hari ini.`);
 		sections.push("Tetap waspada dan perhatikan tanda-tanda alam ya, Bang.");
 	}
 
+	sections.push("");
+	sections.push("\u{1F324}\uFE0F CUACA HARI INI");
 	if (weather) {
-		sections.push("");
-		sections.push("\u{1F324}\uFE0F CUACA HARI INI");
 		BEACH_COORDS.forEach((beach, i) => {
 			const w = weather[i];
-			if (w) {
+			if (w && beaches.includes(beach.slug)) {
 				const shortName = beach.name.replace("Pantai ", "");
 				sections.push(`\u{1F4CD} ${shortName}: ${w.condition}, angin ${w.windSpeed} km/h, ombak ${w.waveHeight}m`);
 			}
 		});
 	} else {
-		sections.push("");
-		sections.push("\u{1F324}\uFE0F CUACA HARI INI");
 		sections.push("Data cuaca belum tersedia.");
 	}
 
@@ -286,24 +278,76 @@ route.get("/broadcast/morning", async (c) => {
 		sections.push(`Sunrise: ${astronomy.sunrise} WIB | Sunset: ${astronomy.sunset} WIB`);
 		sections.push(`Fase bulan: ${astronomy.moonPhase}`);
 	}
+	return sections.join("\n");
+}
 
-	const message = sections.join("\n");
+/** Sends the morning message to every WhatsApp group (each about its own beach). */
+export async function runMorningBroadcast(): Promise<{ sent: boolean; groups: number; alertsCount: number; weatherAvailable: boolean; astronomyAvailable: boolean }> {
+	console.log("[broadcast-morning] Starting morning broadcast...");
+	const [alerts, weather, astronomy] = await Promise.all([fetchAlerts(), fetchWeather(), fetchAstronomy()]);
 
-	console.log("[broadcast-morning] Sending broadcast, length:", message.length);
+	// One message per WhatsApp group, about that group's own beach(es) only: a neighbouring
+	// beach's warning in the morning message would teach fishermen to ignore warnings.
+	const groups = beachesByGroup(BEACH_COORDS.map((b) => b.slug));
+	console.log("[broadcast-morning] Sending broadcast to", groups.size, "group(s)");
 
+	let unsafeCount = 0;
+	for (const [group, beaches] of groups) {
+		const own = alerts.filter((a) => beaches.includes(a.beachLocation));
+		unsafeCount += own.filter((a) => isWarningLevel(a.riskLevel)).length;
+		await sendOpenClawToGroups([group], buildMorningMessage(beaches, own, weather, astronomy));
+	}
+	return { sent: groups.size > 0, groups: groups.size, alertsCount: unsafeCount, weatherAvailable: weather !== null, astronomyAvailable: astronomy !== null };
+}
+
+/** Only with the researcher key: otherwise anyone could make the bot message every group. */
+export function broadcastKeyOk(given: string | null | undefined, expected = process.env.RESEARCH_API_KEY): boolean {
+	return Boolean(expected) && given === expected;
+}
+
+/** Manual trigger (testing): GET /api/broadcast/morning with header X-Research-Key. */
+route.get("/broadcast/morning", async (c) => {
+	if (!broadcastKeyOk(c.req.header("X-Research-Key"))) return c.json({ ok: false, error: "unauthorized" }, 401);
 	try {
-		await sendOpenClawAlert(message);
-		return c.json({
-			ok: true,
-			sent: true,
-			alertsCount: unsafeAlerts.length,
-			weatherAvailable: weather !== null,
-			astronomyAvailable: astronomy !== null,
-		});
+		return c.json({ ok: true, ...(await runMorningBroadcast()) });
 	} catch (err) {
 		console.error("[broadcast-morning] Failed to send:", err);
 		return c.json({ ok: true, sent: false, error: "Failed to send broadcast" }, 500);
 	}
 });
+
+/**
+ * Daily schedule: MORNING_BROADCAST_TIME (WIB, "HH:MM", default 05:30; empty = off). Checked every
+ * minute; a Redis key makes sure it is sent once per day even after a restart.
+ */
+export function morningDue(now: Date, time: string, lastSentDay: string | null): { due: boolean; day: string } {
+	const wib = new Date(now.getTime() + 7 * 3600_000);
+	const day = wib.toISOString().slice(0, 10);
+	const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+	if (!m) return { due: false, day };
+	const minutes = wib.getUTCHours() * 60 + wib.getUTCMinutes();
+	const target = Number(m[1]) * 60 + Number(m[2]);
+	return { due: minutes >= target && minutes < target + 60 && lastSentDay !== day, day };
+}
+
+export function startMorningSchedule(time = process.env.MORNING_BROADCAST_TIME ?? "05:30") {
+	if (!time.trim()) {
+		console.log("[broadcast-morning] daily schedule off (MORNING_BROADCAST_TIME empty)");
+		return;
+	}
+	const tick = async () => {
+		try {
+			const last = await redis.get("broadcast:morning:last-day");
+			const { due, day } = morningDue(new Date(), time, last);
+			if (!due) return;
+			await redis.set("broadcast:morning:last-day", day, { EX: 3 * 86400 });
+			await runMorningBroadcast();
+		} catch (err) {
+			console.error("[broadcast-morning] scheduled run failed:", err);
+		}
+	};
+	setInterval(tick, 60_000);
+	console.log(`[broadcast-morning] daily at ${time} WIB`);
+}
 
 export default route;

@@ -24,16 +24,28 @@ export const ACKS_STREAM = process.env.ACKS_STREAM ?? "alerts:acks";
 export const REPORT_SYNC_STREAM = process.env.REPORT_SYNC_STREAM ?? "reports:sync";
 export const REPORT_DEDUPE_PREFIX = process.env.REPORT_DEDUPE_PREFIX ?? "reports:dedupe";
 export const REPORT_WINDOW_MS = Number(process.env.REPORT_WINDOW_MS ?? 24 * 60 * 60 * 1000);
-export const REPORT_THRESHOLD = Number(process.env.REPORT_THRESHOLD ?? 5);
+// Reports of the same sign at one beach (from different fishermen, 24 h) that raise a community
+// warning. 1 for now: one report is enough. Raise it with REPORT_THRESHOLD (all beaches) or per beach
+// with REPORT_THRESHOLD_BEACHES, e.g. "pantai_lampuuk=3,pantai_lhoknga=5".
+export const REPORT_THRESHOLD = Math.max(1, Number(process.env.REPORT_THRESHOLD ?? 1) || 1);
+// Same reporter + same sign + same beach within this window counts as one report (app and WhatsApp alike).
+// App reports need a registered fisherman (X-Fisherman-Token). WhatsApp reports are identified by the number.
+export const REPORT_REQUIRE_REGISTRATION = (process.env.REPORT_REQUIRE_REGISTRATION ?? "true") !== "false";
+export const REPORT_REPEAT_WINDOW_MS = Number(process.env.REPORT_REPEAT_WINDOW_MS ?? 5 * 60 * 1000);
 
-export const BEACH_THRESHOLDS: Record<string, number> = {
-	pantai_lampuuk: 5,
-	pantai_ulee_lheue: 5,
-	pantai_depok: 5,
-	pantai_samas: 5,
-	pantai_lhoknga: 5,
-};
-export const ACTIVE_WARNING_TTL_SECONDS = Number(process.env.ACTIVE_WARNING_TTL_SECONDS ?? 12 * 60 * 60); // 12 hours
+export const BEACH_THRESHOLDS: Record<string, number> = Object.fromEntries(
+	(process.env.REPORT_THRESHOLD_BEACHES ?? "")
+		.split(",")
+		.map((pair) => pair.split("=").map((x) => x.trim()))
+		.filter(([beach, n]) => beach && Number(n) >= 1)
+		.map(([beach, n]) => [beach, Math.floor(Number(n))]),
+);
+/**
+ * How long a fishermen's (LIK) warning stays active on its own: 1 hour for every sign, until lead
+ * times per sign are known (decided with the researcher, 14 Nov 2026). While an official BMKG
+ * warning covers the beach, the LIK warning follows BMKG instead (lib/lik-duration.ts).
+ */
+export const ACTIVE_WARNING_TTL_SECONDS = Number(process.env.ACTIVE_WARNING_TTL_SECONDS ?? 60 * 60);
 
 // Anonymous flood guard for /report (no auth required): max requests per IP per window.
 export const REPORT_RATE_LIMIT_MAX = Number(process.env.REPORT_RATE_LIMIT_MAX ?? 15);
@@ -94,11 +106,16 @@ export const JWT_PUBLIC_PATHS = parseCsvEnv(process.env.JWT_PUBLIC_PATHS, [
 	"/api/auth/register",
 	"/api/auth/login",
 	"/api/report/submit",
-	"/api/broadcast/morning",
 	"/api/alerts",
 	"/api/reports/active",
+	"/api/broadcast/morning",
 	"/api/bmkg",
 	"/api/openclaw/webhook",
+	"/api/warning/personal",
+	"/api/fishermen",
+	"/api/incidents",
+	"/api/research",
+	"/api/trust-index",
 ]);
 export const AUTH_USER_KEY_PREFIX = process.env.AUTH_USER_KEY_PREFIX ?? "auth:user";
 export const AUTH_USER_EMAIL_KEY_PREFIX =
@@ -109,6 +126,20 @@ export const AUTH_USER_IDENTITY_KEY_PREFIX =
 export const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL ?? "";
 export const OPENCLAW_HOOK_TOKEN = process.env.OPENCLAW_HOOK_TOKEN ?? "";
 export const OPENCLAW_BROADCAST_GROUPS = parseCsvEnv(process.env.OPENCLAW_BROADCAST_GROUPS, []);
+/**
+ * One WhatsApp group per beach: "pantai_lhoknga=1203…@g.us,pantai_ulee_lheue=1203…@g.us".
+ * When set, a beach's warnings go ONLY to its own group(s) (neighbouring beaches never see them);
+ * a beach without a group gets no WhatsApp message. When empty, everything goes to
+ * OPENCLAW_BROADCAST_GROUPS as before.
+ */
+export const OPENCLAW_BEACH_GROUPS: Record<string, string[]> = (() => {
+	const out: Record<string, string[]> = {};
+	for (const pair of parseCsvEnv(process.env.OPENCLAW_BEACH_GROUPS, [])) {
+		const [beach, group] = pair.split("=").map((s) => s.trim());
+		if (beach && group) (out[beach] ??= []).push(group);
+	}
+	return out;
+})();
 export const WEATHERAPI_KEY = process.env.WEATHERAPI_KEY ?? "";
 
 if (JWT_AUTH_ENABLED && !JWT_SECRET) {
@@ -117,3 +148,15 @@ if (JWT_AUTH_ENABLED && !JWT_SECRET) {
 if (!Number.isFinite(JWT_EXPIRES_SECONDS) || JWT_EXPIRES_SECONDS <= 0) {
 	throw new Error("JWT_EXPIRES_SECONDS must be a positive number");
 }
+
+// BMKG short-term warnings (peringatan dini cuaca, CAP via RSS)
+export const BMKG_NOWCAST_ENABLED = (process.env.BMKG_NOWCAST_ENABLED ?? "true") !== "false";
+export const BMKG_NOWCAST_INTERVAL_MINUTES = Number(process.env.BMKG_NOWCAST_INTERVAL_MINUTES ?? 10);
+export const BMKG_NOWCAST_RSS_URL = process.env.BMKG_NOWCAST_RSS_URL ?? "https://www.bmkg.go.id/alerts/nowcast/id";
+
+/**
+ * Shared only between the WhatsApp webhook and /api/report/submit inside this process: a
+ * "reporter" (WhatsApp number) is trusted only with this header, so nobody can file reports in a
+ * registered fisherman's name through the public URL.
+ */
+export const INTERNAL_REQUEST_SECRET = process.env.INTERNAL_REQUEST_SECRET || crypto.randomUUID();

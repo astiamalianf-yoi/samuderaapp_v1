@@ -25,6 +25,15 @@ import docsRoute from "./routes/docs";
 import authRoute from "./routes/auth";
 import openclawWebhookRoute from "./routes/openclaw-webhook";
 import reportsActiveRoute from "./routes/reports-active";
+import warningPersonalRoute from "./routes/warning-personal";
+import fishermenRoute from "./routes/fishermen";
+import trustIndexRoute from "./routes/trust-index";
+import incidentsRoute from "./routes/incidents";
+import researchRoute from "./routes/research";
+import { startNowcastMonitor } from "./lib/bmkg-nowcast";
+import { startMorningSchedule } from "./routes/broadcast-morning";
+import { sendOpenClawToGroups } from "./lib/openclaw";
+import { publishIotAlertForEvent } from "./lib/iot-mqtt";
 import bmkgRoute from "./routes/bmkg";
 import alertsRoute from "./routes/alerts";
 import reportSubmitRoute from "./routes/report-submit";
@@ -56,6 +65,8 @@ app.onError((err, c) => {
 await initRedis();
 initDb();
 initWebPush();
+startMorningSchedule();
+startNowcastMonitor({ sendWhatsApp: (group, text) => sendOpenClawToGroups([group], text), publishIot: publishIotAlertForEvent });
 
 await sub.subscribe(ALERTS_CHANNEL, async (message) => {
 	console.log("[sub] received alert from Redis, SSE clients:", sseClients.size, "WS clients:", wsClients.size);
@@ -101,6 +112,11 @@ app.route("/api", docsRoute);
 app.route("/api", authRoute);
 app.route("/api", openclawWebhookRoute);
 app.route("/api", reportsActiveRoute);
+app.route("/api", warningPersonalRoute);
+app.route("/api", fishermenRoute);
+app.route("/api", incidentsRoute);
+app.route("/api", trustIndexRoute);
+app.route("/api", researchRoute);
 app.route("/api", bmkgRoute);
 app.route("/api", alertsRoute);
 app.route("/api", reportSubmitRoute);

@@ -1,7 +1,17 @@
+# samudraapp.com stack. It shares the server with the samudraapp.id app (peringatan-* containers,
+# /root/peringatan-cuaca), so every container, router and volume here has its own samudra-* name.
+#
+# The same file runs twice on the server:
+#   production  /root/samudra-com      .env from .env.example          -> www / api.samudraapp.com
+#   staging     /root/samudra-staging  .env from .env.staging.example  -> staging / api-staging.samudraapp.com
+# Staging sets COMPOSE_PROJECT_NAME and CONTAINER_PREFIX, so its containers, routers, volumes,
+# database and Redis are all separate from production. Unset, everything keeps the production names.
+name: samudra-com
+
 services:
   redis:
     image: redis:7-alpine
-    container_name: peringatan-redis
+    container_name: ${CONTAINER_PREFIX:-samudra}-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -14,7 +24,7 @@ services:
 
   mosquitto:
     image: eclipse-mosquitto:2
-    container_name: peringatan-mosquitto
+    container_name: ${CONTAINER_PREFIX:-samudra}-mosquitto
     restart: unless-stopped
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
@@ -23,7 +33,7 @@ services:
     build:
       context: ./SHAP-model-api
       dockerfile: Dockerfile
-    container_name: peringatan-ml
+    container_name: ${CONTAINER_PREFIX:-samudra}-ml
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -35,7 +45,7 @@ services:
     build:
       context: ./disaster-backend
       dockerfile: Dockerfile
-    container_name: peringatan-backend
+    container_name: ${CONTAINER_PREFIX:-samudra}-backend
     restart: unless-stopped
     environment:
       PORT: "3000"
@@ -46,9 +56,34 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://${APP_DOMAIN:-www.samudraapp.com},https://${APP_APEX_DOMAIN:-samudraapp.com}}
       JWT_AUTH_ENABLED: ${JWT_AUTH_ENABLED:-false}
       JWT_SECRET: ${JWT_SECRET:-}
+      # Keyed hash of fishermen's WhatsApp numbers: set a long random value and keep it private.
+      FISHERMAN_HASH_SECRET: ${FISHERMAN_HASH_SECRET:-}
+      # Researcher endpoints (/api/research/*) are off unless this is set.
+      RESEARCH_API_KEY: ${RESEARCH_API_KEY:-}
+      # Daily WhatsApp morning message, WIB "HH:MM" (empty = off). Manual: GET /api/broadcast/morning + X-Research-Key.
+      MORNING_BROADCAST_TIME: ${MORNING_BROADCAST_TIME-05:30}
+      # UAT only: BMKG test switch (POST /api/research/uat/bmkg, needs X-Research-Key). Keep false in the field study.
+      BMKG_SIM_ENABLED: ${BMKG_SIM_ENABLED:-false}
+      # Trust Index: adaptive (survey + app reports) or paper (Table 2 fixed); confirmation window in hours
+      TRUST_INDEX_MODE: ${TRUST_INDEX_MODE:-adaptive}
+      TRUST_CONFIRM_WINDOW_HOURS: ${TRUST_CONFIRM_WINDOW_HOURS:-24}
+      # WhatsApp group (beach) warning class: majority of the beach's registered fishermen once at least
+      # GROUP_MAJORITY_MIN have a profile (else the survey profile); "survey" keeps the survey profile always.
+      # Reports of the same sign at a beach (different fishermen, 24 h) that raise a community warning.
+      # 1 everywhere for now (decided 14 Nov 2026: one report raises or renews a warning). Raise it in
+      # .env if needed; per beach: REPORT_THRESHOLD_BEACHES="pantai_lampuuk=3,pantai_lhoknga=5"
+      REPORT_THRESHOLD: ${REPORT_THRESHOLD:-1}
+      REPORT_THRESHOLD_BEACHES: ${REPORT_THRESHOLD_BEACHES:-}
+      GROUP_CLASS_MODE: ${GROUP_CLASS_MODE:-majority}
+      GROUP_MAJORITY_MIN: ${GROUP_MAJORITY_MIN:-10}
+      # "Profil Anda" box on the Profil page (five tipping points, colours only). Shown by default;
+      # set false to hide it (the fisherman then never sees his class).
+      PROFILE_CLASS_VISIBLE: ${PROFILE_CLASS_VISIBLE:-true}
       OPENCLAW_GATEWAY_URL: ${OPENCLAW_GATEWAY_URL:-}
       OPENCLAW_HOOK_TOKEN: ${OPENCLAW_HOOK_TOKEN:-}
       OPENCLAW_BROADCAST_GROUPS: ${OPENCLAW_BROADCAST_GROUPS:-}
+      # One group per beach: pantai_lhoknga=<id>@g.us,pantai_ulee_lheue=<id>@g.us (warnings only to the beach's own group)
+      OPENCLAW_BEACH_GROUPS: ${OPENCLAW_BEACH_GROUPS:-}
       WEATHERAPI_KEY: ${WEATHERAPI_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
@@ -71,14 +106,13 @@ services:
         condition: service_healthy
     networks:
       - default
-      - shared-net
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.peringatan-backend.rule=Host(`${API_DOMAIN:-api.samudraapp.com}`)"
-      - "traefik.http.routers.peringatan-backend.entrypoints=websecure"
-      - "traefik.http.routers.peringatan-backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.peringatan-backend.loadbalancer.server.port=3000"
+      - "traefik.http.routers.${CONTAINER_PREFIX:-samudra}-api.rule=Host(`${API_DOMAIN:-api.samudraapp.com}`)"
+      - "traefik.http.routers.${CONTAINER_PREFIX:-samudra}-api.entrypoints=websecure"
+      - "traefik.http.routers.${CONTAINER_PREFIX:-samudra}-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${CONTAINER_PREFIX:-samudra}-api.loadbalancer.server.port=3000"
       - "traefik.docker.network=traefik-public"
 
   frontend:
@@ -86,11 +120,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        BACKEND_URL: https://${API_DOMAIN:-api.samudraapp.com}
-    container_name: peringatan-frontend
+        VITE_API_BASE_URL: https://${API_DOMAIN:-api.samudraapp.com}
+        # Staging only: a coloured bar on every page so testers never mistake it for the real app.
+        VITE_STAGE_LABEL: ${STAGE_LABEL:-}
+    container_name: ${CONTAINER_PREFIX:-samudra}-web
     restart: unless-stopped
-    environment:
-      BACKEND_URL: https://${API_DOMAIN:-api.samudraapp.com}
     depends_on:
       - backend
     networks:
@@ -98,33 +132,85 @@ services:
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.peringatan-frontend.rule=Host(`${APP_DOMAIN:-www.samudraapp.com}`) || Host(`${APP_APEX_DOMAIN:-samudraapp.com}`)"
-      - "traefik.http.routers.peringatan-frontend.entrypoints=websecure"
-      - "traefik.http.routers.peringatan-frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.peringatan-frontend.loadbalancer.server.port=3001"
+      - "traefik.http.routers.${CONTAINER_PREFIX:-samudra}-web.rule=Host(`${APP_DOMAIN:-www.samudraapp.com}`) || Host(`${APP_APEX_DOMAIN:-samudraapp.com}`)"
+      - "traefik.http.routers.${CONTAINER_PREFIX:-samudra}-web.entrypoints=websecure"
+      - "traefik.http.routers.${CONTAINER_PREFIX:-samudra}-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${CONTAINER_PREFIX:-samudra}-web.loadbalancer.server.port=80"
       - "traefik.docker.network=traefik-public"
 
   openclaw-bridge:
     build:
       context: ./openclaw-bridge
       dockerfile: Dockerfile
-    container_name: peringatan-openclaw-bridge
+    container_name: ${CONTAINER_PREFIX:-samudra}-openclaw-bridge
     restart: unless-stopped
     environment:
-      GATEWAY_WS_URL: ws://openclaw-openclaw-gateway-1:18789
-      GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
-      BACKEND_WEBHOOK_URL: http://peringatan-backend:3000/api/openclaw/webhook
+      # Our own OpenClaw (bot number of samudraapp.com), not the .id app's openclaw-openclaw-gateway-1.
+      GATEWAY_WS_URL: ${OPENCLAW_GATEWAY_INTERNAL_URL:-ws://openclaw-gateway:18789}
+      GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?set OPENCLAW_GATEWAY_TOKEN in .env}
+      REDIS_URL: redis://redis:6379
+      BACKEND_WEBHOOK_URL: http://backend:3000/api/openclaw/webhook
+      BACKEND_REPORT_URL: http://backend:3000/api/report
     depends_on:
       - backend
+      - openclaw-gateway
     networks:
       - default
+
+  # Our own OpenClaw (the samudraapp.com bot number), separate from the .id app's /root/openclaw.
+  # Same image as the .id one (openclaw:local, already built on the server). No public ports:
+  # only the bridge (and the backend through the hook) talk to it, inside this stack.
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    container_name: ${CONTAINER_PREFIX:-samudra}-openclaw-gateway
+    restart: unless-stopped
+    init: true
+    environment: &openclaw-env
+      HOME: /home/node
+      OPENCLAW_HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
+      OPENCLAW_CONFIG_DIR: /home/node/.openclaw
+      OPENCLAW_WORKSPACE_DIR: /home/node/.openclaw/workspace
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?set OPENCLAW_GATEWAY_TOKEN in .env}
+      TZ: Asia/Jakarta
+    volumes: &openclaw-volumes
+      - ${SAMUDRA_OPENCLAW_DIR:-/root/.openclaw-samudra}:/home/node/.openclaw
+      - ${SAMUDRA_OPENCLAW_SECRETS_DIR:-/root/.openclaw-samudra-auth}:/home/node/.config/openclaw
+    cap_drop: [NET_RAW, NET_ADMIN]
+    security_opt: ["no-new-privileges:true"]
+    command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - default
+
+  # Run only when needed, e.g. to link the bot number:
+  #   docker compose run --rm openclaw-cli channels login --channel whatsapp
+  openclaw-cli:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    profiles: ["cli"]
+    network_mode: "service:openclaw-gateway"
+    environment: *openclaw-env
+    volumes: *openclaw-volumes
+    cap_drop: [NET_RAW, NET_ADMIN]
+    security_opt: ["no-new-privileges:true"]
+    stdin_open: true
+    tty: true
+    init: true
+    entrypoint: ["node", "dist/index.js"]
+    depends_on:
+      - openclaw-gateway
 
 volumes:
   redis_data:
   backend_data:
 
 networks:
-  shared-net:
-    external: true
   traefik-public:
     external: true
