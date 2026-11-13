@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react"
 import { WEATHER_CONFIG } from "../constants/weatherConfig"
 import { filterTodaySlots, findClosestTimeSlot, translateWindDirection } from "../utils/weatherUtils"
+import { BEACH_LOCATIONS } from "../constants/observationData"
+import { API_BASE_URL } from "../config"
+
+/**
+ * BMKG's forecast comes through our backend (cached there): browsers cannot call api.bmkg.go.id
+ * directly ("Gagal memuat prakiraan cuaca", UAT 14 Nov 2026). A village that is not one of the
+ * beaches falls back to BMKG directly.
+ */
+function forecastUrl(adm4: string): string {
+  const beach = BEACH_LOCATIONS.find((b) => b.adm4Code === adm4)?.value
+  return beach ? `${API_BASE_URL}/api/bmkg/${beach}/forecast` : `${WEATHER_CONFIG.BMKG_API_PROXY}?adm4=${adm4}`
+}
 
 export interface BmkgForecastItem {
   local_datetime: string
@@ -43,7 +55,7 @@ export function useWeatherForecast(adm4Code?: string) {
         setError(null)
 
         const res = await fetch(
-          `${WEATHER_CONFIG.BMKG_API_PROXY}?adm4=${code}`,
+          forecastUrl(code),
           { signal: controller.signal },
         )
 
@@ -119,7 +131,7 @@ export function useAllWeatherForecasts(adm4Code?: string) {
         setError(null)
 
         const res = await fetch(
-          `${WEATHER_CONFIG.BMKG_API_PROXY}?adm4=${code}`,
+          forecastUrl(code),
           { signal: controller.signal },
         )
 

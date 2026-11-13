@@ -148,3 +148,28 @@ export async function getAllBmkgData(): Promise<BmkgData[]> {
 }
 
 export { ALLOWED_BEACHES, isBeachValid };
+
+/**
+ * BMKG's full forecast (every time slot) for a beach's village, for the "Per jam" page. The phone
+ * cannot call api.bmkg.go.id itself (no CORS for browsers), so it comes through the backend,
+ * cached like the current-slot data.
+ */
+export async function getBmkgForecastSlots(beach: string): Promise<unknown[][] | null> {
+	if (!isBeachValid(beach)) return null;
+	const cacheKey = `bmkg:forecast:${beach}`;
+	const cached = await redis.get(cacheKey).catch(() => null);
+	if (cached) {
+		try {
+			return JSON.parse(cached) as unknown[][];
+		} catch {
+			await redis.del(cacheKey).catch(() => undefined);
+		}
+	}
+	const json = await fetchJson<{ data?: { cuaca?: unknown[][] }[] }>(
+		`https://api.bmkg.go.id/publik/prakiraan-cuaca?adm4=${BEACH_ADM4_CODES[beach]}`,
+	);
+	const cuaca = json?.data?.[0]?.cuaca;
+	if (!Array.isArray(cuaca)) return null;
+	await redis.set(cacheKey, JSON.stringify(cuaca), { EX: BMKG_CACHE_TTL_SECONDS }).catch(() => undefined);
+	return cuaca;
+}

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getBmkgData } from "../lib/bmkg-fetch";
+import { getBmkgData, getBmkgForecastSlots } from "../lib/bmkg-fetch";
 import { getActiveNowcast } from "../lib/bmkg-nowcast";
 import { listSimWarnings, SIM_ENABLED, simWarningCap, simWarningsRss } from "../lib/bmkg-sim";
 import { ALLOWED_BEACH_LOCATIONS } from "../types";
@@ -32,6 +32,17 @@ route.get("/bmkg/sim/cap/:id", async (c) => {
 	const w = (await listSimWarnings()).find((x) => x.id === c.req.param("id"));
 	if (!w) return c.json({ ok: false, error: "not_found" }, 404);
 	return c.body(simWarningCap(w), 200, { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "no-store" });
+});
+
+/** BMKG's full forecast for the beach's village (BMKG's own format: data[0].cuaca), for "Per jam". */
+route.get("/bmkg/:beach/forecast", async (c) => {
+	const beach = c.req.param("beach").toLowerCase();
+	if (!ALLOWED_BEACH_LOCATIONS.includes(beach as (typeof ALLOWED_BEACH_LOCATIONS)[number])) {
+		return c.json({ ok: false, error: `Unknown beach: ${beach}` }, 400);
+	}
+	const cuaca = await getBmkgForecastSlots(beach);
+	if (!cuaca) return c.json({ ok: false, error: "bmkg_unavailable" }, 502);
+	return c.json({ data: [{ cuaca }] });
 });
 
 route.get("/bmkg/:beach", async (c) => {
