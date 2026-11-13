@@ -358,7 +358,7 @@ function ProfileViewCard({ view }: { view: ProfileView }) {
         {view.overall && (
           <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${SIDE[view.overall].pill}`} data-testid="profile-overall">
             <span className="w-2.5 h-2.5 rounded-full bg-white" aria-hidden />
-            Keseluruhan: {SIDE[view.overall].word}
+            {SIDE[view.overall].word}
           </span>
         )}
       </div>
