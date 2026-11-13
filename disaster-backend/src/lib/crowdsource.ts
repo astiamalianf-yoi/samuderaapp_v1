@@ -1,3 +1,4 @@
+import { ACTIVE_WARNING_TTL_SECONDS } from "../config";
 import { redis } from "./redis";
 
 const QUEUE_PREFIX = "reports:queue";
@@ -7,8 +8,10 @@ export type ActiveWarning = {
 	codes: string[];
 	triggeredAt: number;
 	alertId: string;
-	/** When it ends (ms): 1 hour after the last trigger, or the end of a BMKG warning covering the beach. */
+	/** When it ends (ms): its own end, or later while a BMKG warning covering the beach lasts longer. */
 	expiresAt?: number;
+	/** Its own end: 1 hour after the last trigger (ACTIVE_WARNING_TTL_SECONDS). */
+	ownExpiresAt?: number;
 	alertEvent?: Record<string, unknown>;
 };
 
@@ -158,18 +161,26 @@ export async function getActiveWarning(beachLocation: string): Promise<ActiveWar
 }
 
 /**
- * Keeps an active LIK warning until `untilMs` when that is later than its current end (a BMKG
- * warning covering the beach is longer or was extended). Never shortens it. Returns true if extended.
+ * The end of an active LIK warning follows BMKG (decided 14 Nov 2026): it is the later of its own
+ * end (1 hour after the last trigger, `ownExpiresAt`) and the end of a BMKG warning covering the
+ * beach. So it is extended while BMKG warns, and goes back to its own end when BMKG's warning ends
+ * or is withdrawn early; if that own end has passed, the warning ends now.
+ * Returns the new end (ms), null when it ended, or undefined when there was no active warning.
  */
-export async function extendActiveWarning(beachLocation: string, untilMs: number, now = Date.now()): Promise<boolean> {
+export async function syncActiveWarningWithBmkg(beachLocation: string, bmkgEndMs: number | null, now = Date.now()): Promise<number | null | undefined> {
 	const key = `${WARNING_PREFIX}:${beachLocation}`;
 	const current = await getActiveWarning(beachLocation);
-	if (!current) return false;
-	const ttl = await redis.ttl(key);
-	const currentEnd = current.expiresAt ?? (ttl > 0 ? now + ttl * 1000 : now);
-	if (untilMs <= currentEnd) return false;
-	await redis.set(key, JSON.stringify({ ...current, expiresAt: untilMs }), { EX: Math.ceil((untilMs - now) / 1000) });
-	return true;
+	if (!current) return undefined;
+	const own = current.ownExpiresAt ?? current.expiresAt;
+	if (own === undefined) return current.expiresAt; // older entry without end times: leave its TTL
+	const end = Math.max(own, bmkgEndMs ?? 0);
+	if (end === current.expiresAt) return end;
+	if (end <= now) {
+		await redis.del(key);
+		return null;
+	}
+	await redis.set(key, JSON.stringify({ ...current, expiresAt: end }), { EX: Math.ceil((end - now) / 1000) });
+	return end;
 }
 
 export async function setActiveWarning(
@@ -185,6 +196,7 @@ export async function setActiveWarning(
 		triggeredAt: Date.now(),
 		alertId,
 		expiresAt: Date.now() + ttlSeconds * 1000,
+		ownExpiresAt: Date.now() + Math.min(ttlSeconds, ACTIVE_WARNING_TTL_SECONDS) * 1000,
 		...(alertEvent ? { alertEvent } : {}),
 	};
 	await redis.set(key, JSON.stringify(warning), { EX: ttlSeconds });

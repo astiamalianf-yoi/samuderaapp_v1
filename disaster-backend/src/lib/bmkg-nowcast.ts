@@ -12,7 +12,7 @@ import { listSimWarnings, simWarningCap } from "./bmkg-sim";
 import { beachesByGroup } from "./openclaw";
 import { createHash } from "node:crypto";
 import { redis } from "./redis";
-import { extendActiveWarning, getActiveWarning } from "./crowdsource";
+import { getActiveWarning, syncActiveWarningWithBmkg } from "./crowdsource";
 import {
 	ALERTS_CHANNEL,
 	ALERTS_STREAM,
@@ -160,8 +160,14 @@ async function fetchText(url: string): Promise<string | null> {
 }
 
 /** Active warnings per beach, straight from BMKG. */
-export async function fetchNowcastByBeach(now = Date.now()): Promise<Record<string, CapInfo[]>> {
-	const out: Record<string, CapInfo[]> = Object.fromEntries(Object.keys(BEACH_AREA).map((b) => [b, []]));
+/**
+ * BMKG warnings per beach. `incomplete` is set when BMKG's feed or one of its warnings could not be
+ * read: the check then must not treat a missing warning as ended (no shortening, no clearing).
+ */
+export type NowcastByBeach = Record<string, CapInfo[]> & { incomplete?: boolean };
+
+export async function fetchNowcastByBeach(now = Date.now()): Promise<NowcastByBeach> {
+	const out: NowcastByBeach = Object.fromEntries(Object.keys(BEACH_AREA).map((b) => [b, []]));
 	// UAT test switch: simulated warnings go through the same CAP parsing and beach matching.
 	for (const w of await listSimWarnings(now)) {
 		const cap = parseCap(simWarningCap(w));
@@ -171,11 +177,15 @@ export async function fetchNowcastByBeach(now = Date.now()): Promise<Record<stri
 		}
 	}
 	const rss = await fetchText(BMKG_NOWCAST_RSS_URL);
-	if (!rss) return out;
+	if (!rss) {
+		Object.defineProperty(out, "incomplete", { value: true, enumerable: false });
+		return out;
+	}
 	const items = parseRssItems(rss).filter((i) => PROVINCE_KEYWORDS.some((k) => i.title.toLowerCase().includes(k)));
 	for (const item of items.slice(0, 15)) {
 		const xml = await fetchText(item.link);
 		const cap = xml ? parseCap(xml) : null;
+		if (!xml) Object.defineProperty(out, "incomplete", { value: true, enumerable: false, configurable: true });
 		if (!cap || (cap.expires !== null && cap.expires <= now)) continue;
 		for (const beach of Object.keys(BEACH_AREA)) {
 			if (capAppliesToBeach(beach, cap)) out[beach]!.push(cap);
@@ -287,7 +297,7 @@ export function buildNowcastAlertEvent(w: NowcastWarning, beach: string, now = D
 }
 
 type Deps = {
-	fetchByBeach?: typeof fetchNowcastByBeach;
+	fetchByBeach?: (now: number) => Promise<NowcastByBeach>;
 	/** Sends one message to one WhatsApp group. */
 	sendWhatsApp?: (group: string, text: string) => Promise<void>;
 	/** Group -> the beaches it covers (default: OPENCLAW_BEACH_GROUPS / OPENCLAW_BROADCAST_GROUPS). */
@@ -295,8 +305,8 @@ type Deps = {
 	publishIot?: (event: unknown) => Promise<unknown>;
 	/** LIK level of the active fishermen's warning at a beach (default: the stored active warning). */
 	likLevelFor?: (beach: string) => Promise<string | null>;
-	/** Extends the active fishermen's warning at a beach to BMKG's end (default: crowdsource). */
-	extendLik?: (beach: string, untilMs: number, now: number) => Promise<boolean>;
+	/** Sets the active fishermen's warning end from BMKG's end, or null when BMKG has none (default: crowdsource). */
+	syncLik?: (beach: string, bmkgEndMs: number | null, now: number) => Promise<unknown>;
 };
 
 async function storedLikLevel(beach: string): Promise<string | null> {
@@ -323,10 +333,14 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 		const latestExpiry = Math.max(now + 60_000, ...warnings.map((w) => w.expires ?? now + 3 * 3600_000));
 		if (warnings.length) {
 			await redis.set(ACTIVE_KEY(beach), JSON.stringify(warnings), { EX: Math.ceil((latestExpiry - now) / 1000) });
-			// A fishermen's warning active at this beach follows BMKG while BMKG warns (never shortened).
-			await (deps.extendLik ?? extendActiveWarning)(beach, latestExpiry, now).catch(() => false);
-		} else {
+		} else if (!byBeach.incomplete) {
 			await redis.del(ACTIVE_KEY(beach));
+		}
+		// A fishermen's warning active at this beach follows BMKG: until BMKG's end while BMKG warns,
+		// back to its own hour when BMKG ends or is withdrawn early (14 Nov 2026). When BMKG could not
+		// be read, a missing warning is not taken as ended.
+		if (warnings.length || !byBeach.incomplete) {
+			await (deps.syncLik ?? syncActiveWarningWithBmkg)(beach, warnings.length ? latestExpiry : null, now).catch(() => null);
 		}
 
 		const likFor = deps.likLevelFor ?? storedLikLevel;
