@@ -7,6 +7,7 @@ import { desc } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 import { fishermanClassHistory, fishermanReports, fishermen, incidents } from "../db/schema";
 import { answersOf, effectiveProfile, loadActivity } from "../lib/adaptive-profile";
+import { isDeleted } from "../lib/fishermen";
 
 /**
  * Researcher-only data (the fisherman never sees his category). Enabled only when
@@ -48,6 +49,7 @@ route.get("/research/fishermen", (c) => {
 		return {
 			id: f.id,
 			phoneLast4: f.phoneLast4,
+			deleted: isDeleted(f), // identity deleted at his request; reports kept anonymously
 			homeBeach: f.homeBeach,
 			registeredAt: f.createdAt,
 			activity,

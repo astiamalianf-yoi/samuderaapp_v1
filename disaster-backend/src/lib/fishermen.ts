@@ -3,7 +3,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 // initDb() returns the open database (and opens it on first use, e.g. in tests).
-import { fishermen } from "../db/schema";
+import { fishermanClassHistory, fishermen, incidents, waHeld } from "../db/schema";
 import { ALLOWED_BEACH_LOCATIONS } from "../types";
 import { parseAnswers, type ProfileAnswers } from "./adaptive-profile";
 
@@ -144,4 +144,36 @@ export const fishermanReporterKey = (f: Fisherman) => `fisher:${f.id}`;
 export function findFishermanById(id: string | null | undefined): Fisherman | null {
 	if (!id) return null;
 	return getDb().select().from(fishermen).where(eq(fishermen.id, id)).get() ?? null;
+}
+
+/** Marks a row whose identity was deleted at his request (phone_hash is unique, so it keeps his id). */
+export const DELETED_PREFIX = "deleted:";
+export const isDeleted = (f: Pick<Fisherman, "phoneHash">) => f.phoneHash.startsWith(DELETED_PREFIX);
+
+/**
+ * "Hapus data saya" (decided with the researcher, 13 Nov 2026): his identity is deleted, his
+ * reports and incidents stay as anonymous research rows.
+ * - Deleted: the number hash and last 4 digits, the app token (every phone is logged out), his
+ *   registration answers, the class history computed from them, the GPS position of his help
+ *   requests, and WhatsApp items still held for his number.
+ * - Kept: his sign reports and incidents (beach, signs/type, time), under a random id that no longer
+ *   leads to a number. Registering again with the same number starts a new, unlinked person.
+ */
+export function deleteFishermanIdentity(f: Fisherman): void {
+	const db = getDb();
+	db.transaction((tx) => {
+		tx.delete(waHeld).where(eq(waHeld.phoneHash, f.phoneHash)).run();
+		tx.delete(fishermanClassHistory).where(eq(fishermanClassHistory.fishermanId, f.id)).run();
+		tx.update(incidents).set({ latitude: null, longitude: null }).where(eq(incidents.fishermanId, f.id)).run();
+		tx.update(fishermen)
+			.set({
+				phoneHash: `${DELETED_PREFIX}${f.id}`,
+				phoneLast4: "",
+				profile: null,
+				tokenHash: tokenHash(randomBytes(32).toString("base64url")),
+				updatedAt: new Date().toISOString().slice(0, 19).replace("T", " "),
+			})
+			.where(eq(fishermen.id, f.id))
+			.run();
+	});
 }

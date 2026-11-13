@@ -80,3 +80,31 @@ describe("registration", () => {
 		expect(F.findFishermanByToken(again.token)?.id).toBe(id);
 	});
 });
+
+describe("Hapus data saya: identity deleted, reports kept anonymously", () => {
+	test("number, token, answers, class history, help location and held items go; reports and incidents stay", async () => {
+		const r = await F.registerFisherman({ phone: "0813-1111-2222", homeBeach: "pantai_lampuuk", profile, consent: true });
+		if (!r.ok) throw new Error("register failed");
+		const id = r.fisherman.id;
+		const hash = F.phoneHash("6281311112222");
+		sqlite.run(`INSERT INTO fisherman_reports (fisherman_id, beach, signs, channel, counted) VALUES ('${id}','pantai_lampuuk','["Wn-3"]','PWA',1)`);
+		sqlite.run(`INSERT INTO incidents (id, fisherman_id, beach, type, need_help, latitude, longitude) VALUES ('i1','${id}','pantai_lampuuk','angin_kencang',1,5.49,95.24)`);
+		sqlite.run(`INSERT INTO fisherman_class_history (fisherman_id, reason, effective_profile, activity, mean_probability, behavioural_class, per_sign, source) VALUES ('${id}','registration','{}','{}',0.5,0,'{}','random_forest')`);
+		sqlite.run(`INSERT INTO wa_held (phone_hash, kind, beach, payload) VALUES ('${hash}','report','pantai_lampuuk','{}')`);
+
+		F.deleteFishermanIdentity(F.findFishermanByToken(r.token)!);
+
+		expect(F.findFishermanByToken(r.token)).toBeNull(); // logged out everywhere
+		expect(F.findFishermanByPhone("0813-1111-2222")).toBeNull(); // the number no longer leads to him
+		const row = sqlite.query(`SELECT phone_hash, phone_last4, profile FROM fishermen WHERE id = '${id}'`).get() as Record<string, unknown>;
+		expect(row).toEqual({ phone_hash: `deleted:${id}`, phone_last4: "", profile: null });
+		expect(sqlite.query(`SELECT count(*) n FROM fisherman_class_history WHERE fisherman_id = '${id}'`).get()).toEqual({ n: 0 });
+		expect(sqlite.query(`SELECT count(*) n FROM wa_held WHERE phone_hash = '${hash}'`).get()).toEqual({ n: 0 });
+		expect(sqlite.query(`SELECT count(*) n FROM fisherman_reports WHERE fisherman_id = '${id}'`).get()).toEqual({ n: 1 });
+		expect(sqlite.query(`SELECT type, latitude, longitude FROM incidents WHERE id = 'i1'`).get()).toEqual({ type: "angin_kencang", latitude: null, longitude: null });
+
+		// Registering again with the same number is a new person, not linked to the old rows.
+		const again = await F.registerFisherman({ phone: "0813-1111-2222", homeBeach: "pantai_lampuuk", profile, consent: true });
+		expect(again.ok && again.created && again.fisherman.id !== id).toBe(true);
+	});
+});

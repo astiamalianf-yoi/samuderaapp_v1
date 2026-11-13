@@ -96,3 +96,22 @@ describe("Profil: view and edit are separate pages", () => {
     expect(screen.getByRole("link", { name: /Kembali ke profil/ }).getAttribute("href")).toBe("/profil")
   })
 })
+
+describe("Hapus data saya", () => {
+  it("asks first, then deletes on the server, logs out on this phone and says so", async () => {
+    const { fireEvent } = await import("@testing-library/react")
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) =>
+      new Response(JSON.stringify((init as RequestInit | undefined)?.method === "DELETE"
+        ? { ok: true, deleted: true }
+        : { ok: true, fisherman: { id: "f1", phoneLast4: "9373", homeBeach: "pantai_lampuuk", profile: null }, activity })))
+    render(<MemoryRouter><ProfilePage /></MemoryRouter>)
+    fireEvent.click(await screen.findByText("Hapus data saya"))
+    expect(screen.getByText(/tetap disimpan/).textContent).toContain("tanpa nomor")
+    fireEvent.click(screen.getByText("Ya, hapus data saya"))
+    await waitFor(() => expect(screen.getByText(/Data Anda sudah dihapus/)).toBeTruthy())
+    const del = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === "DELETE")!
+    expect(String(del[0])).toContain("/api/fishermen/me")
+    expect(localStorage.getItem(REGISTRATION_KEY)).toBeNull()
+    expect(screen.getByText("Daftar sebagai nelayan")).toBeTruthy()
+  })
+})

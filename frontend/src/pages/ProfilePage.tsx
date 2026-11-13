@@ -75,11 +75,62 @@ function ProfileOverview() {
           Keluar dan hapus profil dari HP ini
         </button>
 
+        <DeleteMyData token={registration.token} />
+
         <Link to="/mulai" className="block text-center min-h-12 py-3 text-base font-semibold text-sky-800">
           Lihat pengenalan aplikasi lagi
         </Link>
       </div>
     </AppShell>
+  )
+}
+
+/**
+ * "Hapus data saya" (consent: "Saya bisa menghapus data dari profil kapan saja"). The server deletes
+ * his number, answers and class history; his reports and incidents stay without his number.
+ */
+function DeleteMyData({ token }: { token: string }) {
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const remove = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await fishermenService.deleteMe(token)
+      try { sessionStorage.setItem("samudra.dataDeleted", "1") } catch { /* ignore */ }
+      saveAnswers(null)
+      saveRegistration(null)
+    } catch {
+      setError("Belum bisa menghapus (sinyal?). Coba lagi saat ada sinyal.")
+      setBusy(false)
+    }
+  }
+  if (!asking) {
+    return (
+      <button onClick={() => setAsking(true)} className="w-full min-h-12 rounded-xl text-base font-semibold text-red-700">
+        Hapus data saya
+      </button>
+    )
+  }
+  return (
+    <section className="rounded-2xl border-2 border-red-300 bg-red-50 p-4 space-y-3" role="alertdialog" aria-label="Hapus data saya">
+      <p className="text-lg font-bold text-red-800">Hapus data Anda?</p>
+      <p className="text-base text-gray-800">
+        Nomor WhatsApp, jawaban profil dan riwayat profil Anda dihapus dari server, dan Anda keluar di semua HP.
+        Laporan tanda alam dan kejadian yang pernah Anda kirim tetap disimpan <b>tanpa nomor</b> untuk penelitian.
+        Ini tidak bisa dibatalkan.
+      </p>
+      {error && <p className="text-base text-red-800">{error}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => setAsking(false)} disabled={busy}
+          className="min-h-12 rounded-xl border-2 border-gray-300 bg-white text-base font-semibold">Batal</button>
+        <button onClick={remove} disabled={busy}
+          className="min-h-12 rounded-xl bg-red-600 text-white text-base font-bold disabled:opacity-60">
+          {busy ? "Menghapus…" : "Ya, hapus data saya"}
+        </button>
+      </div>
+    </section>
   )
 }
 
@@ -96,6 +147,16 @@ function ProfileForm() {
   const [serverError, setServerError] = useState<string | null>(null)
   // The form opened from "Ubah profil" (already registered) rather than a first registration.
   const [editing] = useState(Boolean(registration))
+  // Shown once, right after "Hapus data saya".
+  const [dataDeleted] = useState(() => {
+    try {
+      const v = sessionStorage.getItem("samudra.dataDeleted") === "1"
+      sessionStorage.removeItem("samudra.dataDeleted")
+      return v
+    } catch {
+      return false
+    }
+  })
 
   useEffect(() => {
     if (!editing) return
@@ -194,6 +255,11 @@ function ProfileForm() {
             <Link to="/profil" className="inline-flex items-center gap-1 min-h-11 mb-1 text-base font-semibold text-sky-800">
               <ArrowLeft className="w-5 h-5" aria-hidden /> Kembali ke profil
             </Link>
+          )}
+          {dataDeleted && (
+            <p className="mb-3 rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-base text-emerald-900" role="status">
+              ✅ Data Anda sudah dihapus. Peringatan tetap bisa dilihat tanpa mendaftar.
+            </p>
           )}
           <h1 className="text-2xl font-black">{editing ? "Ubah profil" : "Daftar sebagai nelayan"}</h1>
           <p className="text-base text-gray-700">

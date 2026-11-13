@@ -66,6 +66,12 @@ export const fishermenService = {
     return json<{ ok: true; fisherman: PublicFisherman }>(res)
   },
 
+  /** "Hapus data saya": identity, answers and class history deleted; reports stay anonymous. */
+  async deleteMe(token: string) {
+    const res = await fetch(`${API_BASE_URL}/api/fishermen/me`, { method: "DELETE", headers: { "X-Fisherman-Token": token } })
+    return json<{ ok: true; deleted: true }>(res)
+  },
+
   async me(token: string) {
     const res = await fetch(`${API_BASE_URL}/api/fishermen/me`, { headers: { "X-Fisherman-Token": token } })
     return json<{ ok: true; fisherman: PublicFisherman; activity: Activity; profile_view?: ProfileView }>(res)

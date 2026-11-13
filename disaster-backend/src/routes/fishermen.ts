@@ -2,7 +2,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 import { fishermanReports } from "../db/schema";
 import { Hono } from "hono";
-import { findFishermanByToken, registerFisherman, toPublic, updateFisherman } from "../lib/fishermen";
+import { deleteFishermanIdentity, findFishermanByToken, registerFisherman, toPublic, updateFisherman } from "../lib/fishermen";
 import { currentEffectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { classIsStale, profileView, profileViewEnabled } from "../lib/profile-view";
 import { recordClass } from "../lib/class-history";
@@ -62,6 +62,18 @@ route.get("/fishermen/me", async (c) => {
 		activity: { ...loadActivity(f.id), channels_30d: { app, whatsapp } },
 		...(view ? { profile_view: view } : {}),
 	});
+});
+
+/**
+ * DELETE /api/fishermen/me (X-Fisherman-Token): "Hapus data saya". His identity, answers and class
+ * history are deleted; his reports and incidents stay as anonymous rows (lib/fishermen.ts).
+ */
+route.delete("/fishermen/me", (c) => {
+	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
+	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
+	deleteFishermanIdentity(f);
+	console.log("[fishermen] identity deleted at his request:", f.id);
+	return c.json({ ok: true, deleted: true });
 });
 
 /** PUT /api/fishermen/me { homeBeach?, profile? } (X-Fisherman-Token) */
