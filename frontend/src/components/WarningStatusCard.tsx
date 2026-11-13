@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { ChevronDown, RefreshCw, UserRound } from "lucide-react"
 import type { BeachLocation } from "../types/api"
 import { useActiveWarning, usePersonalWarning, useProfile, useRegistration } from "../hooks/useAppState"
-import { LEVELS, STRATEGY_HEADLINE, assessBmkg, eventLevel, fuseLevels, mainAction, maxLevel, toLevel } from "../lib/warning"
+import { LEVELS, STRATEGY_HEADLINE, assessBmkg, eventLevel, fuseLevels, levelRaisedReason, mainAction, maxLevel, toLevel } from "../lib/warning"
 import type { BmkgData } from "../services/reportService"
 import type { WeatherAlertProps } from "./WeatherAlertCard"
 import { getSign } from "../constants/signs"
@@ -130,6 +130,13 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
   const strategy = personal?.warning_strategy ?? event?.ml?.warning_strategy ?? null
   const head = strategy ? STRATEGY_HEADLINE[strategy.code] : null
   const action = mainAction(event)
+  const raisedWhy = levelRaisedReason({
+    level,
+    strategy: strategy?.code,
+    bmkgLevel: bmkgState.level,
+    communityLevel: maxLevel(eventLevel(event), event?.ml?.lik_risk_level ? toLevel(event.ml.lik_risk_level) : "NORMAL"),
+    personal: !!personal?.warning_strategy,
+  })
   const codes = event?.ml?.active_warning ?? active.codes ?? []
 
   return (
@@ -152,6 +159,9 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
           <p className="text-xl font-extrabold">{head.title}</p>
           {action && <p className="text-lg mt-1">👉 <b>{action}</b></p>}
           <p className="text-base mt-1">{head.action}</p>
+          {raisedWhy && (
+            <p className="text-base mt-2 pt-2 border-t border-gray-200 font-semibold">ℹ️ {raisedWhy}</p>
+          )}
         </div>
       )}
       {!head && event?.ml?.action_recommendation && (

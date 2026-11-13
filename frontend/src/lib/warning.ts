@@ -67,6 +67,39 @@ export function mainAction(ev?: ActiveWarningEvent | null): string | null {
 }
 
 export const LEVEL_ORDER: RiskLevel[] = ["NORMAL", "WASPADA", "SIAGA", "EKSTREM"]
+
+/** Level that a warning strategy stands for on its own (paper matrix). */
+export const STRATEGY_LEVEL: Record<WarningStrategyCode, RiskLevel> = {
+  STANDARD: "SIAGA",
+  EXTRA_WARNING: "SIAGA",
+  ENHANCED_MONITORING: "WASPADA",
+  MAXIMUM_ALERT: "SIAGA",
+}
+
+/**
+ * When the card's level is higher than the level of the strategy message shown, a short line
+ * that says which side raised it: BMKG and/or the beach's community warning (personal card only).
+ * Null when the levels match, or at BAHAYA (that has its own box).
+ */
+export function levelRaisedReason(params: {
+  level: RiskLevel
+  strategy: WarningStrategyCode | null | undefined
+  bmkgLevel: RiskLevel
+  communityLevel: RiskLevel
+  personal: boolean
+}): string | null {
+  const { level, strategy, bmkgLevel, communityLevel, personal } = params
+  if (!strategy || level === "EKSTREM") return null
+  const rank = (l: RiskLevel) => LEVEL_ORDER.indexOf(l)
+  const own = STRATEGY_LEVEL[strategy]
+  if (rank(level) <= rank(own)) return null
+  const why: string[] = []
+  if (rank(bmkgLevel) >= rank(level)) why.push("peringatan BMKG")
+  if (personal && rank(communityLevel) >= rank(level)) why.push("peringatan untuk komunitas pantai ini")
+  if (!why.length) return null
+  const word = LEVELS[level].label
+  return `Level ${word} karena ${why.join(" dan ")}. Pesan di atas tetap berlaku untuk tanda ini.`
+}
 export const maxLevel = (...levels: RiskLevel[]): RiskLevel =>
   levels.reduce((a, b) => (LEVEL_ORDER.indexOf(b) > LEVEL_ORDER.indexOf(a) ? b : a), "NORMAL" as RiskLevel)
 
