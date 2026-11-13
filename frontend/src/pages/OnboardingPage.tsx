@@ -64,7 +64,7 @@ const SLIDES: Slide[] = [
     body: (
       <p>
         <b>Daftar sekali</b> dengan nomor WhatsApp untuk bisa melapor dan mendapat peringatan yang sesuai dengan
-        pengalaman Anda. Sudah pernah daftar di HP lain? Daftar lagi dengan <b>nomor yang sama</b>.
+        pengalaman Anda. Sudah pernah daftar di HP lain? Anda dapat mendaftar kembali dengan <b>nomor yang sama</b>.
       </p>
     ),
   },
