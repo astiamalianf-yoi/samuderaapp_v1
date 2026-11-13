@@ -8,6 +8,7 @@ import type { BmkgData } from "../services/reportService"
 import type { WeatherAlertProps } from "./WeatherAlertCard"
 import { getSign } from "../constants/signs"
 import { WhyPanel } from "./WhyPanel"
+import { BEACH_LOCATIONS } from "../constants/observationData"
 
 const ACK_KEY = "samudra_acked_alerts"
 
@@ -32,6 +33,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
   const distributed = event?.decision?.shouldDistribute ?? !!active
   const personal = usePersonalWarning(beach, profile, distributed ? active?.alertId : undefined)
   const bmkgState = assessBmkg(bmkg, weatherAlerts)
+  const beachLabel = BEACH_LOCATIONS.find((b) => b.value === beach)?.label ?? beach
   const [open, setOpen] = useState(false)
   const [acked, setAcked] = useState(false)
 
@@ -84,7 +86,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
       const s = LEVELS.NORMAL
       return (
         <section className={`rounded-3xl border-2 p-5 ${s.card}`} aria-live="polite">
-          <p className="text-sm font-semibold uppercase tracking-wide opacity-80">Status laut hari ini</p>
+          <p className="text-sm font-semibold uppercase tracking-wide opacity-80">Status laut hari ini · {beachLabel}</p>
           <p className="text-4xl font-black mt-1">{s.emoji} {s.label}</p>
           <p className="text-lg mt-1">Tidak ada peringatan dari nelayan maupun BMKG untuk pantai ini.</p>
           {pending}
@@ -97,7 +99,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     const w = bmkgState.warnings[0]
     return (
       <section className={`rounded-3xl border-2 p-5 shadow-lg ${s.card}`} role="alert">
-        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">Peringatan dari BMKG</p>
+        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">Peringatan dari BMKG · {beachLabel}</p>
         <p className="text-5xl font-black mt-1 leading-none">{s.emoji} {s.label}</p>
         <p className="text-lg font-semibold mt-2">{s.sub}</p>
         <div className="mt-4 rounded-2xl bg-white text-gray-950 p-4 shadow">
@@ -132,7 +134,9 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
   return (
     <section className={`rounded-3xl border-2 p-5 shadow-lg ${s.card}`} role="alert">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">{level === "EKSTREM" ? "Peringatan dari nelayan dan BMKG" : "Peringatan dari nelayan"}</p>
+        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">
+          {bmkgState.level !== "NORMAL" ? "Peringatan dari nelayan dan BMKG" : "Peringatan dari nelayan"} · {beachLabel}
+        </p>
         {personal?.warning_strategy && (
           <span className={`flex items-center gap-1 text-xs font-bold rounded-full px-2 py-1 ${s.badge}`}>
             <UserRound className="w-3.5 h-3.5" /> Untuk Anda
