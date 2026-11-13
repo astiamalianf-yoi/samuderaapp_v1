@@ -172,7 +172,12 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
             )
           })}
         </ul>
-        {active.triggeredAt && <p className="mt-2 text-sm opacity-80">Dimulai {timeAgo(active.triggeredAt)}</p>}
+        {active.triggeredAt && (
+          <p className="mt-2 text-sm opacity-80">
+            Dimulai {timeAgo(active.triggeredAt)}
+            {active.expiresAt ? ` · berlaku sampai ${new Date(active.expiresAt).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" })} WIB` : ""}
+          </p>
+        )}
       </div>
 
       {level === "EKSTREM" && (

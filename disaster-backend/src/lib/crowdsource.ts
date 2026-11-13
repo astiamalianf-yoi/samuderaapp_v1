@@ -7,6 +7,8 @@ export type ActiveWarning = {
 	codes: string[];
 	triggeredAt: number;
 	alertId: string;
+	/** When it ends (ms): 1 hour after the last trigger, or the end of a BMKG warning covering the beach. */
+	expiresAt?: number;
 	alertEvent?: Record<string, unknown>;
 };
 
@@ -155,6 +157,21 @@ export async function getActiveWarning(beachLocation: string): Promise<ActiveWar
 	}
 }
 
+/**
+ * Keeps an active LIK warning until `untilMs` when that is later than its current end (a BMKG
+ * warning covering the beach is longer or was extended). Never shortens it. Returns true if extended.
+ */
+export async function extendActiveWarning(beachLocation: string, untilMs: number, now = Date.now()): Promise<boolean> {
+	const key = `${WARNING_PREFIX}:${beachLocation}`;
+	const current = await getActiveWarning(beachLocation);
+	if (!current) return false;
+	const ttl = await redis.ttl(key);
+	const currentEnd = current.expiresAt ?? (ttl > 0 ? now + ttl * 1000 : now);
+	if (untilMs <= currentEnd) return false;
+	await redis.set(key, JSON.stringify({ ...current, expiresAt: untilMs }), { EX: Math.ceil((untilMs - now) / 1000) });
+	return true;
+}
+
 export async function setActiveWarning(
 	beachLocation: string,
 	codes: string[],
@@ -167,6 +184,7 @@ export async function setActiveWarning(
 		codes,
 		triggeredAt: Date.now(),
 		alertId,
+		expiresAt: Date.now() + ttlSeconds * 1000,
 		...(alertEvent ? { alertEvent } : {}),
 	};
 	await redis.set(key, JSON.stringify(warning), { EX: ttlSeconds });

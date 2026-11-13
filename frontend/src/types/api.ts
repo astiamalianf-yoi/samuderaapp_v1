@@ -175,6 +175,8 @@ export interface PersonalWarningResponse {
 export interface ActiveWarning {
   codes: string[];
   triggeredAt: number;
+  /** End of the fishermen's warning: 1 hour, or the end of a BMKG warning covering the beach. */
+  expiresAt?: number;
   alertId: string;
   reportCount?: number;
   reportCounts?: Record<string, number>;

@@ -1,3 +1,4 @@
+import { likWarningTtlSeconds } from "../lib/lik-duration";
 import { riskLabelFor } from "../lib/whatsapp-commands";
 import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
@@ -452,7 +453,7 @@ route.post("/report", async (c) => {
 			...(existingWarning?.codes ?? []),
 			...result.active_warning,
 		])];
-		await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, ACTIVE_WARNING_TTL_SECONDS, alertEvent);
+		await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, await likWarningTtlSeconds(beachLocation), alertEvent);
 
 		const alertJson = JSON.stringify(alertEvent);
 

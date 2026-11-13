@@ -12,7 +12,7 @@ import { listSimWarnings, simWarningCap } from "./bmkg-sim";
 import { beachesByGroup } from "./openclaw";
 import { createHash } from "node:crypto";
 import { redis } from "./redis";
-import { getActiveWarning } from "./crowdsource";
+import { extendActiveWarning, getActiveWarning } from "./crowdsource";
 import {
 	ALERTS_CHANNEL,
 	ALERTS_STREAM,
@@ -295,6 +295,8 @@ type Deps = {
 	publishIot?: (event: unknown) => Promise<unknown>;
 	/** LIK level of the active fishermen's warning at a beach (default: the stored active warning). */
 	likLevelFor?: (beach: string) => Promise<string | null>;
+	/** Extends the active fishermen's warning at a beach to BMKG's end (default: crowdsource). */
+	extendLik?: (beach: string, untilMs: number, now: number) => Promise<boolean>;
 };
 
 async function storedLikLevel(beach: string): Promise<string | null> {
@@ -321,6 +323,8 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 		const latestExpiry = Math.max(now + 60_000, ...warnings.map((w) => w.expires ?? now + 3 * 3600_000));
 		if (warnings.length) {
 			await redis.set(ACTIVE_KEY(beach), JSON.stringify(warnings), { EX: Math.ceil((latestExpiry - now) / 1000) });
+			// A fishermen's warning active at this beach follows BMKG while BMKG warns (never shortened).
+			await (deps.extendLik ?? extendActiveWarning)(beach, latestExpiry, now).catch(() => false);
 		} else {
 			await redis.del(ACTIVE_KEY(beach));
 		}

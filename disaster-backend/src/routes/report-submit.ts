@@ -1,3 +1,4 @@
+import { likWarningTtlSeconds } from "../lib/lik-duration";
 import { holdForRegistration } from "../lib/wa-sync";
 import { trustTiersFor } from "../lib/trust-index";
 import { Hono } from "hono";
@@ -229,7 +230,7 @@ route.get("/report/submit", async (c) => {
 		...(existingWarning?.codes ?? []),
 		...result.active_warning,
 	])];
-	await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, ACTIVE_WARNING_TTL_SECONDS, alertEvent);
+	await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, await likWarningTtlSeconds(beachLocation), alertEvent);
 
 	const alertJson = JSON.stringify(alertEvent);
 

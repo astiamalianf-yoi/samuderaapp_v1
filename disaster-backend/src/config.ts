@@ -40,7 +40,12 @@ export const BEACH_THRESHOLDS: Record<string, number> = Object.fromEntries(
 		.filter(([beach, n]) => beach && Number(n) >= 1)
 		.map(([beach, n]) => [beach, Math.floor(Number(n))]),
 );
-export const ACTIVE_WARNING_TTL_SECONDS = Number(process.env.ACTIVE_WARNING_TTL_SECONDS ?? 12 * 60 * 60); // 12 hours
+/**
+ * How long a fishermen's (LIK) warning stays active on its own: 1 hour for every sign, until lead
+ * times per sign are known (decided with the researcher, 14 Nov 2026). While an official BMKG
+ * warning covers the beach, the LIK warning follows BMKG instead (lib/lik-duration.ts).
+ */
+export const ACTIVE_WARNING_TTL_SECONDS = Number(process.env.ACTIVE_WARNING_TTL_SECONDS ?? 60 * 60);
 
 // Anonymous flood guard for /report (no auth required): max requests per IP per window.
 export const REPORT_RATE_LIMIT_MAX = Number(process.env.REPORT_RATE_LIMIT_MAX ?? 15);
