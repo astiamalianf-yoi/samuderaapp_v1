@@ -52,6 +52,12 @@ const PROVINCE_KEYWORDS = ["aceh", "yogyakarta", "diy", "jawa barat"];
 
 const ACTIVE_KEY = (beach: string) => `bmkg:nowcast:active:${beach}`;
 const SENT_KEY = (id: string, beach: string) => `bmkg:nowcast:sent:${id}:${beach}`;
+/** What was last broadcast to a beach (event, end time, level), to skip BMKG re-issues that change nothing. */
+const LAST_KEY = (beach: string) => `bmkg:nowcast:last:${beach}`;
+/** A warning that ends within this many minutes is not broadcast any more. */
+export const MIN_REMAINING_MINUTES = 15;
+/** An end time this much later than the one already broadcast counts as an extension. */
+const EXTENSION_MINUTES = 10;
 
 // ---------------------------------------------------------------------------
 // Parsing (pure; Bun has no DOMParser, CAP/RSS are simple enough for regex)
@@ -194,26 +200,65 @@ const timeWib = (ms: number | null) =>
 		? "-"
 		: new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }).format(ms) + " WIB";
 
-export function formatNowcastWhatsApp(w: NowcastWarning, beaches: string[], escalated: string[] = []): string {
+/**
+ * The first sentence of the BMKG text without its long list of kecamatan (BMKG lists every
+ * kecamatan of the province alphabetically, cut off long before the beach's own), followed by
+ * the kabupaten/kota of these beaches, e.g. "... di sebagian wilayah Aceh, termasuk Aceh Besar."
+ * The kabupaten, not the kecamatan: Lampuuk lies in kecamatan Lhoknga, and "Lhoknga" in the
+ * Lampuuk group would read as the neighbouring beach.
+ */
+export function shortNowcastDescription(description: string, beaches: string[]): string {
+	const head = description.split(/,?\s*khususnya\b/i)[0]!.trim().replace(/[.,;\s]+$/, "");
+	const areas = [...new Set(beaches.map((b) => {
+		const names = BEACH_AREA[b]?.names ?? [];
+		return names[names.length - 1] ?? "";
+	}).filter(Boolean))];
+	const base = head.length > 220 ? `${head.slice(0, 217)}...` : head;
+	if (!base) return areas.length ? `Termasuk wilayah ${areas.join(" dan ")}.` : "";
+	return areas.length ? `${base}, termasuk ${areas.join(" dan ")}.` : `${base}.`;
+}
+
+export function formatNowcastWhatsApp(w: NowcastWarning, beaches: string[], escalated: string[] = [], extended = false): string {
 	const label = (b: string) => BEACH_AREA[b]?.label ?? b;
 	const names = beaches.map(label).join(", ");
-	const desc = w.description.length > 280 ? `${w.description.slice(0, 277)}...` : w.description;
 	const esc = beaches.filter((b) => escalated.includes(b));
 	const allEsc = esc.length > 0 && esc.length === beaches.length;
 	return [
 		allEsc ? `🔴 *PERINGATAN BMKG — BAHAYA*` : `⚠️ *PERINGATAN BMKG — SIAGA*`,
 		`📍 ${names}`,
 		`🌩️ ${w.event}`,
-		`🕒 Berlaku sampai ${timeWib(w.expires)}`,
+		extended ? `🔄 *Diperpanjang* sampai ${timeWib(w.expires)}` : `🕒 Berlaku sampai ${timeWib(w.expires)}`,
 		...(esc.length ? [`🔴 *BAHAYA* di ${esc.map(label).join(", ")}: nelayan juga melaporkan tanda alam bahaya.`] : []),
 		"",
-		desc,
+		shortNowcastDescription(w.description, beaches),
 		"",
 		esc.length
 			? `👉 *Jangan melaut sampai peringatan berakhir.* Jika sudah di laut, segera menepi.`
 			: `👉 *Tunda melaut sampai peringatan berakhir.* Jika sudah di laut, segera menepi.`,
 		`Sumber: BMKG (peringatan dini cuaca)${esc.length ? " dan laporan nelayan" : ""}`,
 	].join("\n");
+}
+
+type LastSent = { event: string; expires: number | null; level: string };
+
+/**
+ * Whether a warning is news for a beach compared with what was last broadcast there:
+ * "new" (another event, or the earlier one has ended), "extended" (same event, later end time),
+ * "escalated" (same event, now BAHAYA), or null (a re-issue that changes nothing, or a
+ * warning that ends within MIN_REMAINING_MINUTES).
+ */
+export function nowcastNews(
+	w: Pick<NowcastWarning, "event" | "expires">,
+	level: string,
+	last: LastSent | null,
+	now = Date.now(),
+): "new" | "extended" | "escalated" | null {
+	if (w.expires !== null && w.expires - now < MIN_REMAINING_MINUTES * 60_000) return null;
+	const lastActive = last && (last.expires === null || last.expires > now);
+	if (!last || !lastActive || last.event.toLowerCase() !== w.event.toLowerCase()) return "new";
+	if (level === "EKSTREM" && last.level !== "EKSTREM") return "escalated";
+	if (w.expires !== null && last.expires !== null && w.expires > last.expires + EXTENSION_MINUTES * 60_000) return "extended";
+	return null;
 }
 
 /**
@@ -259,13 +304,15 @@ async function storedLikLevel(beach: string): Promise<string | null> {
 }
 
 /**
- * One monitor pass: store active warnings per beach, then broadcast each warning
- * that has not been sent for that beach yet. One WhatsApp message per warning
- * (listing its beaches); one alert event per beach for push/SSE/WS/IoT.
+ * One monitor pass: store active warnings per beach, then broadcast each warning that is news
+ * for that beach (nowcastNews): a new event, a later end time, or BAHAYA. BMKG re-issues an
+ * ongoing warning about hourly with a new identifier; a re-issue that changes nothing, or a
+ * warning ending within MIN_REMAINING_MINUTES, is not sent again. One WhatsApp message per
+ * warning (listing its beaches); one alert event per beach for push/SSE/WS/IoT.
  */
 export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 	const byBeach = await (deps.fetchByBeach ?? fetchNowcastByBeach)(now);
-	const fresh = new Map<string, { warning: NowcastWarning; beaches: string[] }>();
+	const fresh = new Map<string, { warning: NowcastWarning; beaches: string[]; extended: string[] }>();
 
 	for (const [beach, caps] of Object.entries(byBeach)) {
 		const warnings: NowcastWarning[] = caps.map(({ id, event, headline, description, effective, expires }) => ({
@@ -278,19 +325,35 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 			await redis.del(ACTIVE_KEY(beach));
 		}
 
-		for (const w of warnings) {
+		const likFor = deps.likLevelFor ?? storedLikLevel;
+		let last: LastSent | null = null;
+		try {
+			const raw = await redis.get(LAST_KEY(beach));
+			last = raw ? (JSON.parse(raw) as LastSent) : null;
+		} catch {
+			last = null;
+		}
+		// Latest end time first, so a re-issue that extends the warning is the one compared.
+		for (const w of [...warnings].sort((a, b) => (b.expires ?? Infinity) - (a.expires ?? Infinity))) {
 			const ttl = Math.max(60, Math.ceil(((w.expires ?? now + 6 * 3600_000) - now) / 1000) + 3600);
 			const firstTime = await redis.set(SENT_KEY(w.id, beach), "1", { NX: true, EX: ttl });
 			if (firstTime !== "OK") continue;
-			const entry = fresh.get(w.id) ?? { warning: w, beaches: [] };
+			const lik = await likFor(beach).catch(() => null);
+			const level = buildNowcastAlertEvent(w, beach, now, lik).decision.final_risk_level;
+			const news = nowcastNews(w, level, last, now);
+			if (!news) continue; // BMKG re-issued the same warning, or it is about to end
+			last = { event: w.event, expires: w.expires, level };
+			await redis.set(LAST_KEY(beach), JSON.stringify(last), { EX: ttl });
+			const entry = fresh.get(w.id) ?? { warning: w, beaches: [], extended: [] };
 			entry.beaches.push(beach);
+			if (news === "extended") entry.extended.push(beach);
 			fresh.set(w.id, entry);
 		}
 	}
 
 	let events = 0;
 	const likFor = deps.likLevelFor ?? storedLikLevel;
-	for (const { warning, beaches } of fresh.values()) {
+	for (const { warning, beaches, extended } of fresh.values()) {
 		const escalated: string[] = [];
 		for (const beach of beaches) {
 			const lik = await likFor(beach).catch(() => null);
@@ -304,7 +367,8 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 		}
 		// Each beach group gets the warning only if it covers its beach, naming only its beaches.
 		for (const [group, own] of (deps.groupsFor ?? beachesByGroup)(beaches)) {
-			await deps.sendWhatsApp?.(group, formatNowcastWhatsApp(warning, own, escalated)).catch(() => undefined);
+			const isExtension = own.every((b) => extended.includes(b));
+			await deps.sendWhatsApp?.(group, formatNowcastWhatsApp(warning, own, escalated, isExtension)).catch(() => undefined);
 		}
 	}
 	return { warnings: fresh.size, events };

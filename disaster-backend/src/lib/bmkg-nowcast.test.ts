@@ -3,6 +3,8 @@ import {
 	buildNowcastAlertEvent,
 	capAppliesToBeach,
 	formatNowcastWhatsApp,
+	nowcastNews,
+	shortNowcastDescription,
 	parseCap,
 	parseRssItems,
 } from "./bmkg-nowcast";
@@ -84,5 +86,44 @@ describe("broadcast content", () => {
 		expect(text).toContain("Pantai Lampuuk, Pantai Lhoknga");
 		expect(text).toContain("20.06 WIB");
 		expect(text).toContain("Tunda melaut");
+	});
+});
+
+describe("BMKG re-issues are not broadcast again", () => {
+	const now = Date.UTC(2026, 10, 12, 17, 38); // 00.38 WIB
+	const h = 3600_000;
+	const last = { event: "Hujan Lebat dan Petir", expires: now + 3 * h, level: "SIAGA" };
+
+	test("the first warning for a beach is news", () => {
+		expect(nowcastNews({ event: "Hujan Lebat dan Petir", expires: now + 3 * h }, "SIAGA", null, now)).toBe("new");
+	});
+	test("a re-issue with the same event and end time is not sent again", () => {
+		expect(nowcastNews({ event: "Hujan Lebat dan Petir", expires: now + 3 * h }, "SIAGA", last, now + h)).toBeNull();
+	});
+	test("a later end time is sent as an extension", () => {
+		expect(nowcastNews({ event: "Hujan Lebat dan Petir", expires: now + 5 * h }, "SIAGA", last, now + h)).toBe("extended");
+	});
+	test("BAHAYA (fishermen also report) is sent", () => {
+		expect(nowcastNews({ event: "Hujan Lebat dan Petir", expires: now + 3 * h }, "EKSTREM", last, now + h)).toBe("escalated");
+	});
+	test("another event, or after the earlier warning ended, is new", () => {
+		expect(nowcastNews({ event: "Angin Kencang", expires: now + 3 * h }, "SIAGA", last, now + h)).toBe("new");
+		expect(nowcastNews({ event: "Hujan Lebat dan Petir", expires: now + 6 * h }, "SIAGA", last, now + 4 * h)).toBe("new");
+	});
+	test("a warning ending within 15 minutes is not sent", () => {
+		expect(nowcastNews({ event: "Hujan Lebat dan Petir", expires: now + 7 * 60_000 }, "SIAGA", null, now)).toBeNull();
+	});
+});
+
+describe("BMKG text in WhatsApp", () => {
+	const long = "Hujan lebat disertai petir akan terjadi pada 13 November 2026, 00:20 WIB di sebagian wilayah Aceh, khususnya di BABUL MAKMUR, BABUL RAHMAH, BABUSSALAM, BADAR, BAKONGAN, LHOKNGA, MEURAXA";
+	test("drops the kecamatan list and names the beach's own area", () => {
+		const text = shortNowcastDescription(long, ["pantai_lhoknga"]);
+		expect(text).toBe("Hujan lebat disertai petir akan terjadi pada 13 November 2026, 00:20 WIB di sebagian wilayah Aceh, termasuk Aceh Besar.");
+		expect(text).not.toContain("BABUL");
+	});
+	test("an extension says so", () => {
+		const w = { id: "x", event: "Hujan Lebat dan Petir", headline: "", description: long, effective: null, expires: Date.UTC(2026, 10, 12, 21, 0) };
+		expect(formatNowcastWhatsApp(w, ["pantai_lampuuk"], [], true)).toContain("Diperpanjang* sampai 04.00 WIB");
 	});
 });
