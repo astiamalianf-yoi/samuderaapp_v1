@@ -10,11 +10,21 @@ interface WeatherAlertListProps {
   disableFilter?: boolean;
   /** Pass results from a parent's useWeatherAlerts to avoid fetching twice. */
   state?: ReturnType<typeof useWeatherAlerts>;
+  /**
+   * Only BMKG warnings that cover this beach and have not ended (Beranda): warnings for other
+   * districts of the province are left out, so this list never competes with the status card.
+   */
+  onlyThisBeach?: boolean;
+  beachLabel?: string;
 }
 
-export function WeatherAlertList({ selectedBeach, disableFilter = false, state }: WeatherAlertListProps) {
+export function WeatherAlertList({ selectedBeach, disableFilter = false, state, onlyThisBeach = false, beachLabel }: WeatherAlertListProps) {
   const own = useWeatherAlerts(selectedBeach, disableFilter, !state)
-  const { alerts, loading, error } = state ?? own
+  const { alerts: all, loading, error } = state ?? own
+  const now = Date.now()
+  const alerts = onlyThisBeach
+    ? all.filter((a) => a.appliesToBeach && (a.expiresAt === undefined || a.expiresAt > now))
+    : all
   const [activeIndex, setActiveIndex] = useState(0)
 
   useEffect(() => {
@@ -48,7 +58,9 @@ export function WeatherAlertList({ selectedBeach, disableFilter = false, state }
   if (alerts.length === 0) {
     return (
       <p className="text-sm text-gray-500">
-        Tidak ada peringatan cuaca aktif dari BMKG saat ini.
+        {onlyThisBeach && beachLabel
+          ? `Tidak ada peringatan cuaca dari BMKG untuk ${beachLabel} saat ini.`
+          : "Tidak ada peringatan cuaca aktif dari BMKG saat ini."}
       </p>
     )
   }

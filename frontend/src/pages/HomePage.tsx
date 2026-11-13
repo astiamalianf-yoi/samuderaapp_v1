@@ -8,6 +8,7 @@ import { PushNotificationCard } from "../components/PushNotificationCard"
 import { WeatherAlertList } from "../components/WeatherAlertList"
 import { useBmkg, useHomeBeach, useRegistration, useSelectedBeach } from "../hooks/useAppState"
 import { useWeatherAlerts } from "../hooks/useWeatherAlerts"
+import { BEACH_LOCATIONS } from "../constants/observationData"
 
 export function HomePage() {
   const [beach, setBeach] = useSelectedBeach()
@@ -15,6 +16,7 @@ export function HomePage() {
   const registration = useRegistration()
   const weather = useWeatherAlerts(beach)
   const bmkg = useBmkg(beach)
+  const beachLabel = BEACH_LOCATIONS.find((b) => b.value === beach)?.label ?? beach
 
   return (
     <AppShell>
@@ -54,11 +56,12 @@ export function HomePage() {
 
         <WhatsAppGroupCard />
 
-        <BmkgMarineCard data={bmkg} alerts={weather.alerts} />
+        {/* Both for this beach only: the forecast, then BMKG's official warnings that cover it. */}
+        <BmkgMarineCard data={bmkg} alerts={weather.alerts} beachLabel={beachLabel} />
 
         <section className="space-y-3">
-          <h2 className="text-xl font-extrabold">Peringatan cuaca BMKG</h2>
-          <WeatherAlertList selectedBeach={beach} state={weather} />
+          <h2 className="text-xl font-extrabold">Peringatan cuaca BMKG · {beachLabel}</h2>
+          <WeatherAlertList selectedBeach={beach} state={weather} onlyThisBeach beachLabel={beachLabel} />
         </section>
 
       </div>

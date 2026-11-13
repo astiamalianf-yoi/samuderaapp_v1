@@ -31,7 +31,8 @@ function PerJamLink() {
  * orange (WASPADA) or red (SIAGA) when its value crosses a limit of the BMKG situation table.
  * "Per jam" opens the following time slots of the same forecast.
  */
-export function BmkgMarineCard({ data, alerts = [] }: { data: BmkgData | null; alerts?: WeatherAlertProps[] }) {
+export function BmkgMarineCard({ data, alerts = [], beachLabel }: { data: BmkgData | null; alerts?: WeatherAlertProps[]; beachLabel?: string }) {
+  const title = `Prakiraan cuaca BMKG${beachLabel ? ` · ${beachLabel}` : ""}`
   // An official BMKG warning (peringatan dini) covering this beach and not yet expired is SIAGA in
   // the situation table, whatever the ordinary forecast for this time slot says. Same check as the
   // status card (assessBmkg), so the two cards always agree.
@@ -41,7 +42,7 @@ export function BmkgMarineCard({ data, alerts = [] }: { data: BmkgData | null; a
     return (
       <section className="rounded-2xl border-2 p-4 bg-white border-gray-200">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-bold text-lg">Prakiraan cuaca BMKG</p>
+          <p className="font-bold text-lg">{title}</p>
           <PerJamLink />
         </div>
         {official && <OfficialBadge />}
@@ -60,7 +61,7 @@ export function BmkgMarineCard({ data, alerts = [] }: { data: BmkgData | null; a
   return (
     <section className={`rounded-2xl border-2 p-4 bg-white ${siaga ? "border-red-500" : unusual ? "border-orange-400" : "border-gray-200"}`}>
       <div className="flex items-center justify-between gap-2">
-        <p className="font-bold text-lg">Prakiraan cuaca BMKG</p>
+        <p className="font-bold text-lg">{title}</p>
         <PerJamLink />
       </div>
       {official ? (
