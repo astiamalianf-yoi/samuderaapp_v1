@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import {
-  ArrowLeft, ArrowRight, BellRing, CloudLightning, Megaphone, ShieldAlert, UserPlus, UserRound, WifiOff,
+  ArrowLeft, ArrowRight, BellRing, CloudLightning, LifeBuoy, Megaphone, ShieldAlert, UserPlus, UserRound, WifiOff,
 } from "lucide-react"
 import { markOnboardingDone } from "../lib/onboarding"
 
@@ -16,8 +16,8 @@ const Circle = ({ className, children }: { className: string; children: ReactNod
 )
 
 const Feature = ({ icon, text }: { icon: ReactNode; text: string }) => (
-  <li className="flex items-center gap-3 text-left text-base leading-snug">
-    <span className="w-11 h-11 shrink-0 rounded-xl bg-sky-100 text-sky-900 flex items-center justify-center">{icon}</span>
+  <li className="flex items-center gap-3 text-left text-[14px] leading-snug">
+    <span className="w-9 h-9 shrink-0 rounded-xl bg-sky-100 text-sky-900 flex items-center justify-center">{icon}</span>
     {text}
   </li>
 )
@@ -40,20 +40,22 @@ const SLIDES: Slide[] = [
   {
     title: "Yang bisa Anda lakukan",
     art: (
-      <div className="grid grid-cols-3 gap-2 w-full max-w-xs" aria-hidden>
-        <span className="rounded-2xl bg-emerald-600 text-white text-sm font-black py-5 text-center">AMAN</span>
-        <span className="rounded-2xl bg-amber-400 text-black text-[13px] tracking-tight font-black py-5 text-center">WASPADA</span>
-        <span className="rounded-2xl bg-red-600 text-white text-sm font-black py-5 text-center">SIAGA</span>
+      <div className="grid grid-cols-4 gap-1.5 w-full max-w-xs" aria-hidden>
+        <span className="rounded-2xl bg-emerald-600 text-white text-xs font-black py-3 text-center">AMAN</span>
+        <span className="rounded-2xl bg-amber-400 text-black text-[11px] tracking-tight font-black py-3 text-center">WASPADA</span>
+        <span className="rounded-2xl bg-orange-500 text-white text-xs font-black py-3 text-center">SIAGA</span>
+        <span className="rounded-2xl bg-red-700 text-white text-xs font-black py-3 text-center">BAHAYA</span>
       </div>
     ),
     body: (
-      <ul className="space-y-2">
-        <Feature icon={<ShieldAlert className="w-6 h-6" aria-hidden />} text="Lihat status pantai Anda dan apa yang harus dilakukan" />
-        <Feature icon={<UserRound className="w-6 h-6" aria-hidden />} text="Peringatan khusus untuk Anda, sesuai pengalaman dan laporan Anda" />
-        <Feature icon={<Megaphone className="w-6 h-6" aria-hidden />} text="Lapor tanda alam dengan 2 sentuhan, atau !lapor di grup WhatsApp" />
-        <Feature icon={<CloudLightning className="w-6 h-6" aria-hidden />} text="Peringatan resmi dan prakiraan cuaca BMKG" />
-        <Feature icon={<BellRing className="w-6 h-6" aria-hidden />} text="Notifikasi di HP untuk pantai asal Anda" />
-        <Feature icon={<WifiOff className="w-6 h-6" aria-hidden />} text="Tetap bisa dipakai saat sinyal lemah" />
+      <ul className="space-y-1">
+        <Feature icon={<ShieldAlert className="w-5 h-5" aria-hidden />} text="Lihat status pantai Anda dan apa yang harus dilakukan melalui SAMUDRA atau grup WhatsApp" />
+        <Feature icon={<UserRound className="w-5 h-5" aria-hidden />} text="Peringatan khusus untuk Anda, sesuai pengalaman dan laporan Anda" />
+        <Feature icon={<Megaphone className="w-5 h-5" aria-hidden />} text="Lapor tanda alam dengan 2 sentuhan, atau !lapor di grup WhatsApp" />
+        <Feature icon={<LifeBuoy className="w-5 h-5" aria-hidden />} text="Minta bantuan dalam kondisi bahaya dengan mengirimkan koordinat di grup WhatsApp" />
+        <Feature icon={<CloudLightning className="w-5 h-5" aria-hidden />} text="Peringatan resmi dan prakiraan cuaca BMKG" />
+        <Feature icon={<BellRing className="w-5 h-5" aria-hidden />} text="Notifikasi di HP untuk pantai asal Anda" />
+        <Feature icon={<WifiOff className="w-5 h-5" aria-hidden />} text="Tetap bisa dipakai saat sinyal lemah" />
       </ul>
     ),
   },
@@ -89,7 +91,7 @@ export function OnboardingPage() {
 
   return (
     <main
-      className="min-h-dvh bg-gradient-to-b from-sky-50 to-white flex flex-col max-w-md mx-auto px-6 pt-4 pb-6"
+      className="h-dvh bg-gradient-to-b from-sky-50 to-white flex flex-col max-w-md mx-auto px-6 pt-4 pb-6"
       onTouchStart={(e) => { touchX.current = e.touches[0].clientX }}
       onTouchEnd={(e) => {
         if (touchX.current === null) return
@@ -109,11 +111,14 @@ export function OnboardingPage() {
         )}
       </div>
 
-      <section className="flex-1 flex flex-col items-center justify-center text-center gap-5 overflow-y-auto" aria-live="polite"
+      {/* min-h-0 + my-auto: centred when it fits, scrollable from the top when it does not (small phones). */}
+      <section className="flex-1 min-h-0 flex flex-col overflow-y-auto" aria-live="polite"
         aria-roledescription="slide" aria-label={`${i + 1} dari ${SLIDES.length}`}>
-        <div className="flex items-center justify-center">{slide.art}</div>
-        <h1 className="text-[1.7rem] leading-tight font-black text-gray-900">{slide.title}</h1>
-        <div className="text-[17px] text-gray-700 leading-normal">{slide.body}</div>
+        <div className="my-auto flex flex-col items-center text-center gap-3 py-2">
+          <div className="flex items-center justify-center">{slide.art}</div>
+          <h1 className="text-[1.7rem] leading-tight font-black text-gray-900">{slide.title}</h1>
+          <div className="text-[17px] text-gray-700 leading-normal">{slide.body}</div>
+        </div>
       </section>
 
       <div className="flex justify-center gap-2 py-4" role="tablist" aria-label="Halaman pengenalan">
