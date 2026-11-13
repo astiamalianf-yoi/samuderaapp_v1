@@ -70,8 +70,9 @@ services:
       # WhatsApp group (beach) warning class: majority of the beach's registered fishermen once at least
       # GROUP_MAJORITY_MIN have a profile (else the survey profile); "survey" keeps the survey profile always.
       # Reports of the same sign at a beach (different fishermen, 24 h) that raise a community warning.
-      # Production: 3. Staging sets 1 in its .env. Per beach: REPORT_THRESHOLD_BEACHES="pantai_lampuuk=3,pantai_lhoknga=5"
-      REPORT_THRESHOLD: ${REPORT_THRESHOLD:-3}
+      # 1 everywhere for now (decided 14 Nov 2026: one report raises or renews a warning). Raise it in
+      # .env if needed; per beach: REPORT_THRESHOLD_BEACHES="pantai_lampuuk=3,pantai_lhoknga=5"
+      REPORT_THRESHOLD: ${REPORT_THRESHOLD:-1}
       REPORT_THRESHOLD_BEACHES: ${REPORT_THRESHOLD_BEACHES:-}
       GROUP_CLASS_MODE: ${GROUP_CLASS_MODE:-majority}
       GROUP_MAJORITY_MIN: ${GROUP_MAJORITY_MIN:-10}
