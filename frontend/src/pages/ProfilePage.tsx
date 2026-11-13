@@ -249,7 +249,7 @@ function ProfileForm() {
           </div>
         </fieldset>
 
-        <Stepper id="disaster_interaction" label="7. Berapa kali Anda sendiri kena angin kencang berbahaya di laut?" unit="kali" min={0} max={50}
+        <Stepper id="disaster_interaction" label="7. Berapa kali Anda menghadapi kejadian angin kencang di laut?" unit="kali" min={0} max={50}
           value={a.disaster_interaction} onChange={(v) => set("disaster_interaction", v)} error={err("disaster_interaction")} />
         <Stepper id="lik_combination_count" label="8. Berapa macam tanda alam yang biasa Anda pakai?" unit="tanda" min={1} max={17}
           value={a.lik_combination_count} onChange={(v) => set("lik_combination_count", v)} error={err("lik_combination_count")} />
@@ -329,7 +329,7 @@ const ANSWER_TEXT: Record<string, { label: string; show: (a: ProfileView["answer
   usage_frequency: { label: "Memakai tanda alam", show: (a) => `${num(a.value)} kali per bulan` },
   lik_combination_count: { label: "Jumlah tanda alam yang dipakai", show: (a) => `${num(a.value)} tanda` },
   usage_duration: { label: "Lama memakai tanda alam", show: (a) => `${num(a.value)} tahun` },
-  disaster_interaction: { label: "Kena angin kencang berbahaya di laut", show: (a) => `${num(a.value)} kali` },
+  disaster_interaction: { label: "Menghadapi kejadian angin kencang di laut", show: (a) => `${num(a.value)} kali` },
   disaster_experience_count: { label: "Jenis bencana yang pernah dialami dan dikenali dari tanda alam", show: (a) => `${num(a.value)} jenis` },
   age: { label: "Usia", show: (a) => `${num(a.value)} tahun` },
   fishing_experience: { label: "Lama menjadi nelayan", show: (a) => `${num(a.value)} tahun` },
