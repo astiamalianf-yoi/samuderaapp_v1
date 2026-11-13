@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import {
-  ArrowLeft, ArrowRight, BellRing, CloudLightning, Megaphone, ShieldAlert, UserPlus, WifiOff,
+  ArrowLeft, ArrowRight, BellRing, CloudLightning, Megaphone, ShieldAlert, UserPlus, UserRound, WifiOff,
 } from "lucide-react"
 import { markOnboardingDone } from "../lib/onboarding"
 
@@ -34,6 +34,10 @@ const SLIDES: Slide[] = [
           <b>tanda alam</b> yang dilihat nelayan dengan <b>informasi resmi BMKG</b>, supaya Anda tahu kapan aman
           melaut dan apa yang harus dilakukan.
         </p>
+        <p className="mt-3">
+          Peringatan juga <b>menyesuaikan dengan pengalaman Anda</b>: makin sering Anda melapor tanda alam dan
+          kejadian di laut, makin tepat peringatan untuk Anda.
+        </p>
       </>
     ),
   },
@@ -49,6 +53,7 @@ const SLIDES: Slide[] = [
     body: (
       <ul className="space-y-2">
         <Feature icon={<ShieldAlert className="w-6 h-6" aria-hidden />} text="Lihat status pantai Anda dan apa yang harus dilakukan" />
+        <Feature icon={<UserRound className="w-6 h-6" aria-hidden />} text="Peringatan khusus untuk Anda, sesuai pengalaman dan laporan Anda" />
         <Feature icon={<Megaphone className="w-6 h-6" aria-hidden />} text="Lapor tanda alam dengan 2 sentuhan, atau !lapor di grup WhatsApp" />
         <Feature icon={<CloudLightning className="w-6 h-6" aria-hidden />} text="Peringatan resmi dan prakiraan cuaca BMKG" />
         <Feature icon={<BellRing className="w-6 h-6" aria-hidden />} text="Notifikasi di HP untuk pantai asal Anda" />
