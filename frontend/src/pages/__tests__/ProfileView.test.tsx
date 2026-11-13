@@ -83,7 +83,7 @@ describe("Profil: view and edit are separate pages", () => {
     await screen.findByLabelText("Aktivitas Anda")
     expect(screen.queryByLabelText(/Nomor WhatsApp Anda/)).toBeNull()
     expect(screen.getByRole("link", { name: /Ubah profil/ }).getAttribute("href")).toBe("/profil/ubah")
-    expect(screen.getByRole("button", { name: /Keluar dan hapus profil/ })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /^Keluar dari HP ini$/ })).toBeTruthy()
   })
 
   it("/profil/ubah holds the form with a way back", async () => {

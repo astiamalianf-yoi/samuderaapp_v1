@@ -72,7 +72,7 @@ function ProfileOverview() {
 
         <button onClick={() => { saveAnswers(null); saveRegistration(null) }}
           className="w-full min-h-12 rounded-xl border-2 border-gray-300 text-base font-semibold text-gray-700">
-          Keluar dan hapus profil dari HP ini
+          Keluar dari HP ini
         </button>
 
         <DeleteMyData token={registration.token} />
