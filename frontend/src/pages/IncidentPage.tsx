@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { CheckCircle2, CloudLightning, MapPin, MessageCircle, Phone, Siren, Waves, Wind, MoveRight } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
@@ -31,11 +31,33 @@ export function CallButtons() {
   )
 }
 
-const getPosition = () =>
-  new Promise<GeolocationPosition | null>((resolve) => {
-    if (!navigator.geolocation) return resolve(null)
-    navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 })
-  })
+type Gps =
+  | { status: "idle" | "searching" }
+  | { status: "ok"; lat: number; lon: number; accuracy: number }
+  | { status: "denied" | "unavailable" }
+
+const once = (opts: PositionOptions) =>
+  new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, opts))
+
+/**
+ * Asks the phone for its position: precise GPS first (up to 20 s, a fix at sea can take a while),
+ * then any recent position (network / last known, up to 10 minutes old). Never throws.
+ */
+async function locate(): Promise<Gps> {
+  if (!("geolocation" in navigator)) return { status: "unavailable" }
+  for (const opts of [
+    { enableHighAccuracy: true, timeout: 20_000, maximumAge: 60_000 },
+    { enableHighAccuracy: false, timeout: 10_000, maximumAge: 600_000 },
+  ]) {
+    try {
+      const p = await once(opts)
+      return { status: "ok", lat: p.coords.latitude, lon: p.coords.longitude, accuracy: Math.round(p.coords.accuracy) }
+    } catch (e) {
+      if ((e as GeolocationPositionError)?.code === 1) return { status: "denied" }
+    }
+  }
+  return { status: "unavailable" }
+}
 
 type Result = { help: boolean; helpSent: boolean; helpReason: string | null }
 
@@ -50,6 +72,21 @@ export function IncidentPage() {
   const [type, setType] = useState<IncidentType | null>(null)
   const [needHelp, setNeedHelp] = useState(false)
   const [shareGps, setShareGps] = useState(true)
+  // Location is looked up as soon as he asks for help (not only on "Kirim"), so it is ready in time
+  // and he can see whether it worked before sending.
+  const [gps, setGps] = useState<Gps>({ status: "idle" })
+  const gpsJob = useRef<Promise<Gps> | null>(null)
+  const startGps = () => {
+    setGps({ status: "searching" })
+    const job = locate()
+    gpsJob.current = job
+    job.then((g) => { if (gpsJob.current === job) setGps(g) })
+    return job
+  }
+  useEffect(() => {
+    if (needHelp && shareGps && gps.status === "idle") startGps()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needHelp, shareGps])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<Result | null>(null)
@@ -58,7 +95,9 @@ export function IncidentPage() {
   const typeLabel = TYPES.find((t) => t.key === type)?.label ?? ""
   // Works even without internet: WhatsApp keeps the message and sends it when the signal returns.
   const waFallback = `https://wa.me/?text=${encodeURIComponent(
-    `🆘 NELAYAN BUTUH BANTUAN\n📍 ${beachName}\n⚠️ ${typeLabel || "Bahaya di laut"}\nMohon segera bantu. Darurat: Basarnas 115 / 112.`,
+    `🆘 NELAYAN BUTUH BANTUAN\n📍 ${beachName}\n⚠️ ${typeLabel || "Bahaya di laut"}\n` +
+      (gps.status === "ok" ? `🗺️ Lokasi: https://maps.google.com/?q=${gps.lat.toFixed(5)},${gps.lon.toFixed(5)}\n` : "") +
+      "Mohon segera bantu. Darurat: Basarnas 115 / 112.",
   )}`
 
   if (!registration) {
@@ -120,10 +159,14 @@ export function IncidentPage() {
     setSending(true)
     setError(null)
     try {
-      const pos = needHelp && shareGps ? await getPosition() : null
+      let where: Gps | null = null
+      if (needHelp && shareGps) {
+        where = gps.status === "ok" ? gps : await (gps.status === "searching" && gpsJob.current ? gpsJob.current : startGps())
+      }
       const res = await fishermenService.reportIncident(registration.token, {
         beach, type, needHelp,
-        ...(pos ? { lat: pos.coords.latitude, lon: pos.coords.longitude } : {}),
+        ...(where?.status === "ok" ? { lat: where.lat, lon: where.lon } : {}),
+        ...(needHelp ? { locationStatus: !shareGps ? "not_shared" : where?.status === "denied" ? "denied" : where?.status === "ok" ? undefined : "unavailable" } : {}),
         ...(needHelp && registration.phone ? { contactPhone: registration.phone } : {}),
       })
       setResult({ help: needHelp, helpSent: res.helpSent, helpReason: res.helpReason })
@@ -181,6 +224,26 @@ export function IncidentPage() {
               <input type="checkbox" checked={shareGps} onChange={(e) => setShareGps(e.target.checked)} className="w-6 h-6" />
               <span className="flex items-center gap-1"><MapPin className="w-5 h-5 text-red-700" aria-hidden /> Bagikan lokasi GPS saya</span>
             </label>
+            {shareGps && (
+              <div className="text-base" role="status" data-testid="gps-status">
+                {gps.status === "searching" && <p className="text-gray-700">📡 Mencari lokasi Anda…</p>}
+                {gps.status === "ok" && <p className="text-emerald-800 font-semibold">✅ Lokasi ditemukan (± {gps.accuracy} m)</p>}
+                {gps.status === "denied" && (
+                  <p className="text-red-800">
+                    ⚠️ HP tidak mengizinkan lokasi. Izinkan lokasi untuk aplikasi/peramban ini di pengaturan HP, lalu{" "}
+                    <button type="button" onClick={startGps} className="underline font-semibold">coba lagi</button>.
+                    Tanpa lokasi, pesan tetap terkirim.
+                  </p>
+                )}
+                {gps.status === "unavailable" && (
+                  <p className="text-red-800">
+                    ⚠️ Lokasi belum didapat. Nyalakan GPS/Lokasi di HP lalu{" "}
+                    <button type="button" onClick={startGps} className="underline font-semibold">coba lagi</button>.
+                    Tanpa lokasi, pesan tetap terkirim.
+                  </p>
+                )}
+              </div>
+            )}
             <p className="text-sm text-gray-700">
               Pesan bantuan dikirim ke grup WhatsApp dengan pantai, kejadian, lokasi
               {registration.phone ? ` dan nomor WhatsApp Anda (••••${registration.phoneLast4})` : ""}, supaya nelayan terdekat bisa menolong.

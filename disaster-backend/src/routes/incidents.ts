@@ -29,7 +29,15 @@ const wib = (d = new Date()) =>
 const showPhone = (digits: string) => `0${digits.slice(2, 5)}-${digits.slice(5, 9)}-${digits.slice(9)}`;
 
 /** WhatsApp group text for a help request. The number is used for this message only, never stored. */
-export function formatHelpMessage(o: { beach: string; type: IncidentType; lat?: number | null; lon?: number | null; phone?: string | null; at?: Date }) {
+/** Why a help request has no location: he chose not to share it, or the phone could not give one. */
+export type LocationStatus = "not_shared" | "denied" | "unavailable";
+const NO_LOCATION: Record<LocationStatus, string> = {
+	not_shared: "🗺️ Lokasi tidak dibagikan",
+	denied: "🗺️ Lokasi tidak terkirim: izin lokasi di HP ditolak",
+	unavailable: "🗺️ Lokasi tidak terkirim: GPS HP belum mendapat posisi",
+};
+
+export function formatHelpMessage(o: { beach: string; type: IncidentType; lat?: number | null; lon?: number | null; phone?: string | null; at?: Date; locationStatus?: LocationStatus | null }) {
 	const lines = [
 		"🆘 *NELAYAN BUTUH BANTUAN*",
 		`📍 ${BEACH_DISPLAY_NAMES[o.beach] ?? o.beach}`,
@@ -37,7 +45,7 @@ export function formatHelpMessage(o: { beach: string; type: IncidentType; lat?: 
 		`🕐 ${wib(o.at)}`,
 		o.lat != null && o.lon != null
 			? `🗺️ Lokasi: https://maps.google.com/?q=${o.lat.toFixed(5)},${o.lon.toFixed(5)}`
-			: "🗺️ Lokasi tidak dibagikan",
+			: NO_LOCATION[o.locationStatus ?? "not_shared"],
 		o.phone ? `📞 Hubungi: ${showPhone(o.phone)} (WhatsApp)` : "📞 Nomor tidak dibagikan",
 		"",
 		"Yang terdekat mohon segera bantu. Darurat: Basarnas *115* atau *112*.",
@@ -67,6 +75,7 @@ route.post("/incidents", async (c) => {
 	const needHelp = body.needHelp === true;
 	const lat = coord(body.lat, 90);
 	const lon = coord(body.lon, 180);
+	const locationStatus = (["not_shared", "denied", "unavailable"] as const).find((v) => v === body.locationStatus) ?? null;
 
 	const row = saveIncident({ fishermanId: fisherman.id, beach, type, needHelp, lat, lon });
 
@@ -78,7 +87,7 @@ route.post("/incidents", async (c) => {
 			.catch(() => "OK");
 		if (fresh === "OK") {
 			const phone = normalizePhone(typeof body.contactPhone === "string" ? body.contactPhone : null);
-			await sendOpenClawBeachAlert(beach, formatHelpMessage({ beach, type, lat, lon, phone }))
+			await sendOpenClawBeachAlert(beach, formatHelpMessage({ beach, type, lat, lon, phone, locationStatus }))
 				.then(() => { helpSent = true; })
 				.catch(() => { helpReason = "whatsapp_unavailable"; });
 		} else {

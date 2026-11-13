@@ -56,6 +56,13 @@ describe("Lapor kejadian / Minta bantuan", () => {
 		expect(t).toContain("115");
 	});
 
+	test("without a location the message says why: not shared, permission denied, or no GPS fix", () => {
+		const base = { beach: "pantai_lampuuk", type: "angin_kencang" as const };
+		expect(formatHelpMessage(base)).toContain("Lokasi tidak dibagikan");
+		expect(formatHelpMessage({ ...base, locationStatus: "denied" })).toContain("izin lokasi di HP ditolak");
+		expect(formatHelpMessage({ ...base, locationStatus: "unavailable" })).toContain("GPS HP belum mendapat posisi");
+	});
+
 	test("an incident without help is recorded and nothing is sent to the group", async () => {
 		const res = await post({ beach: "pantai_lampuuk", type: "badai", needHelp: false });
 		expect(res.status).toBe(201);

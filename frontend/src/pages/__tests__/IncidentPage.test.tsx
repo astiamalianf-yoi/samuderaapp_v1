@@ -85,4 +85,34 @@ describe("codebook hazards (No. 12)", () => {
     }))
     expect(loadAnswers()!.hazards.sort()).toEqual(["gelombang_ekstrem", "pasang_tinggi"])
   })
+
+  it("GPS starts when help is switched on and shows the result before sending", async () => {
+    register()
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (ok: PositionCallback) => ok({ coords: { latitude: 5.49, longitude: 95.24, accuracy: 12 } } as GeolocationPosition) },
+    })
+    render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+    fireEvent.click(screen.getByRole("switch"))
+    await waitFor(() => expect(screen.getByTestId("gps-status").textContent).toContain("Lokasi ditemukan (± 12 m)"))
+  })
+
+  it("location permission denied: the message still goes, and says why there is no location", async () => {
+    register()
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (_ok: PositionCallback, err: PositionErrorCallback) => err({ code: 1 } as GeolocationPositionError) },
+    })
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, incidentId: "i3", helpSent: true, helpReason: null }), { status: 201 }))
+    render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+    fireEvent.click(screen.getByText("Angin kencang di laut"))
+    fireEvent.click(screen.getByRole("switch"))
+    await waitFor(() => expect(screen.getByTestId("gps-status").textContent).toContain("tidak mengizinkan lokasi"))
+    fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
+    await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
+    expect(body).toMatchObject({ needHelp: true, locationStatus: "denied" })
+    expect(body.lat).toBeUndefined()
+  })
 })

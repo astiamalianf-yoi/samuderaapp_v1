@@ -44,7 +44,7 @@ export function HomePage() {
           </span>
           <span className="flex-1">
             <span className="block text-lg font-extrabold">Bahaya di laut?</span>
-            <span className="block text-base text-gray-700">Lapor kejadian atau minta bantuan</span>
+            <span className="block text-base text-gray-700">Lapor kejadian bencana atau minta bantuan</span>
           </span>
           <ArrowRight className="w-6 h-6" aria-hidden />
         </Link>
