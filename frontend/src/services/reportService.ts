@@ -112,6 +112,13 @@ export const reportService = {
     return body.data ?? null;
   },
 
+  /** Peta: every beach's level from fishermen's warning and BMKG together (same rule as Beranda). */
+  async getMapStatus(): Promise<BeachStatus[]> {
+    const response = await fetch(`${API_BASE_URL}/api/map/status`);
+    const body = await handleResponse<{ ok: boolean; data: BeachStatus[] }>(response);
+    return body.data ?? [];
+  },
+
   async getBmkgAll(): Promise<BmkgData[]> {
     const response = await fetch(`${API_BASE_URL}/api/bmkg`);
     const body = await handleResponse<{ ok: boolean; data: (BmkgData | null)[] }>(response);
@@ -135,4 +142,18 @@ export const reportService = {
 
     await handleResponse(response);
   },
+};
+
+export type BeachStatus = {
+  beach: BeachLocation;
+  level: "NORMAL" | "WASPADA" | "SIAGA" | "EKSTREM";
+  lik: { level: "NORMAL" | "WASPADA" | "SIAGA" | "EKSTREM"; codes: string[]; triggeredAt: number } | null;
+  bmkg: {
+    level: "NORMAL" | "WASPADA" | "SIAGA" | "EKSTREM";
+    warnings: { event: string; expires: number | null }[];
+    weather: string | null;
+    windSpeed: number | null;
+    windDirection: string | null;
+    temperature: number | null;
+  };
 };

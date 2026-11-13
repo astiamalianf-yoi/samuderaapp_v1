@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { LocateFixed } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BEACH_LOCATIONS } from "../constants/observationData"
-import { reportService, type AlertFeedItem, type BmkgData } from "../services/reportService"
-import { LEVELS, toLevel } from "../lib/warning"
+import { reportService, type BeachStatus } from "../services/reportService"
+import { LEVELS } from "../lib/warning"
+import { getSign } from "../constants/signs"
 import { useSelectedBeach } from "../hooks/useAppState"
 import type { BeachLocation, RiskLevel } from "../types/api"
 
@@ -40,32 +41,18 @@ function icon(level: RiskLevel) {
 
 export function MapPage() {
   const [beach] = useSelectedBeach()
-  const [alerts, setAlerts] = useState<AlertFeedItem[]>([])
-  const [bmkg, setBmkg] = useState<BmkgData[]>([])
+  const [status, setStatus] = useState<BeachStatus[]>([])
   const [me, setMe] = useState<[number, number] | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const startRegion = BEACH_COORDS[beach][0] > 0 ? REGIONS[1] : REGIONS[0]
 
+  // Same rule as the Beranda card: fishermen's warning and BMKG together (both SIAGA = BAHAYA).
   useEffect(() => {
-    reportService.getAlerts(20).then(setAlerts).catch(() => undefined)
-    reportService.getBmkgAll().then(setBmkg).catch(() => undefined)
+    const load = () => reportService.getMapStatus().then(setStatus).catch(() => undefined)
+    load()
+    const id = setInterval(load, 60_000)
+    return () => clearInterval(id)
   }, [])
-
-  const levelOf = useMemo(() => {
-    const out: Record<string, RiskLevel> = {}
-    const cutoff = Date.now() - 6 * 60 * 60 * 1000
-    for (const b of BEACH_LOCATIONS) {
-      const recent = alerts.filter((a) => a.beachLocation === b.value && a.serverTimestamp >= cutoff)
-      let lvl: RiskLevel = "NORMAL"
-      for (const a of recent) {
-        const l = toLevel(a.riskLevel)
-        if (Object.keys(COLOR).indexOf(l) > Object.keys(COLOR).indexOf(lvl)) lvl = l
-      }
-      if (lvl === "NORMAL" && bmkg.find((x) => x.beach === b.value && !x.isSafe)) lvl = "WASPADA"
-      out[b.value] = lvl
-    }
-    return out
-  }, [alerts, bmkg])
 
   const locate = () => {
     navigator.geolocation?.getCurrentPosition(
@@ -105,19 +92,28 @@ export function MapPage() {
             maxZoom={19}
           />
           {BEACH_LOCATIONS.map((b) => {
-            const lvl = levelOf[b.value] ?? "NORMAL"
-            const w = bmkg.find((x) => x.beach === b.value)
+            const st = status.find((x) => x.beach === b.value)
+            const lvl: RiskLevel = st?.level ?? "NORMAL"
+            const fmt = (ms: number | null) => ms ? new Date(ms).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }) : null
+            const source = st?.lik && st.bmkg.level !== "NORMAL" ? "Peringatan dari nelayan dan BMKG"
+              : st?.lik ? "Peringatan dari nelayan" : st && st.bmkg.level !== "NORMAL" ? "Peringatan dari BMKG" : null
             return (
               <Marker key={b.value} position={BEACH_COORDS[b.value]} icon={icon(lvl)}>
                 <Popup>
-                  <div className="text-base space-y-1 min-w-[190px]">
+                  <div className="text-base space-y-1 min-w-[200px]">
                     <p className="font-bold text-lg">{b.label}</p>
                     <p><b>Status:</b> {LEVELS[lvl].label}</p>
-                    {w && (
-                      <>
-                        <p>{w.weather}</p>
-                        <p>Angin {w.windSpeed} km/j {w.windDirection} · {w.temperature}°C</p>
-                      </>
+                    {source && <p className="text-sm font-semibold text-gray-700">{source}</p>}
+                    {st?.lik && (
+                      <p>🐟 Tanda alam: {st.lik.codes.map((c) => getSign(c)?.short ?? c).join(", ")}</p>
+                    )}
+                    {st?.bmkg.warnings.map((w) => (
+                      <p key={w.event + w.expires}>⚠️ BMKG: {w.event}{fmt(w.expires) ? ` sampai ${fmt(w.expires)} WIB` : ""}</p>
+                    ))}
+                    {st?.bmkg.weather && (
+                      <p className="text-sm text-gray-700">
+                        {st.bmkg.weather}{st.bmkg.windSpeed != null ? ` · Angin ${st.bmkg.windSpeed} km/j ${st.bmkg.windDirection ?? ""}` : ""}{st.bmkg.temperature != null ? ` · ${st.bmkg.temperature}°C` : ""}
+                      </p>
                     )}
                   </div>
                 </Popup>

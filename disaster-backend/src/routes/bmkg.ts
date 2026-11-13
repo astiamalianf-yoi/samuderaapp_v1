@@ -3,8 +3,12 @@ import { getBmkgData } from "../lib/bmkg-fetch";
 import { getActiveNowcast } from "../lib/bmkg-nowcast";
 import { listSimWarnings, SIM_ENABLED, simWarningCap, simWarningsRss } from "../lib/bmkg-sim";
 import { ALLOWED_BEACH_LOCATIONS } from "../types";
+import { allBeachStatus } from "../lib/map-status";
 
 const route = new Hono();
+
+/** Peta: every beach's status, fishermen's warning and BMKG together, same rule as the Beranda card. */
+route.get("/map/status", async (c) => c.json({ ok: true, data: await allBeachStatus() }));
 
 /** Active BMKG short-term warnings (peringatan dini) covering a beach. */
 route.get("/bmkg/nowcast/:beach", async (c) => {
