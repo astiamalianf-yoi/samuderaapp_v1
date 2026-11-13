@@ -148,10 +148,24 @@ try {
 }
 
 import { registerRoute, NavigationRoute } from 'workbox-routing';
-import { NetworkFirst, StaleWhileRevalidate, NetworkOnly } from 'workbox-strategies';
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate, NetworkOnly } from 'workbox-strategies';
+import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { BackgroundSyncPlugin } from 'workbox-background-sync';
 import { OBSERVATION_OPTIONS } from './constants/reportConstants';
+
+// Map background (OpenStreetMap tiles, requested with CORS) - CacheFirst: after the first visit the map opens from the
+// phone, also with a weak signal or offline. Tiles change rarely; 30 days, up to ~3000 tiles (~60 MB).
+registerRoute(
+  ({ url }) => url.hostname === 'tile.openstreetmap.org',
+  new CacheFirst({
+    cacheName: 'map-tiles',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [200] }),
+      new ExpirationPlugin({ maxEntries: 3000, maxAgeSeconds: 30 * 24 * 60 * 60, purgeOnQuotaError: true }),
+    ],
+  })
+);
 
 // Cache BMKG APIs (Forecast and RSS) - StaleWhileRevalidate
 registerRoute(

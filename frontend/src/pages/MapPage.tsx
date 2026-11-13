@@ -94,6 +94,12 @@ export function MapPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxZoom={19}
+            // Fewer requests on a slow connection: load tiles when panning stops, keep a ring of
+            // tiles around the view, and fade them in only once.
+            updateWhenIdle
+            keepBuffer={3}
+            // CORS requests, so the service worker can keep real (not opaque) copies of the tiles.
+            crossOrigin
           />
           {BEACH_LOCATIONS.map((b) => {
             const st = status.find((x) => x.beach === b.value)
