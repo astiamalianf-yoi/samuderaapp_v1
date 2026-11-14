@@ -94,7 +94,10 @@ await sub.subscribe(ALERTS_CHANNEL, async (message) => {
 		}
 	}
 
-	if (ENABLE_PUSH_DELIVERY) {
+	let quiet = false;
+	try { quiet = (JSON.parse(message) as { decision?: { notify?: boolean } }).decision?.notify === false; } catch { /* not JSON */ }
+	if (ENABLE_PUSH_DELIVERY && quiet) console.log("[push] skipped: warning updated quietly (no new sign, level not higher)");
+	if (ENABLE_PUSH_DELIVERY && !quiet) {
 		console.log("[push] attempting push delivery");
 		const pushResult = await sendPushAlertToAll(message);
 		console.log("[push] result:", pushResult);

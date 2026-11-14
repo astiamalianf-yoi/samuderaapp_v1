@@ -9,6 +9,7 @@ import { findFishermanByToken, fishermanReporterKey } from "../lib/fishermen";
 import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
 import { tokenFrom } from "./fishermen";
+import { notifyDecision } from "../lib/notify-gate";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
@@ -411,6 +412,9 @@ route.post("/report", async (c) => {
 			likRiskLevel(result, isMultisign);
 		const shouldDistribute = reassuranceFinalLevel !== "NORMAL";
 		const riskLevel = reassuranceFinalLevel.toLowerCase();
+		// Repeat reports during an active warning only notify again when a sign is new or the level rose.
+		const gate = notifyDecision(existingWarning, triggeredCodes, reassuranceFinalLevel);
+		const notify = shouldDistribute && gate.notify;
 
 		const reporterCount = await countReporters(beachLocation, triggeredCodes);
 
@@ -439,6 +443,8 @@ route.post("/report", async (c) => {
 				is_actionable: isActionable,
 				final_risk_level: reassuranceFinalLevel,
 				shouldDistribute,
+				notify,
+				notify_reason: gate.reason,
 				community_basis: communityBasis
 					? { source: communityBasis.source, registered: communityBasis.registered, min: communityBasis.min, inaction_share: communityBasis.inactionShare }
 					: { source: "beach_profile" },
@@ -478,12 +484,13 @@ route.post("/report", async (c) => {
 		console.log("[report] publishing to Redis channel", ALERTS_CHANNEL, "channel:", channel, "alertId:", alertEvent.alertId);
 		await redis.publish(ALERTS_CHANNEL, alertJson);
 		console.log("[report] published OK");
-		const iotResult = await publishIotAlertForEvent(alertEvent);
+		const iotResult = notify ? await publishIotAlertForEvent(alertEvent) : { published: false, topic: undefined };
 		if (iotResult.published) {
 			console.log("[report] published IoT MQTT alert", iotResult.topic);
 		}
 
-		if (channel !== "WHATSAPP" && shouldDistribute) {
+		if (!notify) console.log("[report] warning updated quietly (no new sign, level not higher):", beachLocation, triggeredCodes);
+		if (channel !== "WHATSAPP" && notify) {
 			const alertText = formatWhatsAppAlert({
 				beachLocation,
 				communityCharacteristics: result.community_characteristics,

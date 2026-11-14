@@ -127,12 +127,14 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 			const alertEvent = data.alertEvent;
 			const riskLabel = riskLabelFor(alertEvent.riskLevel);
 
+			const notified = alertEvent.decision?.notify !== false;
 			return [
 				"✅ Laporan diterima, Bang!",
-				`⚠️ THRESHOLD TERLAMPAUI — ${riskLabel}`,
+				`Tanda: ${signText}`,
 				`Pantai: ${beachName}`,
-				`Jumlah pelapor: ${alertEvent.reporterCount}`,
-				"Peringatan sedang dikirim ke semua nelayan.",
+				notified
+					? `⚠️ Peringatan ${riskLabel} dikirim ke grup (dilaporkan oleh ${alertEvent.reporterCount} nelayan).`
+					: `ℹ️ Peringatan ${riskLabel} untuk pantai ini masih berlaku. Laporan Anda ikut memperpanjangnya, tanpa pesan baru ke grup.`,
 				...syncNote(data, sender),
 			].join("\n");
 		}

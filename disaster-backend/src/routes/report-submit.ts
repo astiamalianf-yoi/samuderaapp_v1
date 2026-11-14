@@ -8,6 +8,7 @@ import { sendOpenClawBeachAlert } from "../lib/openclaw";
 import { findFishermanByPhone, fishermanReporterKey } from "../lib/fishermen";
 import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
+import { notifyDecision } from "../lib/notify-gate";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
@@ -194,6 +195,8 @@ route.get("/report/submit", async (c) => {
 		(reassuranceResult?.finalLevel as string) ??
 		likRiskLevel(result, isMultisign);
 	const riskLevel = reassuranceFinalLevel.toLowerCase();
+	// Repeat reports during an active warning only notify again when a sign is new or the level rose.
+	const gate = notifyDecision(existingWarning, triggeredCodes, reassuranceFinalLevel);
 	const reporterCount = await countReporters(beachLocation, triggeredCodes);
 	const timeRange = await getReportTimeRange(beachLocation, triggeredCodes);
 
@@ -220,6 +223,8 @@ route.get("/report/submit", async (c) => {
 			is_actionable: isActionable,
 			final_risk_level: reassuranceFinalLevel,
 			shouldDistribute: reassuranceFinalLevel !== "NORMAL",
+			notify: gate.notify && reassuranceFinalLevel !== "NORMAL",
+			notify_reason: gate.reason,
 		},
 		input: mlPayload,
 		ml: result,
@@ -248,12 +253,14 @@ route.get("/report/submit", async (c) => {
 	console.log("[report-submit] publishing to Redis channel", ALERTS_CHANNEL, "channel:", normalizedChannel, "alertId:", alertEvent.alertId);
 	await redis.publish(ALERTS_CHANNEL, alertJson);
 	console.log("[report-submit] published OK");
-	const iotResult = await publishIotAlertForEvent(alertEvent);
+	const notify = gate.notify && reassuranceFinalLevel !== "NORMAL";
+	const iotResult = notify ? await publishIotAlertForEvent(alertEvent) : { published: false, topic: undefined };
 	if (iotResult.published) {
 		console.log("[report-submit] published IoT MQTT alert", iotResult.topic);
 	}
 
-	if (isWA) {
+	if (!notify) console.log("[report-submit] warning updated quietly (no new sign, level not higher):", beachLocation, triggeredCodes);
+	if (isWA && notify) {
 		const riskLabel = riskLabelFor(alertEvent.riskLevel);
 		const alertText = [
 			`⚠️ PERINGATAN — ${riskLabel} di ${beachLocation.replace(/_/g, " ")}`,
