@@ -38,4 +38,9 @@ describe("Peta status = Beranda rule", () => {
 		Object.assign(state, { active: null, nowcast: [], forecast: { ...calm, windSpeed: 35 } });
 		expect((await M.beachStatus("pantai_lampuuk")).level).toBe("WASPADA");
 	});
+	test("BMKG has ended: back to the fishermen's own level, not the level fused at report time (UAT G-11)", async () => {
+		const likWaspadaFused = { codes: ["Wn-5"], triggeredAt: 1, alertId: "b", alertEvent: { riskLevel: "WASPADA", ml: { lik_risk_level: "WASPADA", active_warning: ["Wn-5"] }, decision: { shouldDistribute: true, final_risk_level: "SIAGA" } } };
+		Object.assign(state, { active: likWaspadaFused, nowcast: [], forecast: calm });
+		expect((await M.beachStatus("pantai_lampuuk")).level).toBe("WASPADA");
+	});
 });

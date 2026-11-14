@@ -57,9 +57,10 @@ export async function beachStatus(beach: string, now = Date.now()): Promise<Beac
 	let level = bmkg;
 	let lik: BeachStatus["lik"] = null;
 	if (active && distributed) {
-		const likLevel = toLevelIndex(ev?.ml?.lik_risk_level);
-		const eventLvl = toLevelIndex(ev?.decision?.final_risk_level ?? ev?.riskLevel ?? ev?.ml?.lik_risk_level);
-		level = Math.max(eventLvl, fuseLevels(likLevel, bmkg));
+		// The fishermen's own level. decision.final_risk_level is not used: it was fused with the BMKG
+		// situation at report time and would keep the beach raised after BMKG has ended (UAT G-11).
+		const likLevel = toLevelIndex(ev?.ml?.lik_risk_level ?? ev?.riskLevel ?? ev?.decision?.final_risk_level);
+		level = fuseLevels(likLevel, bmkg);
 		lik = {
 			level: LEVELS[Math.max(likLevel, 1)]!,
 			codes: (ev?.ml?.active_warning as string[] | undefined) ?? active.codes,

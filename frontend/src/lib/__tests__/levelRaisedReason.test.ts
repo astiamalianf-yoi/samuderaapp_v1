@@ -27,3 +27,10 @@ describe("levelRaisedReason", () => {
     expect(levelRaisedReason({ level: "EKSTREM", strategy: "STANDARD", bmkgLevel: "SIAGA", communityLevel: "SIAGA", personal: true })).toBeNull()
   })
 })
+
+describe("levelRaisedReason with the community level taken from the fishermen's own level (UAT E-16)", () => {
+  it("names only BMKG when the beach's own warning is WASPADA", () => {
+    expect(levelRaisedReason({ level: "SIAGA", strategy: "ENHANCED_MONITORING", bmkgLevel: "SIAGA", communityLevel: "WASPADA", personal: true }))
+      .toBe("Level SIAGA karena peringatan BMKG. Pesan di atas tetap berlaku untuk tanda ini.")
+  })
+})

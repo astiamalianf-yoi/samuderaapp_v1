@@ -121,11 +121,12 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
 
   // ---- Active warning
   // Fishermen's side: the personal strategy level, or the level of the community warning.
+  const communityLevel = eventLevel(event)
   const likLevel = maxLevel(
     personal?.lik_risk_level ? toLevel(personal.lik_risk_level) : "NORMAL",
-    event?.ml?.lik_risk_level ? toLevel(event.ml.lik_risk_level) : "NORMAL",
+    communityLevel,
   )
-  const level = maxLevel(eventLevel(event), fuseLevels(likLevel, bmkgState.level))
+  const level = fuseLevels(likLevel, bmkgState.level)
   const s = LEVELS[level === "NORMAL" ? "WASPADA" : level]
   const strategy = personal?.warning_strategy ?? event?.ml?.warning_strategy ?? null
   const head = strategy ? STRATEGY_HEADLINE[strategy.code] : null
@@ -134,7 +135,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     level,
     strategy: strategy?.code,
     bmkgLevel: bmkgState.level,
-    communityLevel: maxLevel(eventLevel(event), event?.ml?.lik_risk_level ? toLevel(event.ml.lik_risk_level) : "NORMAL"),
+    communityLevel,
     personal: !!personal?.warning_strategy,
   })
   const codes = event?.ml?.active_warning ?? active.codes ?? []

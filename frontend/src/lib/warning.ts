@@ -31,9 +31,14 @@ export function toLevel(value: unknown): RiskLevel {
   return "NORMAL"
 }
 
+/**
+ * The fishermen's own level of a community warning (LIK side only).
+ * decision.final_risk_level is not used: it was fused with BMKG at report time, so it would keep the
+ * card raised after BMKG has ended (UAT G-11). The card fuses with the current BMKG state instead.
+ */
 export function eventLevel(ev?: ActiveWarningEvent | null): RiskLevel {
   if (!ev) return "NORMAL"
-  return toLevel(ev.decision?.final_risk_level ?? ev.riskLevel ?? ev.ml?.lik_risk_level)
+  return toLevel(ev.ml?.lik_risk_level ?? ev.riskLevel ?? ev.decision?.final_risk_level)
 }
 
 /** Short, plain instruction for each warning strategy (paper Table 10). */

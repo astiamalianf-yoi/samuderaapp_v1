@@ -26,8 +26,10 @@ describe("signs", () => {
 })
 
 describe("warning level", () => {
-  it("prefers the fused final level", () => {
-    expect(eventLevel(ev({ decision: { is_actionable: true, final_risk_level: "EKSTREM" }, riskLevel: "siaga" }))).toBe("EKSTREM")
+  it("uses the fishermen's own level, not the level fused with BMKG at report time (UAT G-11)", () => {
+    expect(eventLevel(ev({ decision: { is_actionable: true, final_risk_level: "EKSTREM" }, riskLevel: "siaga" }))).toBe("SIAGA")
+    expect(eventLevel(ev({ decision: { is_actionable: true, final_risk_level: "SIAGA" }, ml: { lik_risk_level: "WASPADA" } } as never))).toBe("WASPADA")
+    expect(eventLevel(ev({ decision: { is_actionable: true, final_risk_level: "SIAGA" } }))).toBe("SIAGA")
     expect(eventLevel(ev({ riskLevel: "waspada" }))).toBe("WASPADA")
     expect(toLevel("HIGH")).toBe("SIAGA")
     expect(eventLevel(null)).toBe("NORMAL")
