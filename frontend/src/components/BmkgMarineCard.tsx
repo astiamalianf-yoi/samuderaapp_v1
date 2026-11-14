@@ -75,8 +75,9 @@ export function BmkgMarineCard({ data, alerts = [], beachLabel }: { data: BmkgDa
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         {official ? (
+          // While an official warning covers the beach, show only the warning: the routine forecast was made
+          // earlier and can contradict it (e.g. "Hujan Ringan" under a heavy-rain warning), 14 Nov 2026.
           <Stat Icon={weatherIcon(official.condition)} label="Cuaca" value={official.condition} tone="siaga"
-            sub={data.weather ? `Prakiraan: ${data.weather}` : undefined}
             note={`Berlaku s.d. ${official.end}`} />
         ) : (
           <Stat Icon={weatherIcon(data.weather)} label="Cuaca" value={data.weather || "-"} tone={wTone}

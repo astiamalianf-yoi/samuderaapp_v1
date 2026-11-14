@@ -75,7 +75,8 @@ describe("BmkgMarineCard agrees with the official BMKG warning card", () => {
     const red = container.querySelectorAll('[data-tone="siaga"]')
     expect(red.length).toBe(1)
     expect(red[0].textContent).toContain("Hujan Lebat dan Petir")
-    expect(red[0].textContent).toContain("Prakiraan: Berawan")
+    expect(red[0].textContent).not.toContain("Prakiraan")  // the routine forecast is hidden under an official warning (14 Nov)
+    expect(red[0].textContent).not.toContain("Berawan")
   })
 
   it("warning for another area or already expired: forecast stays normal", () => {
