@@ -10,6 +10,7 @@ import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
 import { tokenFrom } from "./fishermen";
 import { notifyDecision } from "../lib/notify-gate";
+import { groupAlertFor } from "../lib/group-alert";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
@@ -41,110 +42,6 @@ export const BEACH_DISPLAY_NAMES: Record<string, string> = {
 	pantai_batu_karas: "Pantai Batu Karas",
 	pantai_bojongsalawe: "Pantai Bojongsalawe",
 };
-
-const DANGER_TYPE_MAP: Record<string, string> = {
-	"Wn-1": "Cuaca Ekstrem",
-	"Wn-2": "Cuaca Ekstrem",
-	"Wn-3": "Cuaca Ekstrem",
-	"Wn-4": "Gelombang Tinggi",
-	"Wn-5": "Gelombang Tinggi",
-	"Wn-6": "Cuaca Ekstrem",
-	"Wn-7": "Angin Kencang",
-	"Wn-8": "Cuaca Buruk",
-	"Wn-9": "Hujan Lebat",
-	"Wn-13": "Cuaca Buruk",
-};
-
-function formatWhatsAppAlert(params: {
-	beachLocation: string;
-	communityCharacteristics: string;
-	actionRecommendation: string;
-	signDescription: string;
-	reporterCount: number;
-	triggeredCodes: string[];
-	serverTimestamp: number;
-	firstReportAt: number;
-	lastReportAt: number;
-	activeWarningTtlSeconds: number;
-	warningStrategy?: WarningStrategy | null;
-	/** Fused level (NORMAL/WASPADA/SIAGA/EKSTREM); EKSTREM = BAHAYA, both sources point to danger. */
-	finalLevel?: string;
-}): string {
-	const {
-		beachLocation,
-		communityCharacteristics,
-		actionRecommendation,
-		signDescription,
-		reporterCount,
-		triggeredCodes,
-		serverTimestamp,
-		firstReportAt,
-		lastReportAt,
-		activeWarningTtlSeconds,
-		warningStrategy,
-		finalLevel,
-	} = params;
-
-	const beachName = BEACH_DISPLAY_NAMES[beachLocation] ?? beachLocation;
-
-	const dangerTypes = [...new Set(triggeredCodes.map((c) => DANGER_TYPE_MAP[c] ?? "Bahaya").filter(Boolean))];
-	const dangerLabel = dangerTypes.length > 0 ? dangerTypes.join(" & ") : "Bahaya";
-
-	const dateStr = new Date(serverTimestamp).toLocaleDateString("id-ID", {
-		timeZone: "Asia/Jakarta",
-		day: "numeric",
-		month: "long",
-		year: "numeric",
-	});
-
-	const startStr = new Date(firstReportAt).toLocaleString("id-ID", {
-		timeZone: "Asia/Jakarta",
-		day: "numeric",
-		month: "long",
-		year: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-
-	const endStr = new Date(lastReportAt).toLocaleString("id-ID", {
-		timeZone: "Asia/Jakarta",
-		day: "numeric",
-		month: "long",
-		year: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-
-	const signLines = signDescription
-		.split(" | ")
-		.filter((s) => s.trim().length > 0)
-		.map((s) => `- ${s.trim()}`);
-
-	// Strategy label from the warning strategy matrix (paper Table 10); legacy label otherwise.
-	const riskLabel = warningStrategy?.label_id
-		?? (communityCharacteristics === "Actionable" ? "Risiko Tinggi" : "Risiko Rendah");
-
-	const lines = [
-		`⚠️ *Rekomendasi Aksi Prakiraan ${dangerLabel} di ${beachName}*`,
-		...(finalLevel ? [String(finalLevel).toUpperCase() === "EKSTREM"
-			? `🔴 *BAHAYA* — nelayan dan BMKG sama-sama memberi peringatan. Jangan melaut.`
-			: `Level: ${riskLabelFor(finalLevel)}`] : []),
-		``,
-		`📅 ${dateStr}`,
-		`👥 Dilaporkan oleh ${reporterCount} nelayan`,
-		`🕐 Mulai: ${startStr} | Berakhir: ${endStr}`,
-		``,
-		`🌊 *Tanda Alam Terdeteksi:*`,
-		...signLines,
-		``,
-		`📋 *Rekomendasi Aksi:*`,
-		`[${riskLabel}] ${actionRecommendation}`,
-		``,
-		`📱 Buka aplikasi SAMUDRA untuk peringatan khusus Anda.`,
-	];
-
-	return lines.join("\n");
-}
 
 const route = new Hono();
 const REPORT_DEDUPE_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -491,20 +388,8 @@ route.post("/report", async (c) => {
 
 		if (!notify) console.log("[report] warning updated quietly (no new sign, level not higher):", beachLocation, triggeredCodes);
 		if (channel !== "WHATSAPP" && notify) {
-			const alertText = formatWhatsAppAlert({
-				beachLocation,
-				communityCharacteristics: result.community_characteristics,
-				actionRecommendation: result.action_recommendation,
-				signDescription: result.sign_description,
-				reporterCount,
-				triggeredCodes,
-				serverTimestamp,
-				firstReportAt: timeRange.firstReportAt,
-				lastReportAt: timeRange.lastReportAt,
-				activeWarningTtlSeconds: ACTIVE_WARNING_TTL_SECONDS,
-				warningStrategy: result.warning_strategy,
-				finalLevel: reassuranceFinalLevel,
-			});
+			// Same wording as the app card for this beach (community view), 15 Nov 2026.
+			const alertText = await groupAlertFor(beachLocation, alertEvent as Record<string, any>, timeRange.firstReportAt || serverTimestamp);
 			await sendOpenClawBeachAlert(beachLocation, alertText);
 		}
 

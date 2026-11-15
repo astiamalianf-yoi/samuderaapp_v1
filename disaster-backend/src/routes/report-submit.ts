@@ -9,6 +9,7 @@ import { findFishermanByPhone, fishermanReporterKey } from "../lib/fishermen";
 import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
 import { notifyDecision } from "../lib/notify-gate";
+import { groupAlertFor } from "../lib/group-alert";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
@@ -261,15 +262,8 @@ route.get("/report/submit", async (c) => {
 
 	if (!notify) console.log("[report-submit] warning updated quietly (no new sign, level not higher):", beachLocation, triggeredCodes);
 	if (isWA && notify) {
-		const riskLabel = riskLabelFor(alertEvent.riskLevel);
-		const alertText = [
-			`⚠️ PERINGATAN — ${riskLabel} di ${beachLocation.replace(/_/g, " ")}`,
-			`👥 Dilaporkan oleh ${alertEvent.reporterCount} nelayan`,
-			`Tanda: ${triggeredCodes.join(", ")}`,
-			`Rekomendasi: ${alertEvent.ml?.action_recommendation ?? "Tidak ada rekomendasi"}`,
-			"Peringatan sedang dikirim ke semua nelayan.",
-			"📱 Buka aplikasi SAMUDRA untuk peringatan khusus Anda.",
-		].join("\n");
+		// Same wording as the app card and as warnings raised from the app (15 Nov 2026).
+		const alertText = await groupAlertFor(beachLocation, alertEvent as Record<string, any>, timeRange?.firstReportAt || serverTimestamp);
 		await sendOpenClawBeachAlert(beachLocation, alertText);
 		console.log("[report-submit] sent WhatsApp alert broadcast");
 	}
