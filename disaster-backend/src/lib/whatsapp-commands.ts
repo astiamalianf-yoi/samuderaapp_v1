@@ -111,9 +111,85 @@ const SHORT_FORMS: [RegExp, string][] = [
 	[/\b(?:pntai|pantay|pnt)\b/g, "pantai"],
 ];
 
+/**
+ * Words with the same meaning as a codebook word, written in its place before matching
+ * (informal, everyday or regional words fishermen use when typing quickly).
+ */
+const SAME_MEANING: [RegExp, string][] = [
+	[/\b(?:item|kelam|hitem)\b/g, "hitam"],
+	[/\b(?:gerimis|grimis)\b/g, "hujan"],
+	[/\b(?:guntur|geledek|gledek|geluduk|gemuruh)\b/g, "petir"],
+	[/\b(?:gede|gedhe|raksasa)\b/g, "besar"],
+	[/\b(?:dolfin|dolphin|pesut)\b/g, "lumba"],
+	[/\bburung\s+laut\b/g, "camar"],
+	[/\b(?:numpuk|menumpuk|bertumpuk|berkumpul|ngumpul|kumpul)\b/g, "bergumpal"],
+	[/\bawan\s+rendah\b/g, "awan turun"],
+	[/\b(?:ilang|hilng)\b/g, "hilang"],
+	[/\b(?:deres)\b/g, "deras"],
+	[/\b(\w{3,})2\b/g, "$1-$1"],
+];
+
+/** The words the sign rules are written with: misspelt words are corrected to one of these. */
+const SIGN_WORDS = [
+	"awan", "turun", "merendah", "gumpalan", "gumpal", "bergumpal", "menggumpal", "bergerombol", "berkelompok",
+	"mendekat", "mendekati", "menyatu", "saling", "kilat", "petir", "halilintar", "lumba", "camar", "burung",
+	"ombak", "gelombang", "besar", "tinggi", "rapat", "berubah", "kuat", "deras", "hujan", "tebal", "gelap",
+	"hitam", "pekat", "langit", "tertutup", "mendung", "kelabu", "cerah", "bintang", "hilang", "menghilang",
+	"redup", "lenyap", "terlihat", "kelihatan", "tampak", "muncul", "berkelip", "kelap", "kerlip", "bulan",
+	"kalajengking", "paus", "kecoak", "dentuman", "angin", "peralihan", "pergantian", "perubahan", "pancaroba",
+	"barat", "timur", "sejajar", "banyak", "tidak", "berganti", "beralih",
+];
+const SIGN_WORD_SET = new Set(SIGN_WORDS);
+/** Everyday words that are close to a sign word but must never be "corrected" into one. */
+const KEEP_WORDS = new Set([
+	"aman", "ada", "saya", "kami", "kita", "laut", "pantai", "dan", "yang", "sudah", "sekarang", "baru", "dari",
+	"lapor", "kejadian", "peringatan", "bang", "pak", "sini", "situ", "sana", "pagi", "siang", "sore", "malam",
+	"hari", "jam", "tadi", "lagi", "juga", "sangat", "agak", "mulai", "dekat", "jauh", "kapal", "perahu", "tidur",
+	"lampuuk", "lhoknga", "ulee", "lheue", "depok", "samas", "pangandaran", "batu", "karas", "bojongsalawe", "aceh",
+]);
+
+const consonants = (w: string) => w.replace(/[aeiou]/g, "");
+
+function editDistance(a: string, b: string): number {
+	const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+	for (let j = 1; j <= b.length; j++) d[0][j] = j;
+	for (let i = 1; i <= a.length; i++) {
+		for (let j = 1; j <= b.length; j++) {
+			const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+			d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+			if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+		}
+	}
+	return d[a.length][b.length];
+}
+
+/**
+ * A misspelt word -> the sign word it most likely is, or null. Two ways, both requiring the same first letter:
+ * the same consonants with vowels left out ("gumpl" -> "gumpal", "mndng" -> "mendung"), or at most one
+ * letter wrong (two for long words: "petr" -> "petir", "gelombng" -> "gelombang"). Ambiguous words stay as they are.
+ */
+export function correctSignWord(word: string): string | null {
+	if (word.length < 4 || SIGN_WORD_SET.has(word) || KEEP_WORDS.has(word) || /\d/.test(word)) return null;
+	const sk = consonants(word);
+	const byConsonants = sk.length >= 3 ? SIGN_WORDS.filter((w) => w[0] === word[0] && consonants(w) === sk) : [];
+	if (byConsonants.length === 1) return byConsonants[0];
+	const limit = word.length >= 8 ? 2 : 1;
+	let best: string | null = null;
+	let bestD = Infinity;
+	let tie = false;
+	for (const w of SIGN_WORDS) {
+		if (w[0] !== word[0] || Math.abs(w.length - word.length) > limit) continue;
+		const dist = editDistance(word, w);
+		if (dist < bestD) { bestD = dist; best = w; tie = false; } else if (dist === bestD) tie = true;
+	}
+	return best && bestD <= limit && !tie ? best : null;
+}
+
 export function normaliseReportText(text: string): string {
 	let s = text.toLowerCase().replace(/[.,!?;:()]+/g, " ");
 	for (const [re, to] of SHORT_FORMS) s = s.replace(re, to);
+	for (const [re, to] of SAME_MEANING) s = s.replace(re, to);
+	s = s.split(/\s+/).map((w) => correctSignWord(w) ?? w).join(" ");
 	return s.replace(/\s+/g, " ").trim();
 }
 
