@@ -7,11 +7,11 @@
     "whatsapp": {
       "enabled": true,
       "selfChatMode": false,
-      "dmPolicy": "disabled",
+      "dmPolicy": "open",
       "accounts": {
         "default": {
           "enabled": true,
-          "dmPolicy": "disabled",
+          "dmPolicy": "open",
           "allowFrom": ["*"],
           "groupPolicy": "open",
           "groups": { "*": { "requireMention": false } }

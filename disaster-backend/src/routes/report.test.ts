@@ -36,6 +36,7 @@ mock.module("../lib/crowdsource", () => ({
 	resetQueues: mockResetQueues,
 	reporterKeyFor: () => null,
 	countReporters: async () => 5,
+	reportersOf: async () => ["a", "b", "c", "d", "e"],
 }));
 
 mock.module("../lib/rate-limit", () => ({

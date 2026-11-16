@@ -35,17 +35,27 @@ async function handler(event) {
   const from = ctx.from || "";
   const channelId = ctx.channelId || "";
   const metadata = ctx.metadata || {};
-  const chatId = extractGroupIdFromSessionKey(event.sessionKey) || channelId;
+  const isGroupId = (v) => typeof v === "string" && /@g\.us$/i.test(v);
+  const groupId = extractGroupIdFromSessionKey(event.sessionKey || "");
+  // A private chat with the bot: the reply goes back to the person who wrote (`from`).
+  const isPrivate = !isGroupId(groupId) && !isGroupId(from);
+  const chatId = (isPrivate ? from || groupId : groupId || from) || channelId;
 
   if (!content) {
     console.log(`[webhook-relay] skipped: message without text (${chatId || "unknown chat"})`);
     return;
   }
 
+  // In a private chat only commands (!lapor, !peringatan, !kejadian…) go to SAMUDRA; ordinary
+  // chat with the admin number is not forwarded or stored.
+  if (isPrivate && !content.trim().startsWith("!")) {
+    console.log("[webhook-relay] skipped: private message without a command");
+    return;
+  }
+
   // The person who wrote the message. In a group, `from` is the group id; the sender's number is
   // in metadata.senderE164 (OpenClaw hook context). It links his WhatsApp reports to his app
   // registration, so never send the group id as the sender.
-  const isGroupId = (v) => typeof v === "string" && /@g\.us$/i.test(v);
   const sender =
     [metadata.senderE164, ctx.senderE164, metadata.senderId, ctx.senderId, from]
       .find((v) => typeof v === "string" && v.trim() && !isGroupId(v)) || "";

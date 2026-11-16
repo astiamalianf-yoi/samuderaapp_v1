@@ -10,7 +10,8 @@ import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
 import { notifyDecision } from "../lib/notify-gate";
 import { groupAlertFor } from "../lib/group-alert";
-import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters } from "../lib/crowdsource";
+import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters,
+	reportersOf } from "../lib/crowdsource";
 import { persistReport, persistShapPrediction } from "../lib/bmkg";
 import { reassure } from "../lib/reassurance";
 import { publishIotAlertForEvent } from "../lib/iot-mqtt";
@@ -198,7 +199,9 @@ route.get("/report/submit", async (c) => {
 	const riskLevel = reassuranceFinalLevel.toLowerCase();
 	// Repeat reports during an active warning only notify again when a sign is new or the level rose.
 	const gate = notifyDecision(existingWarning, triggeredCodes, reassuranceFinalLevel);
-	const reporterCount = await countReporters(beachLocation, triggeredCodes);
+	// Everyone behind the warning: these reports plus the people already in the active warning.
+	const reporters = [...new Set([...(existingWarning?.reporters ?? []), ...(await reportersOf(beachLocation, triggeredCodes))])];
+	const reporterCount = Math.max(reporters.length, 1);
 	const timeRange = await getReportTimeRange(beachLocation, triggeredCodes);
 
 	const alertEvent = {
@@ -236,7 +239,7 @@ route.get("/report/submit", async (c) => {
 		...(existingWarning?.codes ?? []),
 		...result.active_warning,
 	])];
-	await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, await likWarningTtlSeconds(beachLocation), alertEvent);
+	await setActiveWarning(beachLocation, mergedCodes, alertEvent.alertId, await likWarningTtlSeconds(beachLocation), alertEvent, reporters);
 
 	const alertJson = JSON.stringify(alertEvent);
 

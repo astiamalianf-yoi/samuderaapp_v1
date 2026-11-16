@@ -13,6 +13,8 @@ export type ActiveWarning = {
 	/** Its own end: 1 hour after the last trigger (ACTIVE_WARNING_TTL_SECONDS). */
 	ownExpiresAt?: number;
 	alertEvent?: Record<string, unknown>;
+	/** Everyone behind the warning (reporter keys; an anonymous report keeps its own entry). */
+	reporters?: string[];
 };
 
 const REPEAT_PREFIX = "reports:recent";
@@ -119,6 +121,22 @@ export async function countReporters(beachLocation: string, codes: string[]): Pr
 	return people.size + anonymous;
 }
 
+/**
+ * Who is behind the queued reports of these signs: one entry per person, and one per anonymous
+ * report. Kept on the active warning, because the queues are reset when a warning is triggered.
+ */
+export async function reportersOf(beachLocation: string, codes: string[]): Promise<string[]> {
+	const out = new Set<string>();
+	for (const code of codes) {
+		const members = await redis.zRange(`${QUEUE_PREFIX}:${beachLocation}:${code.toLowerCase()}`, 0, -1);
+		for (const m of members) {
+			const who = memberReporter(m);
+			out.add(who === "anon" || who === m ? m : who);
+		}
+	}
+	return [...out];
+}
+
 export async function getReportTimeRange(
 	beachLocation: string,
 	codes: string[],
@@ -189,6 +207,7 @@ export async function setActiveWarning(
 	alertId: string,
 	ttlSeconds: number,
 	alertEvent?: Record<string, unknown>,
+	reporters?: string[],
 ): Promise<void> {
 	const key = `${WARNING_PREFIX}:${beachLocation}`;
 	const warning: ActiveWarning = {
@@ -198,6 +217,7 @@ export async function setActiveWarning(
 		expiresAt: Date.now() + ttlSeconds * 1000,
 		ownExpiresAt: Date.now() + Math.min(ttlSeconds, ACTIVE_WARNING_TTL_SECONDS) * 1000,
 		...(alertEvent ? { alertEvent } : {}),
+		...(reporters?.length ? { reporters } : {}),
 	};
 	await redis.set(key, JSON.stringify(warning), { EX: ttlSeconds });
 }

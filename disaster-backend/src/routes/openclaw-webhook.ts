@@ -91,16 +91,36 @@ async function handleKejadian(text: string, sender?: string, chatId?: string): P
 	].join("\n");
 }
 
+/** A WhatsApp group chat (…@g.us), as opposed to a private chat with the bot. */
+export const isGroupChat = (chatId?: string) => typeof chatId === "string" && /@g\.us$/i.test(chatId.trim());
+
+/**
+ * Which beach a report without a beach name is about: the beach of the group it was sent in,
+ * else (private chat) the beach in the sender's registration. Null: we must ask him.
+ */
+export function defaultBeachFor(chatId: string | undefined, sender: string | undefined, lookup = findFishermanByPhone): string | null {
+	return beachForGroup(chatId) ?? lookup(sender)?.homeBeach ?? null;
+}
+
+/** Asked in a private chat when an unregistered number reports without a beach name. */
+export const PRIVATE_MISSING_BEACH =
+	"Di pantai mana, Bang? Tulis nama pantainya, contoh: *!lapor awan hitam lampuuk*\n" +
+	"ℹ️ Daftar di aplikasi SAMUDRA dengan nomor WhatsApp ini, supaya lain kali pantai Anda terisi otomatis.";
+
+/** Added to the private receipt of a report that was sent in a beach group. */
+export const FROM_GROUP_NOTE =
+	"ℹ️ Laporan Anda dari grup. Lain kali kirim *!lapor* di chat pribadi ini saja, supaya grup tetap untuk peringatan dan minta tolong.";
+
 async function handleLapor(text: string, chatId: string, sender?: string): Promise<string> {
 	let result = parseLaporCommand(text);
-	// In a beach group, a report without a beach name is about that group's beach.
-	const groupBeach = beachForGroup(chatId);
-	if (!result.ok && result.missing === "location" && groupBeach) {
-		result = parseLaporCommand(`${text} ${groupBeach.replace(/_/g, " ")}`);
+	// No beach name: the group's beach, or (private chat) the beach in his registration.
+	const fallbackBeach = !result.ok && result.missing === "location" ? defaultBeachFor(chatId, sender) : null;
+	if (fallbackBeach) {
+		result = parseLaporCommand(`${text} ${fallbackBeach.replace(/_/g, " ")}`);
 	}
 
 	if (!result.ok) {
-		if (result.missing === "location") return getMissingLocationMessage();
+		if (result.missing === "location") return isGroupChat(chatId) ? getMissingLocationMessage() : PRIVATE_MISSING_BEACH;
 		return getMissingSignsMessage();
 	}
 
@@ -171,9 +191,9 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 	}
 }
 
-async function handlePeringatan(text: string, chatId: string): Promise<string> {
-	// In a beach group, "!peringatan" alone shows that beach only, never the neighbours'.
-	const beachFilter = parsePeringatanCommand(text) ?? beachForGroup(chatId);
+async function handlePeringatan(text: string, chatId: string, sender?: string): Promise<string> {
+	// "!peringatan" alone: the group's beach, or (private chat) the beach in his registration.
+	const beachFilter = parsePeringatanCommand(text) ?? defaultBeachFor(chatId, sender);
 
 	try {
 		const params = beachFilter ? `?beach_location=${beachFilter}` : "";
@@ -271,16 +291,24 @@ route.post("/openclaw/webhook", async (c) => {
 				console.log(`[openclaw-webhook] Intercepted command: ${lowerText.substring(0, 50)}`);
 
 				let reply: string;
+				let target = replyTarget;
 				if (command === "lapor") {
 					reply = await handleLapor(cleanText, replyTarget, sender);
+					// A report sent in a group: the receipt goes to him privately, so the group stays
+					// for warnings and calls for help. The warning itself still goes to the group.
+					const phone = normalizePhone(sender);
+					if (isGroupChat(replyTarget) && phone) {
+						target = `+${phone}`;
+						reply = `${reply}\n${FROM_GROUP_NOTE}`;
+					}
 				} else if (command === "kejadian") {
 					reply = await handleKejadian(cleanText, sender, replyTarget);
 				} else {
-					reply = await handlePeringatan(cleanText, replyTarget);
+					reply = await handlePeringatan(cleanText, replyTarget, sender);
 				}
 
-				await sendOpenClawReply(replyTarget, reply);
-				console.log("[openclaw-webhook] Command handled, reply sent to:", replyTarget);
+				await sendOpenClawReply(target, reply);
+				console.log("[openclaw-webhook] Command handled, reply sent to:", target === replyTarget ? target : `private ${masked(target)}`);
 
 				return c.json({ success: true, handled: true, command });
 			}

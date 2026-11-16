@@ -9,7 +9,11 @@ in `docker-compose.yml`).
 - `groupPolicy: open` lets every member's `!lapor` reach SAMUDRA. `requireMention: false` is needed:
   with `true`, OpenClaw 2026.5.12 drops messages that do not @mention the bot before the relay hook
   sees them, so a plain `!lapor` never reaches the backend (found on staging, 12 Nov 2026). No AI
-  provider is configured, so the agent cannot answer ordinary chat anyway. DMs to the bot are off.
+  provider is configured, so the agent cannot answer ordinary chat anyway. DMs are open (`dmPolicy: open`,
+  `allowFrom: ["*"]`) so that fishermen report privately and the group stays for warnings and calls
+  for help (16 Nov 2026). The relay forwards only private messages that start with `!`; a private
+  `!lapor` without a beach name uses the beach in his registration, or asks for it. A `!lapor` sent
+  in a group still counts, but its receipt goes to the sender privately.
 - OpenClaw 2026.5.12 needs the WhatsApp plugin matching its version:
   `docker compose run --rm openclaw-cli plugins install @openclaw/whatsapp@2026.5.12-beta.1`
   (the ClawHub default needs a newer OpenClaw and fails).
