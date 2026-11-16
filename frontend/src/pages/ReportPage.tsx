@@ -165,8 +165,8 @@ function RegisterFirst() {
           Daftar sekarang
         </Link>
         <p className="text-base text-gray-700 max-w-sm">
-          Peringatan tetap bisa dilihat tanpa mendaftar. Anda juga bisa melapor di grup WhatsApp dengan
-          menulis <span className="font-mono font-bold">!lapor</span>.
+          Peringatan tetap bisa dilihat tanpa mendaftar. Anda juga bisa melapor lewat chat pribadi ke nomor
+          WhatsApp SAMUDRA (tombol <b>WA</b> di atas) dengan menulis <span className="font-mono font-bold">!lapor</span>.
         </p>
         <a href={WHATSAPP_GROUP_URL} target="_blank" rel="noreferrer" className="min-h-12 flex items-center text-lg font-semibold text-emerald-700">
           Buka grup WhatsApp

@@ -51,7 +51,7 @@ const SLIDES: Slide[] = [
       <ul className="space-y-1">
         <Feature icon={<ShieldAlert className="w-5 h-5" aria-hidden />} text="Lihat status pantai Anda dan apa yang harus dilakukan melalui SAMUDRA atau grup WhatsApp" />
         <Feature icon={<UserRound className="w-5 h-5" aria-hidden />} text="Peringatan khusus untuk Anda, sesuai pengalaman dan laporan Anda" />
-        <Feature icon={<Megaphone className="w-5 h-5" aria-hidden />} text="Lapor tanda alam dengan 2 sentuhan, atau !lapor di grup WhatsApp" />
+        <Feature icon={<Megaphone className="w-5 h-5" aria-hidden />} text="Lapor tanda alam dengan 2 sentuhan, atau !lapor lewat chat pribadi ke WhatsApp SAMUDRA" />
         <Feature icon={<LifeBuoy className="w-5 h-5" aria-hidden />} text="Minta bantuan dalam kondisi bahaya dengan mengirimkan koordinat di grup WhatsApp" />
         <Feature icon={<BellRing className="w-5 h-5" aria-hidden />} text="Notifikasi di HP untuk pantai asal Anda" />
         <Feature icon={<WifiOff className="w-5 h-5" aria-hidden />} text="Tetap bisa dipakai saat sinyal lemah" />

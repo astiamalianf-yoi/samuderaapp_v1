@@ -463,7 +463,7 @@ function ActivitySection({ act }: { act: Activity }) {
         </p>
       )}
       <p className="text-sm text-gray-600">
-        Laporan dan kejadian yang Anda kirim, lewat aplikasi atau grup WhatsApp dengan nomor ini, ikut memperbarui
+        Laporan dan kejadian yang Anda kirim, lewat aplikasi atau WhatsApp dengan nomor ini, ikut memperbarui
         profil Anda, supaya peringatan makin sesuai dengan pengalaman Anda.
       </p>
     </section>

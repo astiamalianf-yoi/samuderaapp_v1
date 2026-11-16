@@ -11,7 +11,11 @@ export const API_HOST = (() => {
 })()
 
 /** WhatsApp: personal report bot and the community group. */
-export const WHATSAPP_REPORT_URL =
-  (import.meta.env.VITE_WHATSAPP_REPORT_URL as string | undefined) || "https://wa.me/6287816964069"
+/** The SAMUDRA bot number (digits, e.g. 6281234567890), set as WHATSAPP_BOT_NUMBER in the stack's .env. */
+const WHATSAPP_BOT_NUMBER = ((import.meta.env.VITE_WHATSAPP_BOT_NUMBER as string | undefined) || "").replace(/\D/g, "")
+/** Private chat with the bot, with "!lapor " already typed, so a fisherman reports privately. */
+export const WHATSAPP_REPORT_URL = WHATSAPP_BOT_NUMBER
+  ? `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=${encodeURIComponent("!lapor ")}`
+  : (import.meta.env.VITE_WHATSAPP_REPORT_URL as string | undefined) || "https://wa.me/6287816964069"
 export const WHATSAPP_GROUP_URL =
   (import.meta.env.VITE_WHATSAPP_GROUP_URL as string | undefined) || "https://chat.whatsapp.com/Fxg7ztLOfbJBcikGh4uPKD"

@@ -83,7 +83,7 @@ export function WhatsAppGroupCard() {
       <span className="w-12 h-12 rounded-full bg-[#25D366] flex items-center justify-center shrink-0">{WA_ICON}</span>
       <span className="flex-1">
         <span className="block text-lg font-bold">Grup WhatsApp Samudra</span>
-        <span className="block text-base text-gray-700">Peringatan juga dikirim ke grup. Lapor dengan ketik <b>!lapor</b>.</span>
+        <span className="block text-base text-gray-700">Grup untuk peringatan dan minta tolong. Lapor tanda alam lewat tombol <b>WA</b> di atas (chat pribadi) dengan <b>!lapor</b>.</span>
       </span>
     </a>
   )

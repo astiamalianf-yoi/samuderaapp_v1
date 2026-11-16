@@ -123,6 +123,8 @@ services:
         VITE_API_BASE_URL: https://${API_DOMAIN:-api.samudraapp.com}
         # Staging only: a coloured bar on every page so testers never mistake it for the real app.
         VITE_STAGE_LABEL: ${STAGE_LABEL:-}
+        # The samudraapp.com bot number (digits only): the WA button opens a private chat with it.
+        VITE_WHATSAPP_BOT_NUMBER: ${WHATSAPP_BOT_NUMBER:-}
     container_name: ${CONTAINER_PREFIX:-samudra}-web
     restart: unless-stopped
     depends_on:
