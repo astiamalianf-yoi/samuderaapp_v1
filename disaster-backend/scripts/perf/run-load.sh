@@ -17,4 +17,4 @@ if [ "$MODE" = "degraded" ]; then
 fi
 docker run --rm --cap-add NET_ADMIN --network "$NET" -e REDIS_URL=redis://redis:6379 \
   -v "$PWD/disaster-backend/scripts/perf:/perf:ro" oven/bun:1 \
-  sh -c "$SHAPE bun /perf/load-reports.ts --base=http://backend:3000 --count=$COUNT --concurrency=$CONC --beach=$BEACH --label=$MODE"
+  sh -c "bun /perf/probe.ts http://backend:3000 before-shaping; $SHAPE bun /perf/probe.ts http://backend:3000 after-shaping && bun /perf/load-reports.ts --base=http://backend:3000 --count=$COUNT --concurrency=$CONC --beach=$BEACH --label=$MODE; [ \"$MODE\" = degraded ] && tc -s qdisc show dev eth0 | head -4 || true"
