@@ -30,18 +30,19 @@ const showPhone = (digits: string) => `0${digits.slice(2, 5)}-${digits.slice(5, 
 
 /** WhatsApp group text for a help request. The number is used for this message only, never stored. */
 /** Why a help request has no location: he chose not to share it, or the phone could not give one. */
-export type LocationStatus = "not_shared" | "denied" | "unavailable";
+export type LocationStatus = "not_shared" | "denied" | "unavailable" | "via_whatsapp";
 const NO_LOCATION: Record<LocationStatus, string> = {
 	not_shared: "🗺️ Lokasi tidak dibagikan",
 	denied: "🗺️ Lokasi tidak terkirim: izin lokasi di HP ditolak",
 	unavailable: "🗺️ Lokasi tidak terkirim: GPS HP belum mendapat posisi",
+	via_whatsapp: "🗺️ Lokasi: diminta lewat WhatsApp; nelayan diminta membagikan lokasinya di grup ini",
 };
 
-export function formatHelpMessage(o: { beach: string; type: IncidentType; lat?: number | null; lon?: number | null; phone?: string | null; at?: Date; locationStatus?: LocationStatus | null }) {
+export function formatHelpMessage(o: { beach: string; type: IncidentType | null; lat?: number | null; lon?: number | null; phone?: string | null; at?: Date; locationStatus?: LocationStatus | null }) {
 	const lines = [
 		"🆘 *NELAYAN BUTUH BANTUAN*",
 		`📍 ${BEACH_DISPLAY_NAMES[o.beach] ?? o.beach}`,
-		`⚠️ ${INCIDENT_LABEL[o.type]}`,
+		`⚠️ ${o.type ? INCIDENT_LABEL[o.type] : "Bahaya di laut (jenis belum disebut)"}`,
 		`🕐 ${wib(o.at)}`,
 		o.lat != null && o.lon != null
 			? `🗺️ Lokasi: https://maps.google.com/?q=${o.lat.toFixed(5)},${o.lon.toFixed(5)}`

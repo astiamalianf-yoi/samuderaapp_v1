@@ -39,3 +39,19 @@ describe("!peringatan end time", () => {
 		expect(t).toContain("Kondisi Aman");
 	});
 });
+
+import { isHelpCommand } from "./openclaw-webhook";
+import { formatHelpMessage } from "./incidents";
+describe("call for help on WhatsApp", () => {
+	test("help commands", () => {
+		for (const t of ["!tolong", "!tolong angin kencang", "!bantu", "!sos", "!tlg ombak besar", "!kejadian badai tolong"]) expect(isHelpCommand(t)).toBe(true);
+		for (const t of ["!kejadian badai", "!lapor awan hitam", "tolong", "!peringatan"]) expect(isHelpCommand(t)).toBe(false);
+	});
+	test("message without a hazard type and with the location asked on WhatsApp", () => {
+		const m = formatHelpMessage({ beach: "pantai_lampuuk", type: null, phone: "6281277000011", locationStatus: "via_whatsapp" });
+		expect(m).toContain("NELAYAN BUTUH BANTUAN");
+		expect(m).toContain("jenis belum disebut");
+		expect(m).toContain("membagikan lokasinya");
+		expect(m).toContain("0812-7700-0011");
+	});
+});

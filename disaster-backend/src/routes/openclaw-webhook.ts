@@ -1,7 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
-import { beachForGroup, sendOpenClawReply } from "../lib/openclaw";
+import { beachForGroup, groupsForBeach, sendOpenClawBeachAlert, sendOpenClawReply } from "../lib/openclaw";
+import { formatHelpMessage } from "./incidents";
 import {
 	parseLaporCommand,
 	parsePeringatanCommand,
@@ -86,8 +87,54 @@ async function handleKejadian(text: string, sender?: string, chatId?: string): P
 		"✅ Kejadian dicatat, Bang. Hati-hati di laut.",
 		`Kejadian: ${names}`,
 		`Pantai: ${beachName}`,
-		"Butuh bantuan? Telepon Basarnas *115* atau *112*.",
+		"Butuh bantuan dari nelayan lain? Kirim *!tolong*. Darurat: Basarnas *115* atau *112*.",
 		...syncNote({ registered: Boolean(fisherman) }, sender),
+	].join("\n");
+}
+
+/** "!tolong", "!bantu", "!sos", or "!kejadian … tolong/bantu": a call for help. */
+export const isHelpCommand = (lower: string) =>
+	/^!(tolong|tlg|bantu|bantuan|sos)\b/.test(lower) || (/^!kejadian\b/.test(lower) && /\b(tolong|tlg|bantu|bantuan|sos)\b/.test(lower));
+
+/** One call for help per number per 10 minutes (repeated in panic are sent once), as in the app. */
+const HELP_COOLDOWN_SECONDS = 10 * 60;
+
+/**
+ * Call for help on WhatsApp: the help message goes to the WhatsApp group of the beach (same text
+ * as the app's "Saya butuh bantuan sekarang"), the incident is recorded, and the sender is asked
+ * to share his location in that group (the bot cannot read a shared location).
+ */
+export async function handleHelp(text: string, sender?: string, chatId?: string): Promise<string> {
+	const parsed = parseKejadianCommand(text.replace(/^!(tolong|tlg|bantu|bantuan|sos)\b/i, "!kejadian"));
+	const fisherman = findFishermanByPhone(sender);
+	const beach = parsed.beachLocation ?? defaultBeachFor(chatId, sender);
+	if (!beach) return "🆘 Di pantai mana, Bang? Contoh: *!tolong angin kencang di lampuuk*\nDarurat: Basarnas *115* atau *112*.";
+	const beachName = BEACH_DISPLAY[beach] ?? beach;
+	const type = (parsed.types[0] ?? null) as Parameters<typeof formatHelpMessage>[0]["type"];
+	if (fisherman) {
+		for (const t of parsed.types) saveIncident({ fishermanId: fisherman.id, beach, type: t, channel: "WHATSAPP", needHelp: true });
+		if (parsed.types.length) void recordClass(fisherman, "incident");
+	} else {
+		for (const t of parsed.types) holdForRegistration(sender, "incident", beach, { type: t });
+	}
+	if (groupsForBeach(beach).length === 0) {
+		return `🆘 ${beachName} belum punya grup WhatsApp SAMUDRA, jadi pesan bantuan tidak bisa dikirim ke nelayan lain.\nDarurat: telepon Basarnas *115* atau *112* sekarang.`;
+	}
+	const phone = normalizePhone(sender);
+	const key = `incident:help:wa:${phone ? phoneHash(phone) : chatId ?? "unknown"}`;
+	const fresh = await redis.set(key, "1", { NX: true, EX: HELP_COOLDOWN_SECONDS }).catch(() => "OK");
+	if (fresh !== "OK") {
+		return `🆘 Permintaan bantuan Anda sudah dikirim ke grup ${beachName} beberapa menit lalu.\nDarurat: Basarnas *115* atau *112*.`;
+	}
+	try {
+		await sendOpenClawBeachAlert(beach, formatHelpMessage({ beach, type, phone, locationStatus: "via_whatsapp" }));
+	} catch {
+		return "🆘 Pesan bantuan belum terkirim ke grup. Telepon Basarnas *115* atau *112* sekarang.";
+	}
+	return [
+		`🆘 Permintaan bantuan dikirim ke grup ${beachName}.`,
+		"📍 Bagikan lokasi Anda di grup itu: tekan 📎 atau ➕, lalu *Lokasi*.",
+		"📞 Darurat: Basarnas *115* atau *112*.",
 	].join("\n");
 }
 
@@ -276,7 +323,8 @@ route.post("/openclaw/webhook", async (c) => {
 
 			const cleanText = text.replace(/@\d+\s*/, "").trim();
 			const lowerText = cleanText.toLowerCase();
-			const command = lowerText.startsWith("!lapor") ? "lapor"
+			const command = isHelpCommand(lowerText) ? "tolong"
+				: lowerText.startsWith("!lapor") ? "lapor"
 				: lowerText.startsWith("!kejadian") ? "kejadian"
 				: lowerText.startsWith("!peringatan") ? "peringatan" : null;
 			const isCommand = command !== null;
@@ -301,6 +349,11 @@ route.post("/openclaw/webhook", async (c) => {
 						target = `+${phone}`;
 						reply = `${reply}\n${FROM_GROUP_NOTE}`;
 					}
+				} else if (command === "tolong") {
+					reply = await handleHelp(cleanText, sender, replyTarget);
+					// The call for help itself goes to the group; the instructions go to him privately.
+					const phone = normalizePhone(sender);
+					if (isGroupChat(replyTarget) && phone) target = `+${phone}`;
 				} else if (command === "kejadian") {
 					reply = await handleKejadian(cleanText, sender, replyTarget);
 				} else {
