@@ -5,7 +5,7 @@
  *   bun scripts/perf/wa-latency.ts --target=1203...@g.us --count=30 --interval=4000
  * Without --target, the first group of pantai_lampuuk is used.
  */
-import { redis } from "../../src/lib/redis";
+import { initRedis, redis } from "../../src/lib/redis";
 import { groupsForBeach, sendOpenClawReply } from "../../src/lib/openclaw";
 
 const arg = (k: string, d: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=").slice(1).join("=") ?? d;
@@ -16,6 +16,7 @@ const WAIT = Number(arg("wait", "30000"));
 const pct = (xs: number[], p: number) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)] : NaN; };
 
 async function main() {
+	await initRedis();
 	if (!TARGET) { console.log("No target: pass --target=<group id>"); process.exit(1); }
 	const startId = `${Date.now()}-0`;
 	for (let i = 1; i <= COUNT; i++) {

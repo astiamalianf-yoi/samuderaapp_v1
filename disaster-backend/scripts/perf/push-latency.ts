@@ -3,10 +3,10 @@
  * reads the delivery receipts that the app's service worker posts to /api/ack.
  * Run inside the backend container:  bun scripts/perf/push-latency.ts --count=30 --interval=3000
  */
-import { sendNotification, setVapidDetails, type PushSubscription } from "web-push";
-import { ACKS_STREAM, VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_SUBJECT } from "../../src/config";
-import { listPushSubscriptions } from "../../src/lib/push";
-import { redis } from "../../src/lib/redis";
+import { sendNotification, type PushSubscription } from "web-push";
+import { ACKS_STREAM } from "../../src/config";
+import { initWebPush, isPushConfigured, listPushSubscriptions } from "../../src/lib/push";
+import { initRedis, redis } from "../../src/lib/redis";
 
 const arg = (k: string, d: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=").slice(1).join("=") ?? d;
 const COUNT = Number(arg("count", "30"));
@@ -16,7 +16,9 @@ const WAIT = Number(arg("wait", "20000"));
 const pct = (xs: number[], p: number) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)] : NaN; };
 
 async function main() {
-	setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+	await initRedis();
+	initWebPush();
+	if (!isPushConfigured()) { console.log("Web Push is not configured on this server (VAPID keys)."); process.exit(1); }
 	const subs = await listPushSubscriptions();
 	if (!subs.length) { console.log("No push subscriptions on this server: turn on notifications in the app first."); process.exit(1); }
 	const run = `perf-${Date.now()}`;
