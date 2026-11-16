@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { ALERTS_STREAM } from "../config";
+import { getActiveWarning, type ActiveWarning } from "../lib/crowdsource";
 
 function deriveRiskLevel(decision: Record<string, unknown> | undefined): string {
 	if (!decision) return "unknown";
@@ -53,6 +54,18 @@ route.get("/alerts", async (c) => {
 			bmkg: parsed.bmkg as Record<string, unknown> | undefined,
 		};
 	}).filter(Boolean);
+
+	// A fishermen's warning ends with its beach's active warning: only the newest alert of that
+	// warning carries its end time and merged signs; older or ended ones get endsAt null.
+	const active = new Map<string, ActiveWarning | null>();
+	for (const a of alerts as any[]) {
+		if (!a || a.source === "BMKG" || !a.beachLocation) continue;
+		if (!active.has(a.beachLocation)) active.set(a.beachLocation, await getActiveWarning(a.beachLocation).catch(() => null));
+		const aw = active.get(a.beachLocation);
+		const current = aw && aw.alertId === a.alertId && (aw.expiresAt ?? 0) > Date.now();
+		a.endsAt = current ? aw!.expiresAt : null;
+		if (current && aw!.codes?.length) a.triggeredCodes = aw!.codes;
+	}
 
 	const sorted = alerts.reverse().slice(0, limit);
 	return c.json({ ok: true, data: sorted });

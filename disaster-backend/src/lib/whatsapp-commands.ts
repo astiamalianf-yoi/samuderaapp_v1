@@ -322,6 +322,9 @@ export function currentAlerts(alerts: any[], now = Date.now()): any[] {
 	return alerts.filter((a: any) => {
 		const expires = a?.bmkg?.expires;
 		if (a?.source === "BMKG" && typeof expires === "number" && expires > 0 && expires <= now) return false;
+		// A fishermen's alert whose warning has ended or was merged into a newer one (endsAt null).
+		if (a?.source !== "BMKG" && a?.endsAt === null) return false;
+		if (a?.source !== "BMKG" && typeof a?.endsAt === "number" && a.endsAt <= now) return false;
 		const key = a?.source === "BMKG" ? `bmkg|${a?.beachLocation ?? ""}` : a?.alertId || "";
 		if (key) {
 			if (seen.has(key)) return false;
@@ -376,7 +379,6 @@ export function formatAlertsResponse(alerts: any[], beachFilter?: string | null,
 		}
 
 		const firstReport = wibTime(alert.firstReportAt);
-		const lastReport = wibTime(alert.lastReportAt);
 		const signLabels = (alert.triggeredCodes || [])
 			.map((code: string) => LIK_LABELS[code.toUpperCase()] || code)
 			.join(", ");
@@ -386,7 +388,8 @@ export function formatAlertsResponse(alerts: any[], beachFilter?: string | null,
 			date,
 			"",
 			`👥 Dilaporkan oleh ${alert.reporterCount} nelayan`,
-			...(firstReport && lastReport ? [`🕐 Mulai: ${firstReport} WIB | Berakhir: ${lastReport} WIB`] : []),
+			// The end of the warning (as in the group message), not the time of the last report.
+			...(firstReport ? [`🕐 Mulai: ${firstReport} WIB${wibTime(alert.endsAt) ? ` · berlaku sampai ${wibTime(alert.endsAt)} WIB` : ""}`] : []),
 			...(signLabels ? ["", "Tanda Alam Terdeteksi:", `- ${signLabels}`] : []),
 			"",
 			"Rekomendasi Aksi:",

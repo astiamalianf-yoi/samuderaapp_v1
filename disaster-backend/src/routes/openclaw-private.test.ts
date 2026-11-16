@@ -24,3 +24,18 @@ describe("private reports to the bot", () => {
 		expect(FROM_GROUP_NOTE).toContain("chat pribadi");
 	});
 });
+
+import { formatAlertsResponse } from "../lib/whatsapp-commands";
+describe("!peringatan end time", () => {
+	const base = { source: "LIK", beachLocation: "pantai_lampuuk", riskLevel: "siaga", reporterCount: 2, triggeredCodes: ["Wn-3"], serverTimestamp: Date.UTC(2026, 10, 16, 10, 59), firstReportAt: Date.UTC(2026, 10, 16, 10, 59), lastReportAt: Date.UTC(2026, 10, 16, 10, 59) };
+	const now = Date.UTC(2026, 10, 16, 11, 10);
+	test("shows 'berlaku sampai' the warning's end, not the last report", () => {
+		const t = formatAlertsResponse([{ ...base, alertId: "a", endsAt: Date.UTC(2026, 10, 16, 11, 59) }], "pantai_lampuuk", now);
+		expect(t).toContain("Mulai: 17.59 WIB · berlaku sampai 18.59 WIB");
+		expect(t).not.toContain("Berakhir");
+	});
+	test("an ended or merged fishermen's alert is not shown", () => {
+		const t = formatAlertsResponse([{ ...base, alertId: "b", endsAt: null }], "pantai_lampuuk", now);
+		expect(t).toContain("Kondisi Aman");
+	});
+});
