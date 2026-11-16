@@ -1,7 +1,9 @@
 {
   "gateway": {
     "mode": "local",
-    "auth": { "mode": "token" }
+    "auth": {
+      "mode": "token"
+    }
   },
   "channels": {
     "whatsapp": {
@@ -12,9 +14,15 @@
         "default": {
           "enabled": true,
           "dmPolicy": "open",
-          "allowFrom": ["*"],
+          "allowFrom": [
+            "*"
+          ],
           "groupPolicy": "open",
-          "groups": { "*": { "requireMention": false } }
+          "groups": {
+            "*": {
+              "requireMention": false
+            }
+          }
         }
       }
     }
@@ -31,6 +39,20 @@
           }
         }
       }
+    }
+  },
+  "session": {
+    "sendPolicy": {
+      "rules": [
+        {
+          "action": "deny",
+          "match": {
+            "channel": "whatsapp",
+            "chatType": "direct"
+          }
+        }
+      ],
+      "default": "allow"
     }
   }
 }

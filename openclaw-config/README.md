@@ -28,3 +28,11 @@ answers only when the bot is @mentioned, and no AI provider is needed for report
 
 The relay hook reads `BACKEND_WEBHOOK_TOKEN` from this file itself, because OpenClaw 2026.5.12 does
 not pass a hook's `env` to the hook.
+
+## OpenClaw's own agent must not answer private chats (16 Nov 2026)
+
+With `dmPolicy: open`, every private message also starts OpenClaw's AI agent. No AI provider is
+configured, so it answered "⚠️ Something went wrong while processing your request…" next to
+SAMUDRA's own reply. `session.sendPolicy` denies the agent's replies in WhatsApp direct sessions;
+SAMUDRA's replies go through the bridge's gateway `send` and are not affected (check after
+changing: a private `halo` gets no answer, a private `!lapor …` still gets its receipt).
