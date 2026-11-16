@@ -21,3 +21,20 @@ export function notifyDecision(existing: ActiveWarning | null, triggeredCodes: s
 	if (rank(newLevel) > rank(prevLevel)) return { notify: true, reason: "level_up", newCodes };
 	return { notify: false, reason: "no_change", newCodes };
 }
+
+/** The signature of what a notification announces: the beach, its signs and its level. */
+export function notifySignature(beach: string, codes: string[], level: string): string {
+	return `${beach}:${[...new Set(codes)].sort().join(",")}:${String(level).toUpperCase()}`;
+}
+
+type SetNx = { set(key: string, value: string, opts: { NX: true; PX: number }): Promise<unknown> };
+
+/**
+ * Reports that arrive at the same moment all see "no active warning yet", so each would announce
+ * the same first warning. Only the first report to claim the signature notifies; the others are
+ * merged quietly (found by the 5,000-report load test, 16 Nov 2026).
+ */
+export async function claimNotify(store: SetNx, beach: string, codes: string[], level: string, windowMs = 120_000): Promise<boolean> {
+	const res = await store.set(`warning:notified:${notifySignature(beach, codes, level)}`, String(Date.now()), { NX: true, PX: windowMs });
+	return res === "OK";
+}

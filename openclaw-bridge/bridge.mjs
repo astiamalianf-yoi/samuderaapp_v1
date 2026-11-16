@@ -214,10 +214,10 @@ async function sendOutboundMessage(target, text) {
   try {
     await sendDirect(target, text);
     log(`outbound sent directly to ${target}: "${(text || "").slice(0, 60)}"`);
-    return;
+    return true;
   } catch (err) {
     log(`direct send failed for ${target}: ${err.message}${AGENT_FALLBACK ? " (trying the agent route)" : ""}`);
-    if (!AGENT_FALLBACK) return;
+    if (!AGENT_FALLBACK) return false;
   }
   try {
     const result = await gatewayPost("/v1/chat/completions", {
@@ -236,8 +236,23 @@ async function sendOutboundMessage(target, text) {
 
     const reply = result.choices?.[0]?.message?.content || "";
     log(`outbound sent to ${target}: "${(text || "").slice(0, 60)}" -> "${reply.slice(0, 60)}"`);
+    return true;
   } catch (err) {
     log(`outbound send error for ${target}: ${err.message}`);
+    return false;
+  }
+}
+
+// Timing of each outbound message (queued by the backend -> accepted by WhatsApp through the
+// gateway), for the performance test (scripts/perf/wa-latency.ts). Capped, so it never grows.
+const SENDTIMES_STREAM = process.env.OUTBOUND_SENDTIMES_STREAM || "whatsapp:sendtimes";
+async function recordSendTime(fields, target, startedAt, ok) {
+  try {
+    await redis.xadd(SENDTIMES_STREAM, "MAXLEN", "~", "2000", "*",
+      "target", target, "queuedAt", String(fields.timestamp || ""), "startedAt", String(startedAt),
+      "sentAt", String(Date.now()), "ok", ok ? "1" : "0", "type", String(fields.type || ""), "perf", String(fields.perf || ""));
+  } catch (err) {
+    log(`sendtimes record failed: ${err.message}`);
   }
 }
 
@@ -275,7 +290,9 @@ async function pollOutbound() {
 
       const targets = target.split(",").filter(Boolean);
       for (const t of targets) {
-        await sendOutboundMessage(t.trim(), text);
+        const startedAt = Date.now();
+        const ok = await sendOutboundMessage(t.trim(), text);
+        await recordSendTime(fields, t.trim(), startedAt, ok);
       }
     }
   } catch (err) {

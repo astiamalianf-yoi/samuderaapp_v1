@@ -192,8 +192,10 @@ export async function sendPushAlertToAll(alertJson: string) {
 			}
 		}
 
+		// Send time inside the push, so the app can report when it arrived (POST /api/ack).
+		const timed = payload.replace(/}$/, `,"sentAt":${Date.now()}}`);
 		try {
-			await sendNotification(subscription as PushSubscription, payload, {
+			await sendNotification(subscription as PushSubscription, timed, {
 				TTL: 60,
 				urgency: "high",
 				topic: typeof alertEvent.alertId === "string" ? alertEvent.alertId.replace(/-/g, "").slice(0, 32) : undefined,

@@ -27,3 +27,18 @@ describe("repeat reports during an active warning (option 1, 14 Nov)", () => {
 		expect(notifyDecision(active(["Wn-5"], "NORMAL", false), ["Wn-5"], "WASPADA")).toMatchObject({ notify: true, reason: "level_up" });
 	});
 });
+
+import { claimNotify, notifySignature } from "./notify-gate";
+describe("claimNotify (simultaneous reports)", () => {
+	test("only the first of many simultaneous claims notifies", async () => {
+		const keys = new Set<string>();
+		const store = { set: async (k: string) => (keys.has(k) ? null : (keys.add(k), "OK")) };
+		const results = await Promise.all(Array.from({ length: 20 }, () => claimNotify(store, "pantai_samas", ["Wn-5"], "WASPADA")));
+		expect(results.filter(Boolean).length).toBe(1);
+	});
+	test("a new sign or a higher level is a new signature", () => {
+		expect(notifySignature("b", ["Wn-5"], "WASPADA")).not.toBe(notifySignature("b", ["Wn-5", "Wn-3"], "WASPADA"));
+		expect(notifySignature("b", ["Wn-5"], "WASPADA")).not.toBe(notifySignature("b", ["Wn-5"], "SIAGA"));
+		expect(notifySignature("b", ["Wn-3", "Wn-5"], "siaga")).toBe(notifySignature("b", ["Wn-5", "Wn-3"], "SIAGA"));
+	});
+});

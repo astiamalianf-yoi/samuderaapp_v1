@@ -9,7 +9,7 @@ import { findFishermanByToken, fishermanReporterKey } from "../lib/fishermen";
 import { logFishermanReport } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
 import { tokenFrom } from "./fishermen";
-import { notifyDecision } from "../lib/notify-gate";
+import { claimNotify, notifyDecision } from "../lib/notify-gate";
 import { groupAlertFor } from "../lib/group-alert";
 import { processReport, getActiveWarning, setActiveWarning, getReportTimeRange, resetQueues, reporterKeyFor, countReporters,
 	reportersOf } from "../lib/crowdsource";
@@ -311,7 +311,11 @@ route.post("/report", async (c) => {
 		const shouldDistribute = reassuranceFinalLevel !== "NORMAL";
 		const riskLevel = reassuranceFinalLevel.toLowerCase();
 		// Repeat reports during an active warning only notify again when a sign is new or the level rose.
-		const gate = notifyDecision(existingWarning, triggeredCodes, reassuranceFinalLevel);
+		let gate = notifyDecision(existingWarning, triggeredCodes, reassuranceFinalLevel);
+		if (gate.notify) {
+			const announced = [...new Set([...(existingWarning?.codes ?? []), ...triggeredCodes])];
+			if (!(await claimNotify(redis, beachLocation, announced, reassuranceFinalLevel))) gate = { ...gate, notify: false, reason: "no_change" };
+		}
 		const notify = shouldDistribute && gate.notify;
 
 		// Everyone behind the warning: these reports plus the people already in the active warning.

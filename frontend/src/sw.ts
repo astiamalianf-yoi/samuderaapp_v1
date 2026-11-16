@@ -246,6 +246,29 @@ self.addEventListener("push", (event) => {
         payload = undefined
       }
 
+      // Delivery receipt: when the server put its send time in the push, tell it when the push
+      // arrived (push latency for the performance test; never blocks the notification).
+      const sentAt = (payload as { sentAt?: unknown } | undefined)?.sentAt
+      const ackId = (payload as { alertId?: unknown } | undefined)?.alertId
+      if (typeof sentAt === "number" && typeof ackId === "string") {
+        fetch(`${API_BASE_URL}/api/ack`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ alertId: ackId, transport: "PUSH", ackStage: "DELIVERED", serverTimestamp: sentAt, receivedAtClient: Date.now() }),
+        }).catch(() => undefined)
+      }
+
+      // Performance-test push: always shown under one tag, so a series replaces itself.
+      if ((payload as { type?: unknown } | undefined)?.type === "PERF_TEST") {
+        await self.registration.showNotification(payload?.title ?? "Uji kecepatan SAMUDRA", {
+          body: payload?.body ?? "Pesan uji, abaikan.",
+          tag: "samudra-perf",
+          silent: true,
+          data: { url: "/" },
+        })
+        return
+      }
+
       const payloadData = payload?.data as { beach_location?: string; beach?: string } | undefined
       const payloadBeach = payload?.beach_location ?? payload?.beach ?? payloadData?.beach_location ?? payloadData?.beach
 
