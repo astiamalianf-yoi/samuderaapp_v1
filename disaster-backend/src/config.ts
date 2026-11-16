@@ -49,6 +49,8 @@ export const ACTIVE_WARNING_TTL_SECONDS = Number(process.env.ACTIVE_WARNING_TTL_
 
 // Anonymous flood guard for /report (no auth required): max requests per IP per window.
 export const REPORT_RATE_LIMIT_MAX = Number(process.env.REPORT_RATE_LIMIT_MAX ?? 15);
+/** Per registered fisherman per window (his offline queue is replayed at once). */
+export const REPORT_RATE_LIMIT_MAX_REGISTERED = Number(process.env.REPORT_RATE_LIMIT_MAX_REGISTERED ?? 120);
 export const REPORT_RATE_LIMIT_WINDOW_SECONDS = Number(process.env.REPORT_RATE_LIMIT_WINDOW_SECONDS ?? 60);
 export const PUSH_SUBSCRIPTIONS_HASH = process.env.PUSH_SUBSCRIPTIONS_HASH ?? "alerts:push:subscriptions";
 export const ENABLE_SSE_DELIVERY = parseBoolEnv(process.env.ENABLE_SSE_DELIVERY, true);

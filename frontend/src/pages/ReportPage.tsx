@@ -10,6 +10,7 @@ import { useRegistration, useSelectedBeach } from "../hooks/useAppState"
 import { ApiError, reportService } from "../services/reportService"
 import { saveRegistration } from "../lib/registration"
 import { WHATSAPP_REPORT_URL } from "../config"
+import { keepIfNotQueued } from "../lib/pendingReports"
 import { getDeviceId } from "../lib/device"
 
 type Result = { kind: "sent" | "queued" | "offline"; count: number } | { kind: "error"; message: string }
@@ -49,6 +50,7 @@ export function ReportPage() {
     } catch (err) {
       // Offline: the service worker keeps the report and sends it when the signal returns.
       if (!navigator.onLine || err instanceof TypeError) {
+        keepIfNotQueued(payload)
         setResult({ kind: "offline", count: selected.length })
         setSelected([])
       } else if (err instanceof ApiError && err.statusCode === 401) {

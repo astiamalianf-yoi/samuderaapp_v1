@@ -70,16 +70,6 @@ function sleep(ms: number) {
 }
 
 route.post("/report", async (c) => {
-	// Anonymous flood guard (no auth required): cap raw request volume per IP.
-	const clientIp = getClientIp(c.req.header("x-forwarded-for"));
-	const rate = await checkReportRateLimit(clientIp);
-	if (!rate.allowed) {
-		return c.json(
-			{ ok: false, error: "Terlalu banyak laporan. Coba lagi sebentar lagi." },
-			429,
-		);
-	}
-
 	const jwtPayload = c.get("jwtPayload") as { sub?: unknown; email?: unknown } | undefined;
 	const jwtUserId = typeof jwtPayload?.sub === "string" ? jwtPayload.sub : null;
 	const reporterEmail = typeof jwtPayload?.email === "string" ? jwtPayload.email : null;
@@ -93,6 +83,14 @@ route.post("/report", async (c) => {
 		tokenFrom(c.req.header("X-Fisherman-Token"), input as unknown as Record<string, unknown>),
 	);
 	delete (input as unknown as Record<string, unknown>).fishermanToken;
+	// Flood guard: per IP for anonymous posts, per person (more room) for a registered fisherman.
+	const rate = await checkReportRateLimit(getClientIp(c.req.header("x-forwarded-for")), fisherman?.id ?? null);
+	if (!rate.allowed) {
+		return c.json(
+			{ ok: false, error: "Terlalu banyak laporan. Coba lagi sebentar lagi." },
+			429,
+		);
+	}
 	if (!fisherman && !jwtUserId && REPORT_REQUIRE_REGISTRATION) {
 		return c.json(
 			{ ok: false, error: "registration_required", message: "Lengkapi profil dulu untuk melapor." },

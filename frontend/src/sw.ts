@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { cleanupOutdatedCaches, precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching"
+import { clientsClaim } from "workbox-core"
 import type { PrecacheEntry } from "workbox-precaching"
 import { API_BASE_URL, API_HOST } from "./config"
 
@@ -195,9 +196,32 @@ registerRoute(
   })
 );
 
+// Take control of open pages as soon as this worker is active, so that a report sent without
+// signal on the very first visit is queued by the worker below (found 16 Nov 2026).
+clientsClaim()
+
 // Background Sync for Offline Reports
 const bgSyncPlugin = new BackgroundSyncPlugin('report-queue', {
   maxRetentionTime: 24 * 60, // Retry for max of 24 Hours
+  // Replay one by one; a report answered "too many" (429) or with a server error stays in the
+  // queue and is tried again at the next sync, instead of being dropped (found 16 Nov 2026).
+  onSync: async ({ queue }) => {
+    let entry
+    while ((entry = await queue.shiftRequest())) {
+      try {
+        const res = await fetch(entry.request.clone())
+        if (res.status === 429 || res.status >= 500) {
+          await queue.unshiftRequest(entry)
+          throw new Error(`report replay deferred: ${res.status}`)
+        }
+      } catch (err) {
+        if (!(err instanceof Error && err.message.startsWith("report replay deferred"))) {
+          await queue.unshiftRequest(entry)
+        }
+        throw err
+      }
+    }
+  },
 });
 
 registerRoute(
