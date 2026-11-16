@@ -54,7 +54,7 @@ export function HomePage() {
         {/* Alerts follow the home beach, not the beach being looked at. */}
         <PushNotificationCard selectedBeach={homeBeach ?? beach} />
 
-        <WhatsAppGroupCard />
+        <WhatsAppGroupCard beach={beach} beachLabel={beachLabel} />
 
         {/* Both for this beach only: the forecast, then BMKG's official warnings that cover it. */}
         <BmkgMarineCard data={bmkg} alerts={weather.alerts} beachLabel={beachLabel} />

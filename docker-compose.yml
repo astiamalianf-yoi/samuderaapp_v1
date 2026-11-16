@@ -84,6 +84,8 @@ services:
       OPENCLAW_BROADCAST_GROUPS: ${OPENCLAW_BROADCAST_GROUPS:-}
       # One group per beach: pantai_lhoknga=<id>@g.us,pantai_ulee_lheue=<id>@g.us (warnings only to the beach's own group)
       OPENCLAW_BEACH_GROUPS: ${OPENCLAW_BEACH_GROUPS:-}
+      # Invite link per beach group, shown in the app: pantai_lampuuk=https://chat.whatsapp.com/…
+      WHATSAPP_GROUP_LINKS: ${WHATSAPP_GROUP_LINKS:-}
       WEATHERAPI_KEY: ${WEATHERAPI_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}

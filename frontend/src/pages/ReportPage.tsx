@@ -9,7 +9,7 @@ import { getBeachMeta } from "../constants/observationData"
 import { useRegistration, useSelectedBeach } from "../hooks/useAppState"
 import { ApiError, reportService } from "../services/reportService"
 import { saveRegistration } from "../lib/registration"
-import { WHATSAPP_GROUP_URL } from "../config"
+import { WHATSAPP_REPORT_URL } from "../config"
 import { getDeviceId } from "../lib/device"
 
 type Result = { kind: "sent" | "queued" | "offline"; count: number } | { kind: "error"; message: string }
@@ -166,10 +166,10 @@ function RegisterFirst() {
         </Link>
         <p className="text-base text-gray-700 max-w-sm">
           Peringatan tetap bisa dilihat tanpa mendaftar. Anda juga bisa melapor lewat chat pribadi ke nomor
-          WhatsApp SAMUDRA (tombol <b>WA</b> di atas) dengan menulis <span className="font-mono font-bold">!lapor</span>.
+          WhatsApp SAMUDRA (tombol di bawah) dengan menulis <span className="font-mono font-bold">!lapor</span>.
         </p>
-        <a href={WHATSAPP_GROUP_URL} target="_blank" rel="noreferrer" className="min-h-12 flex items-center text-lg font-semibold text-emerald-700">
-          Buka grup WhatsApp
+        <a href={WHATSAPP_REPORT_URL} target="_blank" rel="noreferrer" className="min-h-12 flex items-center text-lg font-semibold text-emerald-700">
+          Lapor lewat WhatsApp
         </a>
       </div>
     </AppShell>

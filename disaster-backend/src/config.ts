@@ -140,6 +140,21 @@ export const OPENCLAW_BEACH_GROUPS: Record<string, string[]> = (() => {
 	}
 	return out;
 })();
+/**
+ * Invite link of each beach's WhatsApp group, shown in the app for the beach being looked at:
+ * "pantai_lampuuk=https://chat.whatsapp.com/…,pantai_lhoknga=https://chat.whatsapp.com/…".
+ * Only chat.whatsapp.com links are kept.
+ */
+export const WHATSAPP_GROUP_LINKS: Record<string, string> = (() => {
+	const out: Record<string, string> = {};
+	for (const pair of parseCsvEnv(process.env.WHATSAPP_GROUP_LINKS, [])) {
+		const i = pair.indexOf("=");
+		const beach = pair.slice(0, i).trim();
+		const url = pair.slice(i + 1).trim();
+		if (i > 0 && /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+$/.test(url)) out[beach] = url;
+	}
+	return out;
+})();
 export const WEATHERAPI_KEY = process.env.WEATHERAPI_KEY ?? "";
 
 if (JWT_AUTH_ENABLED && !JWT_SECRET) {

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react"
 import { NavLink } from "react-router-dom"
 import { BookOpen, Home, Map, Megaphone, UserRound } from "lucide-react"
-import { WHATSAPP_GROUP_URL, WHATSAPP_REPORT_URL } from "../../config"
+import { WHATSAPP_REPORT_URL } from "../../config"
+import { useWhatsAppGroups } from "../../hooks/useWhatsAppGroups"
 
 const NAV = [
   { to: "/", label: "Beranda", Icon: Home },
@@ -75,15 +76,20 @@ const WA_ICON = (
   </svg>
 )
 
-/** Card linking the community WhatsApp group (used on the home page). */
-export function WhatsAppGroupCard() {
+/**
+ * Card linking the WhatsApp group of the beach being looked at (used on the home page). Each beach
+ * has its own group; a beach without a link in WHATSAPP_GROUP_LINKS shows no card.
+ */
+export function WhatsAppGroupCard({ beach, beachLabel }: { beach: string; beachLabel: string }) {
+  const url = useWhatsAppGroups()[beach]
+  if (!url) return null
   return (
-    <a href={WHATSAPP_GROUP_URL} target="_blank" rel="noopener noreferrer"
+    <a href={url} target="_blank" rel="noopener noreferrer"
       className="flex items-center gap-3 rounded-2xl bg-white border-2 border-[#25D366] p-4">
       <span className="w-12 h-12 rounded-full bg-[#25D366] flex items-center justify-center shrink-0">{WA_ICON}</span>
       <span className="flex-1">
-        <span className="block text-lg font-bold">Grup WhatsApp Samudra</span>
-        <span className="block text-base text-gray-700">Grup untuk peringatan dan minta tolong. Lapor tanda alam lewat tombol <b>WA</b> di atas (chat pribadi) dengan <b>!lapor</b>.</span>
+        <span className="block text-lg font-bold">Grup WhatsApp {beachLabel}</span>
+        <span className="block text-base text-gray-700">Peringatan untuk {beachLabel} dikirim ke grup ini, juga untuk minta tolong. Lapor tanda alam lewat tombol <b>WA</b> di atas.</span>
       </span>
     </a>
   )

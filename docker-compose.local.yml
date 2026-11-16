@@ -62,6 +62,7 @@ services:
       # per beach: REPORT_THRESHOLD_BEACHES="pantai_lampuuk=3,pantai_lhoknga=5"
       REPORT_THRESHOLD: ${REPORT_THRESHOLD:-1}
       REPORT_THRESHOLD_BEACHES: ${REPORT_THRESHOLD_BEACHES:-}
+      WHATSAPP_GROUP_LINKS: ${WHATSAPP_GROUP_LINKS:-}
       GROUP_CLASS_MODE: ${GROUP_CLASS_MODE:-majority}
       GROUP_MAJORITY_MIN: ${GROUP_MAJORITY_MIN:-3}
       # "Profil Anda" box (shown by default; false hides it)
