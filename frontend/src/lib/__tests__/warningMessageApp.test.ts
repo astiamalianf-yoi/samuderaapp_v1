@@ -43,3 +43,11 @@ describe("forecast window line (matrix row 2)", () => {
     expect(l.some((x) => x === "Prakiraan BMKG saat ini")).toBe(true)
   })
 })
+
+describe("AMAN card (matrix row 1)", () => {
+  it("'Diperbarui HH.MM WIB' is the last line, also for unregistered users", () => {
+    const l = lines({ ...base, final: "NORMAL", bmkg: { official: null, forecastLevel: "NORMAL" }, personal: false, now: Date.UTC(2026, 10, 23, 1, 5) })
+    expect(l[l.length - 1]).toBe("Diperbarui 08.05 WIB")
+    expect(l[l.length - 2]).toBe("Daftar agar dapat peringatan khusus untuk Anda.")
+  })
+})

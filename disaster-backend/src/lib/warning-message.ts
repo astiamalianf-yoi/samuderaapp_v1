@@ -100,8 +100,8 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 			["**STATUS LAUT HARI INI**", `Lokasi: ${p.beach}`, `${H.emoji} **${H.label}**`, "Tidak ada peringatan dari nelayan maupun BMKG saat ini.", fc],
 			[`${personal ? "**Untuk Anda:** boleh" : "Boleh"} melaut. Cuaca bisa berubah, cek kembali sebelum berangkat, bawa pelampung dan amati tanda alam.`],
 			[viaWa ? `Lihat tanda bahaya? Lapor lewat WhatsApp: ${p.reportUrl}` : "Lihat tanda bahaya? Tekan **Lapor**.",
-				...(wa ? [] : [`Diperbarui ${timeWib(now)} WIB`]),
-				...(!wa && !personal ? ["Daftar agar dapat peringatan khusus untuk Anda."] : [])],
+				...(!wa && !personal ? ["Daftar agar dapat peringatan khusus untuk Anda."] : []),
+				...(wa ? [] : [`Diperbarui ${timeWib(now)} WIB`])],
 		];
 	}
 
