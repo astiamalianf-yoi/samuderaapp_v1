@@ -11,6 +11,7 @@ import type { WeatherAlertProps } from "./WeatherAlertCard"
 import { getSign } from "../constants/signs"
 import { WhyPanel } from "./WhyPanel"
 import { BEACH_LOCATIONS } from "../constants/observationData"
+import { WHATSAPP_LAPOR_LINK } from "../config"
 
 const ACK_KEY = "samudra_acked_alerts"
 
@@ -122,6 +123,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     },
     channel: "app",
     personal: isRegistered,
+    reportUrl: WHATSAPP_LAPOR_LINK,
   })
   const s = LEVELS[level]
   const [head, ...rest] = blocks
@@ -176,7 +178,8 @@ function Rich({ text }: { text: string }) {
   if (text.startsWith("Daftar agar dapat peringatan khusus")) {
     return <Link to="/profil" className="font-semibold underline">{text}</Link>
   }
-  const parts: ReactNode[] = text.split(/(\*\*[^*]+\*\*)/).filter(Boolean).map((p, i) => {
+  const parts: ReactNode[] = text.split(/(\*\*[^*]+\*\*|wa\.me\/\S+)/).filter(Boolean).map((p, i) => {
+    if (p.startsWith("wa.me/")) return <a key={i} href={`https://${p}`} target="_blank" rel="noopener noreferrer" className="font-bold underline break-all">{p}</a>
     if (!p.startsWith("**")) return p
     const t = p.slice(2, -2)
     if (t === "Lapor") return <Link key={i} to="/lapor" className="font-bold underline">Lapor</Link>
