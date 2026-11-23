@@ -17,6 +17,8 @@ export interface WeatherAlertProps {
   appliesToBeach?: boolean
   /** Expiry time (ms since epoch), when known. */
   expiresAt?: number
+  /** Start time (CAP effective, ms since epoch), when known. */
+  effectiveAt?: number
 }
 
 export function WeatherAlertCard({

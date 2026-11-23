@@ -116,7 +116,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     final: level,
     lik,
     bmkg: {
-      official: official ? { event: official.condition, expires: official.expiresAt ?? null } : null,
+      official: official ? { event: official.condition, expires: official.expiresAt ?? null, effective: official.effectiveAt ?? null } : null,
       forecastLevel,
       windKmh: bmkg?.windSpeed ?? null,
       weather: bmkg?.weather ?? null,
@@ -125,6 +125,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     channel: "app",
     personal: isRegistered,
     reportUrl: WHATSAPP_LAPOR_LINK,
+    now: updatedAt ?? undefined,
   })
   const s = LEVELS[level]
   const [head, ...rest] = blocks
@@ -169,7 +170,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
           {acked ? "✓ Sudah dibaca" : "Saya mengerti"}
         </button>
       )}
-      <Footer updatedAt={updatedAt} loading={loading} onRefresh={() => refresh()} />
+      <Footer updatedAt={blocks.flat().some((l) => /diperbarui/i.test(l)) ? null : updatedAt} loading={loading} onRefresh={() => refresh()} />
     </section>
   )
 }

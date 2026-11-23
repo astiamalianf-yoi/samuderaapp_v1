@@ -74,7 +74,7 @@ describe("broadcast content", () => {
 		expect(buildNowcastAlertEvent(w, "pantai_lampuuk", 0, "WASPADA").riskLevel).toBe("siaga");
 	});
 	test("the BMKG-only WhatsApp message uses the agreed wording (row 3)", () => {
-		const one = formatNowcastWhatsApp(w, ["pantai_lampuuk"]);
+		const one = formatNowcastWhatsApp(w, ["pantai_lampuuk"]).replace(/\*/g, "");
 		expect(one).toContain("STATUS LAUT HARI INI\nLokasi: Pantai Lampuuk\n🟠 SIAGA");
 		expect(one).toContain("Sumber: peringatan dini BMKG (resmi)");
 		expect(one).toContain("20.06 WIB");

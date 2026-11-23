@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { formatGroupAlert } from "./group-alert";
 import { buildWarningMessage, formatAllClear, plain, toWhatsAppText, type WarningMessageInput } from "./warning-message";
+const noBold = (s: string) => s.replace(/\*/g, "");
 
 // Warning Strategy Matrix, table 3, rows 1–15 (agreed 23 Nov 2026). Example: Pantai Lampuuk, one
 // report at 08.00 WIB, LIK warning until 09.00, official BMKG "Angin Kencang" until 15.00.
@@ -24,7 +25,8 @@ function msg(lik: null | { level: "WASPADA" | "SIAGA"; high: boolean; inaction: 
 			endsAt: src === "cap" ? t(15, 0) : t(9, 0) } : null,
 		bmkg: bm,
 	});
-	return channel === "wa" ? toWhatsAppText(blocks) : blocks.map((b) => b.map(plain).join("\n")).join("\n\n");
+	// WhatsApp *bold* is checked in its own test; wording checks use the text without asterisks.
+	return channel === "wa" ? toWhatsAppText(blocks).replace(/\*/g, "") : blocks.map((b) => b.map(plain).join("\n")).join("\n\n");
 }
 const WA = { level: "WASPADA" as const, high: false, inaction: false };
 const WI = { level: "WASPADA" as const, high: false, inaction: true };
@@ -47,7 +49,7 @@ describe("agreed wording, rows 1–15", () => {
 	});
 	test("row 3 official BMKG warning only", () => {
 		const m = msg(null, "cap", "SIAGA");
-		expect(m).toContain("🟠 SIAGA · ANGIN KENCANG\nSumber: peringatan dini BMKG (resmi)\n🕒 Mulai 08.00 · berlaku sampai 15.00 WIB · dikirim 08.05");
+		expect(m).toContain("🟠 SIAGA · ANGIN KENCANG\nSumber: peringatan dini BMKG (resmi)\n🕒 Mulai 08.00 · berlaku sampai 15.00 WIB\n");
 		expect(m).toContain("petir berbahaya di laut terbuka");
 		expect(m).toContain("Di darat: tunda melaut sampai 15.00 WIB. Ikat perahu dan amankan alat tangkap.");
 		expect(m).toContain("Di laut: tarik alat tangkap, segera kembali ke darat.");
@@ -113,11 +115,23 @@ describe("agreed wording, rows 1–15", () => {
 		expect(m).toContain("Jangan Melaut\n✅ Jangan melaut sampai 15.00 WIB.");
 		expect(m).toContain("✅ Dalam bahaya di laut? Minta bantuan dan kirim lokasi GPS: samudraapp.com/kejadian");
 		expect(m).toContain("Di laut terbuka, perahu kecil sulit bertahan saat angin kencang dan ombak tinggi.");
-		expect(m).toContain("📱 Detail di aplikasi SAMUDRA. Belum daftar? Daftar untuk peringatan khusus Anda.");
+		expect(m).toContain("📱 Detail di aplikasi SAMUDRA.");
+		expect(m).not.toContain("Belum daftar");
+	});
+	test("WhatsApp bold: headings and labels in *asterisks*, no dikirim, no Belum daftar (rows 1–3)", () => {
+		const blocks = buildWarningMessage({ beach: "Pantai Lampuuk", final: "SIAGA", channel: "wa", now: NOW, reportUrl: URL_, lik: null,
+			bmkg: { official: { event: "Hujan lebat, petir dan angin kencang", effective: t(8, 0), expires: t(15, 0) }, forecastLevel: "NORMAL" } });
+		const m = toWhatsAppText(blocks);
+		expect(m).toContain("*STATUS LAUT HARI INI*\nLokasi: Pantai Lampuuk\n🟠 *SIAGA · ANGIN KENCANG*\nSumber: peringatan dini BMKG (resmi)\n🕒 Mulai 08.00 · berlaku sampai 15.00 WIB\n");
+		expect(m).toContain("*Apa yang terjadi:*");
+		expect(m).toContain("*Dampak untuk perahu:*");
+		expect(m).toContain("*Di darat:* tunda melaut sampai 15.00 WIB.");
+		expect(m).toContain("*Di laut:* tarik alat tangkap");
+		expect(m.endsWith("📱 Detail di aplikasi SAMUDRA.")).toBe(true);
 	});
 	test("AMAN message when a warning ends", () => {
 		expect(formatAllClear("Pantai Lampuuk", "SIAGA", t(9, 0))).toBe(
-			"STATUS LAUT HARI INI\nLokasi: Pantai Lampuuk\n🟢 AMAN - Peringatan SIAGA angin kencang sudah berakhir\n" +
+			"*STATUS LAUT HARI INI*\nLokasi: Pantai Lampuuk\n🟢 *AMAN - Peringatan SIAGA angin kencang sudah berakhir*\n" +
 			"Sumber: SAMUDRA (tidak ada laporan baru) + BMKG\n🕒 Berakhir 09.00 WIB\n" +
 			"Boleh melaut. Cuaca bisa berubah, tetap amati tanda alam dan laporkan bila melihat tanda bahaya.");
 	});
@@ -125,15 +139,15 @@ describe("agreed wording, rows 1–15", () => {
 
 describe("group message from the beach state", () => {
 	test("MAXIMUM_ALERT (low trust, inaction) uses the WASPADA checklist; sign names, not codes", () => {
-		const m = formatGroupAlert({ beachLocation: "pantai_lhoknga", codes: ["Wn-9"], likLevel: "WASPADA", finalLevel: "WASPADA",
-			strategyCode: "MAXIMUM_ALERT", reporterCount: 1, startedAt: t(8, 0), endsAt: t(9, 0), now: NOW });
+		const m = noBold(formatGroupAlert({ beachLocation: "pantai_lhoknga", codes: ["Wn-9"], likLevel: "WASPADA", finalLevel: "WASPADA",
+			strategyCode: "MAXIMUM_ALERT", reporterCount: 1, startedAt: t(8, 0), endsAt: t(9, 0), now: NOW }));
 		expect(m).toContain("Lokasi: Pantai Lhoknga\n🟡 WASPADA · TANDA ANGIN KENCANG\nSumber: 1 nelayan Lhoknga\n");
 		expect(m).toContain("Lakukan sekarang, jangan hanya berhati-hati:");
 		expect(m).not.toMatch(/Wn-9|pantai_lhoknga/);
 	});
 	test("STANDARD + official BMKG: BAHAYA with the trusted label", () => {
-		const m = formatGroupAlert({ beachLocation: "pantai_lampuuk", codes: ["Wn-3"], likLevel: "SIAGA", finalLevel: "EKSTREM",
-			strategyCode: "STANDARD", bmkgWarnings: [OFFICIAL], reporterCount: 2, startedAt: t(8, 0), endsAt: t(15, 0), now: NOW });
+		const m = noBold(formatGroupAlert({ beachLocation: "pantai_lampuuk", codes: ["Wn-3"], likLevel: "SIAGA", finalLevel: "EKSTREM",
+			strategyCode: "STANDARD", bmkgWarnings: [OFFICIAL], reporterCount: 2, startedAt: t(8, 0), endsAt: t(15, 0), now: NOW }));
 		expect(m).toContain("🔴 BAHAYA · ANGIN KENCANG\nSumber: peringatan dini BMKG (resmi) + 2 nelayan Lampuuk (tanda alam terpercaya)");
 		expect(m).toContain("Nelayan juga melihat ada kilat.");
 	});

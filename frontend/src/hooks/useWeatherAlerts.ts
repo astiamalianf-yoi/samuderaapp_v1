@@ -44,6 +44,7 @@ export function mapCapToAlert(
   const polygons = Array.from(info?.getElementsByTagNameNS("*", "polygon") ?? []).map((n) => n.textContent ?? "")
   const areaDescs = Array.from(info?.getElementsByTagNameNS("*", "areaDesc") ?? []).map((n) => n.textContent ?? "")
   const expiresAt = expires ? Date.parse(expires) : NaN
+  const effectiveAt = effective ? Date.parse(effective) : NaN
   const appliesToBeach = selectedBeach
     ? capAppliesToBeach(selectedBeach, { polygons, areaDescs, description, headline })
     : true
@@ -58,6 +59,7 @@ export function mapCapToAlert(
     recommendation: buildRecommendation(event, description),
     appliesToBeach,
     expiresAt: Number.isFinite(expiresAt) ? expiresAt : undefined,
+    effectiveAt: Number.isFinite(effectiveAt) ? effectiveAt : undefined,
   }
 }
 

@@ -100,6 +100,7 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 			["**STATUS LAUT HARI INI**", `Lokasi: ${p.beach}`, `${H.emoji} **${H.label}**`, "Tidak ada peringatan dari nelayan maupun BMKG saat ini.", fc],
 			[`${personal ? "**Untuk Anda:** boleh" : "Boleh"} melaut. Cuaca bisa berubah, cek kembali sebelum berangkat, bawa pelampung dan amati tanda alam.`],
 			[viaWa ? `Lihat tanda bahaya? Lapor lewat WhatsApp: ${p.reportUrl}` : "Lihat tanda bahaya? Tekan **Lapor**.",
+				...(wa ? [] : [`Diperbarui ${timeWib(now)} WIB`]),
 				...(!wa && !personal ? ["Daftar agar dapat peringatan khusus untuk Anda."] : [])],
 		];
 	}
@@ -119,7 +120,7 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 	else source = "prakiraan BMKG (belum ada laporan dari nelayan)";
 
 	const end = Math.max(lik?.endsAt ?? 0, official?.expires ?? 0) || null;
-	const sent = wa ? ` · dikirim ${timeWib(now)}` : "";
+	const sent = ""; // "· dikirim HH.MM" removed (matrix rows 3–4 revised 23 Nov)
 	let time: string;
 	if (lik) time = `Mulai ${timeWib(lik.startedAt)}${end ? ` · berlaku sampai ${timeWib(end)} WIB` : ""}${sent}`;
 	else if (official) time = `${official.effective ? `Mulai ${timeWib(official.effective)} · b` : "B"}erlaku sampai ${timeWib(official.expires)} WIB${sent}`;
@@ -219,21 +220,24 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 		block3.push(`${ask} Tekan **Lapor**.${confirm ? " Laporan Anda membantu memastikan tanda ini." : ""}`);
 	}
 	if (lik || official) block3.push("Pesan AMAN dikirim bila peringatan berakhir.");
-	if (wa) block3.push("📱 Detail di aplikasi SAMUDRA. Belum daftar? Daftar untuk peringatan khusus Anda.");
+	if (wa) block3.push("📱 Detail di aplikasi SAMUDRA.");
 	else if (!personal) block3.push("Daftar agar dapat peringatan khusus untuk Anda.");
 
 	return [block1, block2, block3];
 }
 
-/** WhatsApp text: blocks separated by an empty line, without bold markers. */
-export const toWhatsAppText = (blocks: string[][]) => blocks.map((b) => b.map(plain).join("\n")).join("\n\n");
+/** WhatsApp text: blocks separated by an empty line, **bold** as WhatsApp *bold*. */
+export const toWhatsAppText = (blocks: string[][]) => blocks.map((b) => b.map(waBold).join("\n")).join("\n\n");
+
+/** **bold** -> WhatsApp *bold*. */
+export const waBold = (line: string) => line.replace(/\*\*([^*]+)\*\*/g, "*$1*");
 
 /** One-time WhatsApp message when a WASPADA/SIAGA/BAHAYA warning has ended (row 1). */
 export function formatAllClear(beach: string, ended: MsgLevel, endedAt: number): string {
 	return [
-		"STATUS LAUT HARI INI",
+		"*STATUS LAUT HARI INI*",
 		`Lokasi: ${beach}`,
-		`🟢 AMAN - Peringatan ${levelLabel(ended)} angin kencang sudah berakhir`,
+		`🟢 *AMAN - Peringatan ${levelLabel(ended)} angin kencang sudah berakhir*`,
 		"Sumber: SAMUDRA (tidak ada laporan baru) + BMKG",
 		`🕒 Berakhir ${timeWib(endedAt)} WIB`,
 		"Boleh melaut. Cuaca bisa berubah, tetap amati tanda alam dan laporkan bila melihat tanda bahaya.",
