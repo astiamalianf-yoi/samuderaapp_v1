@@ -110,11 +110,12 @@ export const maxLevel = (...levels: RiskLevel[]): RiskLevel =>
 
 /**
  * Fusion of the fishermen's side (LIK) and the BMKG side, same rule as the backend
- * (reassurance.ts, fuseLevels): the higher of the two, and BAHAYA (EKSTREM) when both are at SIAGA.
+ * (reassurance.ts, fuseLevels): the higher of the two, and BAHAYA (EKSTREM) only when the fishermen
+ * are at SIAGA and BMKG has an official warning (a strong-wind forecast alone stays SIAGA).
  */
-export function fuseLevels(lik: RiskLevel, bmkg: RiskLevel): RiskLevel {
+export function fuseLevels(lik: RiskLevel, bmkg: RiskLevel, officialWarning: boolean): RiskLevel {
   const rank = (l: RiskLevel) => LEVEL_ORDER.indexOf(l)
-  if (rank(lik) >= rank("SIAGA") && rank(bmkg) >= rank("SIAGA")) return "EKSTREM"
+  if (rank(lik) >= rank("SIAGA") && rank(bmkg) >= rank("SIAGA") && officialWarning) return "EKSTREM"
   return maxLevel(lik, bmkg)
 }
 

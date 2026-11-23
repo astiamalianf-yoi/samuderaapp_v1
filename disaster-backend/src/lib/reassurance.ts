@@ -27,7 +27,7 @@ type ReassuranceResult = {
  *   MEDIUM (-> WASPADA) wind >= 30 km/h, or a bad-weather forecast (rain/thunderstorm codes)
  *   LOW                 otherwise
  * A forecast alone never reaches SIAGA; only a real warning or strong wind does.
- * Final level: see fuseLevels (BAHAYA when both sides are at SIAGA).
+ * Final level: see fuseLevels (BAHAYA when the fishermen are at SIAGA and BMKG has an official warning).
  */
 export function determineBmkgRisk(
 	weather: { windSpeed: number | null; isSafe?: boolean | null } | null,
@@ -72,23 +72,25 @@ const LEVEL_MAP: Record<number, FinalLevel> = {
 };
 
 /**
- * Fusion of the two sources (0 NORMAL, 1 WASPADA, 2 SIAGA, 3 EKSTREM/BAHAYA):
- * the higher of the two, and one step higher (BAHAYA) when both the fishermen's signs
- * and BMKG are at SIAGA, i.e. both sources independently point to danger.
+ * Fusion of the two sources (0 NORMAL, 1 WASPADA, 2 SIAGA, 3 EKSTREM/BAHAYA): the higher of the two,
+ * and one step higher (BAHAYA) only when the fishermen's signs are at SIAGA AND BMKG has an official
+ * warning (peringatan dini) for the beach. A BMKG strong-wind forecast (>= 46 km/h) alone is SIAGA on
+ * the BMKG side but never makes BAHAYA (Warning Strategy Matrix rows 11 and 14, 23 Nov 2026).
  */
-export function fuseLevels(likLevel: number, bmkgLevel: number): number {
-	if (likLevel >= 2 && bmkgLevel >= 2) return 3;
+export function fuseLevels(likLevel: number, bmkgLevel: number, officialWarning: boolean): number {
+	if (likLevel >= 2 && bmkgLevel >= 2 && officialWarning) return 3;
 	return Math.max(likLevel, bmkgLevel);
 }
 
 export function fusionDecision(
 	shapRisk: string,
 	bmkgRisk: string,
+	officialWarning = false,
 ): { finalLevel: FinalLevel; finalLevelNumeric: number; agreed: boolean } {
 	const likLevel = LIK_LEVEL_MAP[shapRisk.toUpperCase()] ?? 0;
 	const bmkgLevel = BMKG_LEVEL_MAP[bmkgRisk.toUpperCase()] ?? 0;
 
-	const score = fuseLevels(likLevel, bmkgLevel);
+	const score = fuseLevels(likLevel, bmkgLevel, officialWarning);
 
 	const agreed = likLevel === bmkgLevel;
 
@@ -128,7 +130,7 @@ export async function reassure(
 	const shapRisk = shapResult.riskLevel.toUpperCase();
 	const bmkgRisk = determineBmkgRisk(weather, !!officialWarning);
 
-	const { finalLevel, finalLevelNumeric, agreed } = fusionDecision(shapRisk, bmkgRisk);
+	const { finalLevel, finalLevelNumeric, agreed } = fusionDecision(shapRisk, bmkgRisk, !!officialWarning);
 
 	const result: ReassuranceResult = {
 		shapRisk,

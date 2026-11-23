@@ -92,7 +92,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
   if (active && distributed) {
     const communityLevel = eventLevel(event)
     const likLevel = maxLevel(personal?.lik_risk_level ? toLevel(personal.lik_risk_level) : "NORMAL", communityLevel)
-    level = fuseLevels(likLevel, bmkgState.level)
+    level = fuseLevels(likLevel, bmkgState.level, bmkgState.warnings.length > 0)
     const codes = event?.ml?.active_warning ?? active.codes ?? []
     const traits = strategyTraits(strategy?.code)
     lik = {

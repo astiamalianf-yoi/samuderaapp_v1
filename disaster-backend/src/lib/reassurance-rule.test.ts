@@ -28,14 +28,18 @@ describe("fusion of LIK and BMKG", () => {
 		expect(fusionDecision("SIAGA", "MEDIUM").finalLevel).toBe("SIAGA");
 		expect(fusionDecision("WASPADA", "MEDIUM").finalLevel).toBe("WASPADA");
 	});
-	test("both sources at SIAGA raise the warning to BAHAYA (EKSTREM)", () => {
-		const r = fusionDecision("SIAGA", "HIGH");
+	test("fishermen at SIAGA + an official BMKG warning raise the warning to BAHAYA (EKSTREM)", () => {
+		const r = fusionDecision("SIAGA", "HIGH", true);
 		expect(r.finalLevel).toBe("EKSTREM");
 		expect(r.finalLevelNumeric).toBe(3);
 		expect(r.agreed).toBe(true);
 	});
 	test("BAHAYA needs both sides; one side alone never reaches it", () => {
-		for (const [l, b] of [[0, 2], [1, 2], [2, 0], [2, 1]] as const) expect(fuseLevels(l, b)).toBeLessThan(3);
-		expect(fuseLevels(2, 2)).toBe(3);
+		for (const [l, b] of [[0, 2], [1, 2], [2, 0], [2, 1]] as const) expect(fuseLevels(l, b, true)).toBeLessThan(3);
+		expect(fuseLevels(2, 2, true)).toBe(3);
+	});
+	test("a BMKG strong-wind forecast alone never makes BAHAYA (matrix rows 11, 14)", () => {
+		expect(fuseLevels(2, 2, false)).toBe(2);
+		expect(fusionDecision("SIAGA", "HIGH").finalLevel).toBe("SIAGA");
 	});
 });

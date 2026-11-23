@@ -10,7 +10,7 @@ import { ALLOWED_BEACH_LOCATIONS } from "../types";
  * - fishermen's side: the active LIK warning (if distributed) and its level;
  * - BMKG side: an official warning covering the beach or wind >= 46 km/h -> SIAGA;
  *   wind >= 30 km/h or a bad-weather forecast -> WASPADA (frontend assessBmkg);
- * - final: max(LIK event level, fuseLevels(LIK, BMKG)), so both at SIAGA = BAHAYA.
+ * - final: fuseLevels(LIK, BMKG): BAHAYA when the fishermen are at SIAGA and BMKG has an official warning.
  */
 export const LEVELS = ["NORMAL", "WASPADA", "SIAGA", "EKSTREM"] as const;
 export type Level = (typeof LEVELS)[number];
@@ -60,7 +60,7 @@ export async function beachStatus(beach: string, now = Date.now()): Promise<Beac
 		// The fishermen's own level. decision.final_risk_level is not used: it was fused with the BMKG
 		// situation at report time and would keep the beach raised after BMKG has ended (UAT G-11).
 		const likLevel = toLevelIndex(ev?.ml?.lik_risk_level ?? ev?.riskLevel ?? ev?.decision?.final_risk_level);
-		level = fuseLevels(likLevel, bmkg);
+		level = fuseLevels(likLevel, bmkg, nowcast.length > 0);
 		lik = {
 			level: LEVELS[Math.max(likLevel, 1)]!,
 			codes: (ev?.ml?.active_warning as string[] | undefined) ?? active.codes,
