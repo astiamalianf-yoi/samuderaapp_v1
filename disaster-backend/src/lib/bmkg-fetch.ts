@@ -95,13 +95,14 @@ const slotTime = (s: BmkgCuacaItem) => {
  * last consecutive unsafe slot (wind >= 30 km/jam or bad weather). Null when the current slot is safe.
  */
 export function unsafeWindow(slots: BmkgCuacaItem[]): { start: number; end: number } | null {
-	if (!slots.length || !slotUnsafe(slots[0])) return null;
-	const start = slotTime(slots[0]);
+	const first = slots[0];
+	if (!first || !slotUnsafe(first)) return null;
+	const start = slotTime(first);
 	if (start == null) return null;
 	let i = 0;
-	while (i + 1 < slots.length && slotUnsafe(slots[i + 1])) i++;
-	const next = i + 1 < slots.length ? slotTime(slots[i + 1]) : null;
-	const last = slotTime(slots[i]) ?? start;
+	while (slots[i + 1] && slotUnsafe(slots[i + 1]!)) i++;
+	const next = slots[i + 1] ? slotTime(slots[i + 1]!) : null;
+	const last = slotTime(slots[i]!) ?? start;
 	return { start, end: next ?? last + SLOT_MS };
 }
 
