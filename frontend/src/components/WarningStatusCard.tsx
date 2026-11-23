@@ -120,6 +120,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
       forecastLevel,
       windKmh: bmkg?.windSpeed ?? null,
       weather: bmkg?.weather ?? null,
+      period: bmkg?.periodStart && bmkg?.periodEnd ? { start: bmkg.periodStart, end: bmkg.periodEnd } : null,
     },
     channel: "app",
     personal: isRegistered,

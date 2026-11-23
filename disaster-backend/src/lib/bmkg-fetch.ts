@@ -14,6 +14,9 @@ export type BmkgData = {
 	description: string;
 	isSafe: boolean;
 	fetchedAt: number;
+	/** When the current slot is unsafe: the window of consecutive unsafe forecast slots (ms). */
+	periodStart?: number | null;
+	periodEnd?: number | null;
 };
 
 const WIND_UNSAFE_THRESHOLD = 30;
@@ -52,7 +55,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 	}
 }
 
-interface BmkgCuacaItem {
+export interface BmkgCuacaItem {
 	datetime: string;
 	t: number;
 	weather: number;
@@ -80,6 +83,28 @@ interface BmkgResponse {
 	}>;
 }
 
+const SLOT_MS = 3 * 3600_000;
+const slotUnsafe = (s: BmkgCuacaItem) => BMKG_WEATHER_UNSAFE_CODES.has(s.weather) || (s.ws ?? 0) >= WIND_UNSAFE_THRESHOLD;
+const slotTime = (s: BmkgCuacaItem) => {
+	const t = Date.parse(/Z$|[+-]\d\d:?\d\d$/.test(s.datetime) ? s.datetime : `${s.datetime.replace(" ", "T")}Z`);
+	return Number.isFinite(t) ? t : null;
+};
+
+/**
+ * The forecast window shown as "Prakiraan 08.00–15.00 WIB": from the current slot up to the end of the
+ * last consecutive unsafe slot (wind >= 30 km/jam or bad weather). Null when the current slot is safe.
+ */
+export function unsafeWindow(slots: BmkgCuacaItem[]): { start: number; end: number } | null {
+	if (!slots.length || !slotUnsafe(slots[0])) return null;
+	const start = slotTime(slots[0]);
+	if (start == null) return null;
+	let i = 0;
+	while (i + 1 < slots.length && slotUnsafe(slots[i + 1])) i++;
+	const next = i + 1 < slots.length ? slotTime(slots[i + 1]) : null;
+	const last = slotTime(slots[i]) ?? start;
+	return { start, end: next ?? last + SLOT_MS };
+}
+
 function isBeachValid(beach: string): beach is keyof typeof BEACH_ADM4_CODES {
 	return beach in BEACH_ADM4_CODES;
 }
@@ -98,6 +123,7 @@ async function fetchFreshBmkgData(beach: string): Promise<BmkgData | null> {
 	if (!cuacaSlots.length) return null;
 
 	const current = cuacaSlots[0];
+	const period = unsafeWindow(cuacaSlots);
 
 	return {
 		beach,
@@ -111,6 +137,8 @@ async function fetchFreshBmkgData(beach: string): Promise<BmkgData | null> {
 		description: `${data.lokasi.kecamatan}, ${data.lokasi.kotkab}, ${data.lokasi.provinsi}`,
 		isSafe: !BMKG_WEATHER_UNSAFE_CODES.has(current.weather) && (current.ws ?? 0) < WIND_UNSAFE_THRESHOLD,
 		fetchedAt: Date.now(),
+		periodStart: period?.start ?? null,
+		periodEnd: period?.end ?? null,
 	};
 }
 

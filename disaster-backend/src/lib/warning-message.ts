@@ -43,6 +43,8 @@ export interface WarningMessageInput {
 		forecastLevel: MsgLevel;
 		windKmh?: number | null;
 		weather?: string | null;
+		/** Forecast time window with bad weather (BMKG 3-hourly slots), e.g. 08.00–15.00. */
+		period?: { start: number; end: number } | null;
 	};
 	channel: "app" | "wa";
 	/** Registered fisherman with his own strategy (app card only): "Untuk Anda". */
@@ -121,7 +123,11 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 	let time: string;
 	if (lik) time = `Mulai ${timeWib(lik.startedAt)}${end ? ` · berlaku sampai ${timeWib(end)} WIB` : ""}${sent}`;
 	else if (official) time = `${official.effective ? `Mulai ${timeWib(official.effective)} · b` : "B"}erlaku sampai ${timeWib(official.expires)} WIB${sent}`;
-	else time = `Prakiraan BMKG saat ini${wa ? sent : ` · diperbarui ${timeWib(now)}`}`;
+	else {
+		const pr = p.bmkg.period;
+		const when = pr?.start && pr?.end ? `Prakiraan ${timeWib(pr.start)}–${timeWib(pr.end)} WIB` : "Prakiraan BMKG saat ini";
+		time = `${when}${wa ? sent : ` · diperbarui ${timeWib(now)} WIB`}`;
+	}
 
 	const block1 = ["**STATUS LAUT HARI INI**", `Lokasi: ${p.beach}`, `${H.emoji} **${H.label} · ${hazard}**`, `Sumber: ${source}`, `${clock}${time}`];
 

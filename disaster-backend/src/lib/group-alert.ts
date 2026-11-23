@@ -32,6 +32,8 @@ export function formatGroupAlert(p: {
 	bmkgForecastLevel?: unknown;
 	windKmh?: number | null;
 	weather?: string | null;
+	/** Forecast window with bad weather (from getBmkgData periodStart/periodEnd). */
+	bmkgPeriod?: { start: number; end: number } | null;
 	bmkgWarnings?: { event?: string; expires?: number | null; effective?: number | null }[];
 	reporterCount: number;
 	startedAt: number;
@@ -59,6 +61,7 @@ export function formatGroupAlert(p: {
 			forecastLevel: norm(p.bmkgForecastLevel),
 			windKmh: p.windKmh ?? null,
 			weather: p.weather ?? null,
+			period: p.bmkgPeriod ?? null,
 		},
 		channel: "wa",
 		now: p.now,
@@ -101,6 +104,7 @@ export async function groupMessageFor(beachLocation: string, alertEvent: Record<
 		bmkgForecastLevel: forecastLevel(fc?.windSpeed, fc?.weather, fc ? !fc.isSafe : false),
 		windKmh: fc?.windSpeed ?? st?.bmkg?.windSpeed ?? null,
 		weather: fc?.weather ?? null,
+		bmkgPeriod: fc?.periodStart && fc?.periodEnd ? { start: fc.periodStart, end: fc.periodEnd } : null,
 		bmkgWarnings: st?.bmkg?.warnings ?? [],
 		reporterCount: aw?.reporters?.length || Number(ev?.reporterCount) || 1,
 		startedAt: startedAt ?? aw?.triggeredAt ?? Date.now(),

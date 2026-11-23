@@ -13,6 +13,9 @@ export interface BmkgData {
   temperature: number;
   isSafe: boolean;
   fetchedAt: number;
+  /** Forecast window with bad weather (ms), when the current slot is unsafe. */
+  periodStart?: number | null;
+  periodEnd?: number | null;
 }
 
 export interface AlertFeedItem {

@@ -65,6 +65,9 @@ export function simulatedBmkgData(beach: string, sim: SimWeather, base?: Record<
 		description: "SIMULASI UAT",
 		isSafe: !rain && wind < 30,
 		fetchedAt: Date.now(),
+		// Simulated forecast window: from the start of this hour until the simulation ends.
+		periodStart: !rain && wind < 30 ? null : Math.floor(Date.now() / 3600_000) * 3600_000,
+		periodEnd: !rain && wind < 30 ? null : sim.expiresAt,
 	};
 }
 
