@@ -243,6 +243,14 @@ export function signLabel(code: string): string {
 	return LIK_LABELS[code.toUpperCase()] ?? code;
 }
 
+/** Sign name inside a warning message; keep equal to frontend/src/constants/signs.ts WARNING_SIGN_TEXT. */
+const WARNING_SIGN_TEXT: Record<string, string> = {
+	"WN-3": "Kilat muncul di salah satu sisi langit ataupun saling berbalas antara dua sisi",
+};
+export function warningSignLabel(code: string): string {
+	return WARNING_SIGN_TEXT[code.toUpperCase()] ?? signLabel(code);
+}
+
 export type LaporResult =
 	| { ok: true; beachLocation: string; likCodes: string[] }
 	| { ok: false; missing: "location" | "signs" };

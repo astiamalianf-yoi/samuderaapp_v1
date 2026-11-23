@@ -71,3 +71,13 @@ export const TIER_LABEL: Record<TrustTier, string> = {
   Low: "Kurang dipercaya",
   Unranked: "Belum cukup data",
 }
+
+/**
+ * Sign name inside a warning message. Lightning is written out in full, because "ada kilat" alone
+ * is too vague (matrix, 23 Nov); the other signs use their short name.
+ */
+export const WARNING_SIGN_TEXT: Record<string, string> = {
+  "WN-3": "Kilat muncul di salah satu sisi langit ataupun saling berbalas antara dua sisi",
+}
+export const warningSignText = (code: string): string =>
+  WARNING_SIGN_TEXT[code.toUpperCase()] ?? getSign(code)?.short ?? code

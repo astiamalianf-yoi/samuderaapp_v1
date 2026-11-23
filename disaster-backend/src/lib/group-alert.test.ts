@@ -149,6 +149,6 @@ describe("group message from the beach state", () => {
 		const m = noBold(formatGroupAlert({ beachLocation: "pantai_lampuuk", codes: ["Wn-3"], likLevel: "SIAGA", finalLevel: "EKSTREM",
 			strategyCode: "STANDARD", bmkgWarnings: [OFFICIAL], reporterCount: 2, startedAt: t(8, 0), endsAt: t(15, 0), now: NOW }));
 		expect(m).toContain("🔴 BAHAYA · ANGIN KENCANG\nSumber: peringatan dini BMKG (resmi) + 2 nelayan Lampuuk (tanda alam terpercaya)");
-		expect(m).toContain("Nelayan juga melihat ada kilat.");
+		expect(m).toContain("Nelayan juga melihat kilat muncul di salah satu sisi langit ataupun saling berbalas antara dua sisi.");
 	});
 });

@@ -8,7 +8,7 @@ import { buildWarningMessage, strategyTraits } from "../lib/warningMessage"
 import type { ReactNode } from "react"
 import type { BmkgData } from "../services/reportService"
 import type { WeatherAlertProps } from "./WeatherAlertCard"
-import { getSign } from "../constants/signs"
+import { getSign, warningSignText } from "../constants/signs"
 import { WhyPanel } from "./WhyPanel"
 import { BEACH_LOCATIONS } from "../constants/observationData"
 
@@ -97,7 +97,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     const traits = strategyTraits(strategy?.code)
     lik = {
       level: likLevel === "NORMAL" ? "WASPADA" : likLevel,
-      signs: codes.map((c) => getSign(c)?.short ?? c).join(", "),
+      signs: codes.map(warningSignText).join(", "),
       reporters: Math.max(1, Number(event?.reporterCount) || 1),
       highTrust: traits.highTrust,
       inaction: traits.inaction,

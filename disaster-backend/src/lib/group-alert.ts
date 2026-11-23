@@ -1,4 +1,4 @@
-import { signLabel, BEACH_DISPLAY } from "./whatsapp-commands";
+import { warningSignLabel, BEACH_DISPLAY } from "./whatsapp-commands";
 import { buildWarningMessage, strategyTraits, toWhatsAppText, type MsgLevel } from "./warning-message";
 import { APP_URL, WHATSAPP_BOT_NUMBER } from "../config";
 
@@ -49,7 +49,7 @@ export function formatGroupAlert(p: {
 		final: norm(p.finalLevel),
 		lik: hasLik ? {
 			level: norm(p.likLevel),
-			signs: p.codes.map(signLabel).join(", "),
+			signs: p.codes.map(warningSignLabel).join(", "),
 			reporters: Math.max(1, p.reporterCount || 1),
 			highTrust: traits.highTrust,
 			inaction: traits.inaction,
