@@ -31,7 +31,7 @@ export type BeachStatus = {
 	lik: { level: Level; codes: string[]; triggeredAt: number } | null;
 	bmkg: {
 		level: Level;
-		warnings: { event: string; expires: number | null }[];
+		warnings: { event: string; expires: number | null; effective?: number | null }[];
 		weather: string | null;
 		windSpeed: number | null;
 		windDirection: string | null;
@@ -74,7 +74,7 @@ export async function beachStatus(beach: string, now = Date.now()): Promise<Beac
 		lik,
 		bmkg: {
 			level: LEVELS[bmkg]!,
-			warnings: nowcast.map((w) => ({ event: w.event, expires: w.expires })),
+			warnings: nowcast.map((w) => ({ event: w.event, expires: w.expires, effective: w.effective })),
 			weather: forecast?.weather ?? null,
 			windSpeed: forecast?.windSpeed ?? null,
 			windDirection: forecast?.windDirection ?? null,
