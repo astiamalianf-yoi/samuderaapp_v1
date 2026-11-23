@@ -73,19 +73,12 @@ describe("broadcast content", () => {
 		expect(ev.ml.action_recommendation).toContain("Jangan melaut");
 		expect(buildNowcastAlertEvent(w, "pantai_lampuuk", 0, "WASPADA").riskLevel).toBe("siaga");
 	});
-	test("the WhatsApp message says BAHAYA only for the beaches where fishermen also reported", () => {
-		const one = formatNowcastWhatsApp(w, ["pantai_lampuuk", "pantai_lhoknga"], ["pantai_lampuuk"]);
-		expect(one).toContain("PERINGATAN BMKG — SIAGA");
-		expect(one).toContain("BAHAYA* di Pantai Lampuuk");
-		const all = formatNowcastWhatsApp(w, ["pantai_lampuuk"], ["pantai_lampuuk"]);
-		expect(all).toContain("PERINGATAN BMKG — BAHAYA");
-		expect(all).toContain("Jangan melaut");
-	});
-	test("one WhatsApp message lists every covered beach", () => {
-		const text = formatNowcastWhatsApp(w, ["pantai_lampuuk", "pantai_lhoknga"]);
-		expect(text).toContain("Pantai Lampuuk, Pantai Lhoknga");
-		expect(text).toContain("20.06 WIB");
-		expect(text).toContain("Tunda melaut");
+	test("the BMKG-only WhatsApp message uses the agreed wording (row 3)", () => {
+		const one = formatNowcastWhatsApp(w, ["pantai_lampuuk"]);
+		expect(one).toContain("STATUS LAUT HARI INI\nLokasi: Pantai Lampuuk\n🟠 SIAGA");
+		expect(one).toContain("Sumber: peringatan dini BMKG (resmi)");
+		expect(one).toContain("20.06 WIB");
+		expect(one).toContain("tunda melaut");
 	});
 });
 
@@ -122,8 +115,8 @@ describe("BMKG text in WhatsApp", () => {
 		expect(text).toBe("Hujan lebat disertai petir akan terjadi pada 13 November 2026, 00:20 WIB di sebagian wilayah Aceh, termasuk Aceh Besar.");
 		expect(text).not.toContain("BABUL");
 	});
-	test("an extension says so", () => {
+	test("the end time is in the message", () => {
 		const w = { id: "x", event: "Hujan Lebat dan Petir", headline: "", description: long, effective: null, expires: Date.UTC(2026, 10, 12, 21, 0) };
-		expect(formatNowcastWhatsApp(w, ["pantai_lampuuk"], [], true)).toContain("Diperpanjang* sampai 04.00 WIB");
+		expect(formatNowcastWhatsApp(w, ["pantai_lampuuk"], [], true)).toContain("Berlaku sampai 04.00 WIB");
 	});
 });

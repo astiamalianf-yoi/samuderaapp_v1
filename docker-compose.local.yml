@@ -44,6 +44,9 @@ services:
     container_name: peringatan-backend
     restart: unless-stopped
     environment:
+      # Links in WhatsApp warnings: the app's /kejadian page and wa.me/<bot>?text=LAPOR (23 Nov 2026).
+      APP_URL: ${APP_URL:-http://localhost:3001}
+      WHATSAPP_BOT_NUMBER: ${WHATSAPP_BOT_NUMBER:-}
       PORT: "3000"
       REDIS_URL: redis://redis:6379
       ML_BASE_URL: http://ml:8000

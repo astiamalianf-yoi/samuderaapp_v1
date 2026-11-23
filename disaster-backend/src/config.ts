@@ -177,3 +177,8 @@ export const BMKG_NOWCAST_RSS_URL = process.env.BMKG_NOWCAST_RSS_URL ?? "https:/
  * registered fisherman's name through the public URL.
  */
 export const INTERNAL_REQUEST_SECRET = process.env.INTERNAL_REQUEST_SECRET || crypto.randomUUID();
+
+/** Public app address (links in WhatsApp messages, e.g. /kejadian). */
+export const APP_URL = process.env.APP_URL ?? "https://samudraapp.com";
+/** The SAMUDRA WhatsApp bot number (digits), for wa.me report links in group messages. */
+export const WHATSAPP_BOT_NUMBER = (process.env.WHATSAPP_BOT_NUMBER ?? "").replace(/\D/g, "");

@@ -44,8 +44,8 @@ NO_MODEL_BEACHES = ["pantai_pangandaran", "pantai_batu_karas", "pantai_bojongsal
 BEACH_SLUGS = PROFILED_BEACHES + NO_MODEL_BEACHES
 
 # Strategy -> LIK hazard level passed to the backend fusion (max with BMKG).
-# Low-trust + Actionable is "Enhanced Sign Monitoring" rather than a direct alert (paper IV.D),
-# so it is the only strategy below SIAGA. No strategy suppresses the alert.
+# Low-trust signs (Enhanced Sign Monitoring, Maximum Alert) raise WASPADA; high-trust signs SIAGA.
+# No strategy suppresses the alert.
 STRATEGIES = {
     "STANDARD": {
         "label_id": "Peringatan Standar",
@@ -65,11 +65,13 @@ STRATEGIES = {
         "lik_risk_level": "WASPADA",
         "message_id": "Tanda alam ini belum terbukti cukup akurat. Amati tanda alam lain dan periksa info BMKG sebelum melaut.",
     },
+    # WASPADA-I (23 Nov 2026, Paper 4 Table V): a low-trust sign raises WASPADA, also for Inaction;
+    # the stronger push is in the wording (checklist "lakukan sekarang"), not in the level.
     "MAXIMUM_ALERT": {
         "label_id": "Peringatan Maksimum + Intervensi",
         "label_en": "Maximum Alert + Intervention",
-        "lik_risk_level": "SIAGA",
-        "message_id": "Tanda alam terdeteksi dan risiko tidak bertindak tinggi. Tunda melaut, amankan alat tangkap, dan hubungi Panglima Laot atau ketua kelompok sebelum berangkat.",
+        "lik_risk_level": "WASPADA",
+        "message_id": "Tanda alam terdeteksi. Jangan hanya berhati-hati: cek kapal dan mesin, sesuaikan alat tangkap, dan bawa pelampung sebelum berangkat.",
     },
 }
 MATRIX = {

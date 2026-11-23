@@ -321,7 +321,9 @@ route.post("/openclaw/webhook", async (c) => {
 
 			console.log("[openclaw-webhook] Logged to whatsapp:incoming stream");
 
-			const cleanText = text.replace(/@\d+\s*/, "").trim();
+			// "LAPOR" alone (from the wa.me link in a group warning) starts a report, like "!lapor".
+			const rawText = text.replace(/@\d+\s*/, "").trim();
+			const cleanText = /^lapor[.!]?$/i.test(rawText) ? "!lapor" : rawText;
 			const lowerText = cleanText.toLowerCase();
 			const command = isHelpCommand(lowerText) ? "tolong"
 				: lowerText.startsWith("!lapor") ? "lapor"

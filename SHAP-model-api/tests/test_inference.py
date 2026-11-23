@@ -103,7 +103,7 @@ class TestWarningStrategyMatrix:
         ("wn-3", SAFE_PROFILE, "STANDARD", "SIAGA"),
         ("wn-3", UNSAFE_PROFILE, "EXTRA_WARNING", "SIAGA"),
         ("wn-5", SAFE_PROFILE, "ENHANCED_MONITORING", "WASPADA"),
-        ("wn-5", UNSAFE_PROFILE, "MAXIMUM_ALERT", "SIAGA"),
+        ("wn-5", UNSAFE_PROFILE, "MAXIMUM_ALERT", "WASPADA"),
     ])
     def test_four_cells(self, engine, code, profile, strategy, level):
         r = run(engine, [code], profile=profile)

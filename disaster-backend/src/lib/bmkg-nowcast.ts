@@ -10,6 +10,7 @@
  */
 import { listSimWarnings, simWarningCap } from "./bmkg-sim";
 import { beachesByGroup } from "./openclaw";
+import { formatGroupAlert, groupMessageFor } from "./group-alert";
 import { createHash } from "node:crypto";
 import { redis } from "./redis";
 import { getActiveWarning, syncActiveWarningWithBmkg } from "./crowdsource";
@@ -228,25 +229,18 @@ export function shortNowcastDescription(description: string, beaches: string[]):
 	return areas.length ? `${base}, termasuk ${areas.join(" dan ")}.` : `${base}.`;
 }
 
-export function formatNowcastWhatsApp(w: NowcastWarning, beaches: string[], escalated: string[] = [], extended = false): string {
-	const label = (b: string) => BEACH_AREA[b]?.label ?? b;
-	const names = beaches.map(label).join(", ");
-	const esc = beaches.filter((b) => escalated.includes(b));
-	const allEsc = esc.length > 0 && esc.length === beaches.length;
-	return [
-		allEsc ? `🔴 *PERINGATAN BMKG — BAHAYA*` : `⚠️ *PERINGATAN BMKG — SIAGA*`,
-		`📍 ${names}`,
-		`🌩️ ${w.event}`,
-		extended ? `🔄 *Diperpanjang* sampai ${timeWib(w.expires)}` : `🕒 Berlaku sampai ${timeWib(w.expires)}`,
-		...(esc.length ? [`🔴 *BAHAYA* di ${esc.map(label).join(", ")}: nelayan juga melaporkan tanda alam bahaya.`] : []),
-		"",
-		shortNowcastDescription(w.description, beaches),
-		"",
-		esc.length
-			? `👉 *Jangan melaut sampai peringatan berakhir.* Jika sudah di laut, segera menepi.`
-			: `👉 *Tunda melaut sampai peringatan berakhir.* Jika sudah di laut, segera menepi.`,
-		`Sumber: BMKG (peringatan dini cuaca)${esc.length ? " dan laporan nelayan" : ""}`,
-	].join("\n");
+/**
+ * BMKG-only WhatsApp message (Warning Strategy Matrix row 3, agreed 23 Nov 2026), one block per
+ * beach of the group. The monitor sends groupMessageFor() instead, which also includes an active
+ * fishermen's warning (rows 5, 8, 12, 15); this is its fallback.
+ */
+export function formatNowcastWhatsApp(w: NowcastWarning, beaches: string[], escalated: string[] = [], _extended = false): string {
+	return beaches
+		.map((b) => formatGroupAlert({
+			beachLocation: b, codes: [], likLevel: null, finalLevel: escalated.includes(b) ? "EKSTREM" : "SIAGA",
+			bmkgWarnings: [{ event: w.event, expires: w.expires, effective: w.effective }], reporterCount: 0, startedAt: w.effective ?? Date.now(),
+		}))
+		.join("\n\n");
 }
 
 type LastSent = { event: string; expires: number | null; level: string };
@@ -300,6 +294,8 @@ type Deps = {
 	fetchByBeach?: (now: number) => Promise<NowcastByBeach>;
 	/** Sends one message to one WhatsApp group. */
 	sendWhatsApp?: (group: string, text: string) => Promise<void>;
+	/** Group message for a beach (default: groupMessageFor). */
+	messageFor?: (beach: string) => Promise<string>;
 	/** Group -> the beaches it covers (default: OPENCLAW_BEACH_GROUPS / OPENCLAW_BROADCAST_GROUPS). */
 	groupsFor?: (beaches: string[]) => Map<string, string[]>;
 	publishIot?: (event: unknown) => Promise<unknown>;
@@ -384,9 +380,16 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 			events += 1;
 		}
 		// Each beach group gets the warning only if it covers its beach, naming only its beaches.
+		// The message is the beach's current warning (BMKG, with the fishermen's warning when one is active).
 		for (const [group, own] of (deps.groupsFor ?? beachesByGroup)(beaches)) {
 			const isExtension = own.every((b) => extended.includes(b));
-			await deps.sendWhatsApp?.(group, formatNowcastWhatsApp(warning, own, escalated, isExtension)).catch(() => undefined);
+			const texts: string[] = [];
+			for (const b of own) {
+				const text = await (deps.messageFor ?? ((beach: string) => groupMessageFor(beach)))(b)
+					.catch(() => formatNowcastWhatsApp(warning, [b], escalated, isExtension));
+				texts.push(text);
+			}
+			await deps.sendWhatsApp?.(group, texts.join("\n\n")).catch(() => undefined);
 		}
 	}
 	return { warnings: fresh.size, events };

@@ -3,7 +3,9 @@ import { Link } from "react-router-dom"
 import { ChevronDown, RefreshCw, UserRound } from "lucide-react"
 import type { BeachLocation } from "../types/api"
 import { useActiveWarning, usePersonalWarning, useProfile, useRegistration } from "../hooks/useAppState"
-import { LEVELS, STRATEGY_HEADLINE, assessBmkg, eventLevel, fuseLevels, levelRaisedReason, mainAction, maxLevel, toLevel } from "../lib/warning"
+import { LEVELS, assessBmkg, eventLevel, fuseLevels, maxLevel, toLevel } from "../lib/warning"
+import { buildWarningMessage, strategyTraits } from "../lib/warningMessage"
+import type { ReactNode } from "react"
 import type { BmkgData } from "../services/reportService"
 import type { WeatherAlertProps } from "./WeatherAlertCard"
 import { getSign } from "../constants/signs"
@@ -73,143 +75,78 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     )
   }
 
-  // ---- No community warning: the BMKG side alone decides (fusion = max of both).
-  if (!active || !distributed) {
-    const counts = Object.entries(data?.counts ?? {})
-    const pending = counts.length > 0 && (
-      <p className="mt-3 text-base">
-        Laporan masuk: {counts.map(([c, v]) => `${getSign(c)?.short ?? c} (${v.count})`).join(", ")}.
-        {(data?.threshold ?? 1) > 1 && <>{" "}Peringatan keluar jika {data?.threshold} nelayan melaporkan tanda yang sama.</>}
-      </p>
-    )
-
-    if (bmkgState.level === "NORMAL") {
-      const s = LEVELS.NORMAL
-      return (
-        <section className={`rounded-3xl border-2 p-5 ${s.card}`} aria-live="polite">
-          <p className="text-sm font-semibold uppercase tracking-wide opacity-80">Status laut hari ini · {beachLabel}</p>
-          <p className="text-4xl font-black mt-1">{s.emoji} {s.label}</p>
-          <p className="text-lg mt-1">Tidak ada peringatan dari nelayan maupun BMKG untuk pantai ini.</p>
-          {pending}
-          <Footer updatedAt={updatedAt} loading={loading} onRefresh={() => refresh()} />
-        </section>
-      )
-    }
-
-    const s = LEVELS[bmkgState.level]
-    const w = bmkgState.warnings[0]
-    return (
-      <section className={`rounded-3xl border-2 p-5 shadow-lg ${s.card}`} role="alert">
-        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">Peringatan dari BMKG · {beachLabel}</p>
-        <p className="text-5xl font-black mt-1 leading-none">{s.emoji} {s.label}</p>
-        <p className="text-lg font-semibold mt-2">{s.sub}</p>
-        <div className="mt-4 rounded-2xl bg-white text-gray-950 p-4 shadow">
-          <p className="text-xl font-extrabold">{w ? w.condition : "Cuaca kurang baik"}</p>
-          {bmkgState.level === "SIAGA"
-            ? <p className="text-lg mt-1">👉 <b>Tunda melaut{w ? ` sampai pukul ${w.end}` : ""}</b></p>
-            : <p className="text-lg mt-1">👉 <b>Hati-hati, cek cuaca lagi sebelum melaut</b></p>}
-          <ul className="mt-2 text-base list-disc pl-5">
-            {bmkgState.reasons.map((r) => <li key={r}>{r}</li>)}
-          </ul>
-        </div>
-        <p className="mt-3 text-base">Belum ada laporan tanda alam dari nelayan. Jika Anda melihat tanda alam, segera lapor.</p>
-        {pending}
-        <Footer updatedAt={updatedAt} loading={loading} onRefresh={() => refresh()} />
-      </section>
-    )
-  }
-
-  // ---- Active warning
-  // Fishermen's side: the personal strategy level, or the level of the community warning.
-  const communityLevel = eventLevel(event)
-  const likLevel = maxLevel(
-    personal?.lik_risk_level ? toLevel(personal.lik_risk_level) : "NORMAL",
-    communityLevel,
+  // ---- Agreed wording (23 Nov 2026, Warning Strategy Matrix rows 1–15): the same builder as the
+  // WhatsApp group message. Registered fishermen see their own strategy ("Untuk Anda").
+  const counts = Object.entries(data?.counts ?? {})
+  const pending = (!active || !distributed) && counts.length > 0 && (
+    <p className="mt-3 text-base">
+      Laporan masuk: {counts.map(([c, v]) => `${getSign(c)?.short ?? c} (${v.count})`).join(", ")}.
+      {(data?.threshold ?? 1) > 1 && <>{" "}Peringatan keluar jika {data?.threshold} nelayan melaporkan tanda yang sama.</>}
+    </p>
   )
-  const level = fuseLevels(likLevel, bmkgState.level)
-  const s = LEVELS[level === "NORMAL" ? "WASPADA" : level]
+  const forecastLevel = assessBmkg(bmkg, []).level
+  const official = bmkgState.warnings[0]
+  let level = bmkgState.level
+  let lik = null as Parameters<typeof buildWarningMessage>[0]["lik"]
   const strategy = personal?.warning_strategy ?? event?.ml?.warning_strategy ?? null
-  const head = strategy ? STRATEGY_HEADLINE[strategy.code] : null
-  const action = mainAction(event)
-  const raisedWhy = levelRaisedReason({
-    level,
-    strategy: strategy?.code,
-    bmkgLevel: bmkgState.level,
-    communityLevel,
-    personal: !!personal?.warning_strategy,
+  if (active && distributed) {
+    const communityLevel = eventLevel(event)
+    const likLevel = maxLevel(personal?.lik_risk_level ? toLevel(personal.lik_risk_level) : "NORMAL", communityLevel)
+    level = fuseLevels(likLevel, bmkgState.level)
+    const codes = event?.ml?.active_warning ?? active.codes ?? []
+    const traits = strategyTraits(strategy?.code)
+    lik = {
+      level: likLevel === "NORMAL" ? "WASPADA" : likLevel,
+      signs: codes.map((c) => getSign(c)?.short ?? c).join(", "),
+      reporters: Math.max(1, Number(event?.reporterCount) || 1),
+      highTrust: traits.highTrust,
+      inaction: traits.inaction,
+      startedAt: active.triggeredAt,
+      endsAt: active.expiresAt ?? null,
+    }
+    if (level === "NORMAL") level = "WASPADA"
+  }
+  const isPersonal = !!personal?.warning_strategy && !!profile
+  const blocks = buildWarningMessage({
+    beach: beachLabel,
+    final: level,
+    lik,
+    bmkg: {
+      official: official ? { event: official.condition, expires: official.expiresAt ?? null } : null,
+      forecastLevel,
+      windKmh: bmkg?.windSpeed ?? null,
+      weather: bmkg?.weather ?? null,
+    },
+    channel: "app",
+    personal: isPersonal,
   })
-  const codes = event?.ml?.active_warning ?? active.codes ?? []
+  const s = LEVELS[level]
+  const [head, ...rest] = blocks
 
   return (
-    <section className={`rounded-3xl border-2 p-5 shadow-lg ${s.card}`} role="alert">
+    <section className={`rounded-3xl border-2 p-5 ${level === "NORMAL" ? "" : "shadow-lg "}${s.card}`} role={level === "NORMAL" ? undefined : "alert"} aria-live="polite">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold uppercase tracking-wide opacity-90">
-          {bmkgState.level !== "NORMAL" ? "Peringatan dari nelayan dan BMKG" : "Peringatan dari nelayan"} · {beachLabel}
-        </p>
-        {personal?.warning_strategy && (
+        <p className="text-sm font-semibold uppercase tracking-wide opacity-90"><Rich text={head[0]} /></p>
+        {isPersonal && lik && (
           <span className={`flex items-center gap-1 text-xs font-bold rounded-full px-2 py-1 ${s.badge}`}>
             <UserRound className="w-3.5 h-3.5" /> Untuk Anda
           </span>
         )}
       </div>
-      <p className="text-5xl font-black mt-1 leading-none">{s.emoji} {s.label}</p>
-      <p className="text-lg font-semibold mt-2">{s.sub}</p>
+      <p className="text-base mt-1">{head[1]}</p>
+      <p className="text-2xl font-black mt-1 leading-tight"><Rich text={head[2]} /></p>
+      {head.slice(3).map((l) => <p key={l} className="text-base mt-1"><Rich text={l} /></p>)}
 
-      {head && (
-        <div className="mt-4 rounded-2xl bg-white text-gray-950 p-4 shadow">
-          <p className="text-xl font-extrabold">{head.title}</p>
-          {action && <p className="text-lg mt-1">👉 <b>{action}</b></p>}
-          <p className="text-base mt-1">{head.action}</p>
-          {raisedWhy && (
-            <p className="text-base mt-2 pt-2 border-t border-gray-200 font-semibold">ℹ️ {raisedWhy}</p>
-          )}
+      {rest.map((b, i) => b.length > 0 && (
+        <div key={i} className={i === 0 && level !== "NORMAL" ? "mt-4 rounded-2xl bg-white text-gray-950 p-4 shadow" : "mt-3"}>
+          {b.map((l) => (
+            <p key={l} className={`text-base ${l.startsWith("✅") ? "mt-1 pl-1" : "mt-1"}`}><Rich text={l} /></p>
+          ))}
         </div>
-      )}
-      {!head && event?.ml?.action_recommendation && (
-        <div className="mt-4 rounded-2xl bg-white text-gray-950 p-4 shadow text-lg">{event.ml.action_recommendation}</div>
-      )}
+      ))}
+      {pending}
 
-      <div className="mt-4">
-        <p className="font-bold">Tanda yang dilihat nelayan</p>
-        <ul className="mt-2 flex flex-wrap gap-2">
-          {codes.map((c) => {
-            const sign = getSign(c)
-            const n = data?.counts?.[c.toUpperCase()]?.count ?? data?.counts?.[c]?.count
-            return (
-              <li key={c} className="flex items-center gap-2 rounded-full bg-white/80 text-gray-950 px-3 py-2 text-base border border-black/10">
-                <span aria-hidden>{sign?.emoji}</span>
-                <span className="font-semibold">{sign?.short ?? c}</span>
-                {n ? <span className="text-sm opacity-70">· {n} laporan</span> : null}
-              </li>
-            )
-          })}
-        </ul>
-        {active.triggeredAt && (
-          <p className="mt-2 text-sm opacity-80">
-            Dimulai {timeAgo(active.triggeredAt)}
-            {active.expiresAt ? ` · berlaku sampai ${new Date(active.expiresAt).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" })} WIB` : ""}
-          </p>
-        )}
-      </div>
-
-      {level === "EKSTREM" && (
-        <p className="mt-4 rounded-xl bg-white text-red-800 p-3 text-base font-bold border-2 border-red-700">
-          🛑 Nelayan dan BMKG sama-sama memberi peringatan bahaya. Jangan melaut.
-        </p>
-      )}
-      {bmkgState.warnings.length > 0 && (
-        <p className="mt-4 rounded-xl bg-white/80 text-gray-950 p-3 text-base border border-red-300">
-          ⚠️ BMKG juga mengeluarkan peringatan: <b>{bmkgState.warnings[0].condition}</b> sampai pukul {bmkgState.warnings[0].end}.
-        </p>
-      )}
-
-      {!profile && (
-        <Link to="/profil" className="mt-4 flex items-center gap-2 rounded-xl bg-white/80 text-sky-900 px-4 py-3 font-semibold border border-sky-200">
-          <UserRound className="w-5 h-5" /> Isi profil singkat agar peringatan sesuai untuk Anda
-        </Link>
-      )}
-
-      {event && (
+      {active && distributed && event && (
         <div className="mt-4">
           <button onClick={() => setOpen(!open)} aria-expanded={open}
             className="w-full min-h-12 flex items-center justify-between rounded-xl bg-white/60 text-gray-950 px-4 font-bold">
@@ -220,7 +157,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
         </div>
       )}
 
-      {(level === "SIAGA" || level === "EKSTREM") && (
+      {active && distributed && (level === "SIAGA" || level === "EKSTREM") && (
         <button onClick={acknowledge} disabled={acked}
           className="mt-4 w-full min-h-14 rounded-xl bg-gray-950 text-white text-lg font-bold disabled:opacity-60">
           {acked ? "✓ Sudah dibaca" : "Saya mengerti"}
@@ -229,6 +166,21 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
       <Footer updatedAt={updatedAt} loading={loading} onRefresh={() => refresh()} />
     </section>
   )
+}
+
+/** A message line: **bold** parts; "Lapor", "Kejadian" and the registration line are links. */
+function Rich({ text }: { text: string }) {
+  if (text.startsWith("Daftar agar dapat peringatan khusus")) {
+    return <Link to="/profil" className="font-semibold underline">{text}</Link>
+  }
+  const parts: ReactNode[] = text.split(/(\*\*[^*]+\*\*)/).filter(Boolean).map((p, i) => {
+    if (!p.startsWith("**")) return p
+    const t = p.slice(2, -2)
+    if (t === "Lapor") return <Link key={i} to="/lapor" className="font-bold underline">Lapor</Link>
+    if (t === "Kejadian") return <Link key={i} to="/kejadian" className="font-bold underline">Kejadian</Link>
+    return <b key={i}>{t}</b>
+  })
+  return <>{parts}</>
 }
 
 function Footer({ updatedAt, loading, onRefresh }: { updatedAt: number | null; loading: boolean; onRefresh: () => void }) {

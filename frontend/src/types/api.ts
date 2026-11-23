@@ -138,6 +138,8 @@ export interface ActiveWarningEvent {
   alertId?: string;
   riskLevel?: string;
   serverTimestamp?: number;
+  /** Fishermen behind the warning (backend alert event). */
+  reporterCount?: number;
   decision: {
     is_actionable: boolean;
     community_characteristics?: string;

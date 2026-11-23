@@ -13,13 +13,13 @@ export interface LevelStyle {
 }
 
 export const LEVELS: Record<RiskLevel, LevelStyle> = {
-  NORMAL: { level: "NORMAL", label: "AMAN", sub: "Tidak ada peringatan", emoji: "✅",
+  NORMAL: { level: "NORMAL", label: "AMAN", sub: "Tidak ada peringatan", emoji: "🟢",
     card: "bg-emerald-50 border-emerald-300 text-emerald-950", badge: "bg-emerald-600 text-white" },
-  WASPADA: { level: "WASPADA", label: "WASPADA", sub: "Hati-hati, pantau terus", emoji: "⚠️",
+  WASPADA: { level: "WASPADA", label: "WASPADA", sub: "Hati-hati, pantau terus", emoji: "🟡",
     card: "bg-amber-50 border-amber-400 text-amber-950", badge: "bg-amber-500 text-black" },
   SIAGA: { level: "SIAGA", label: "SIAGA", sub: "Bahaya, siapkan perlindungan", emoji: "🟠",
     card: "bg-orange-50 border-orange-500 text-orange-950", badge: "bg-orange-600 text-white" },
-  EKSTREM: { level: "EKSTREM", label: "BAHAYA", sub: "Jangan melaut", emoji: "🛑",
+  EKSTREM: { level: "EKSTREM", label: "BAHAYA", sub: "Jangan melaut", emoji: "🔴",
     card: "bg-red-700 border-red-900 text-white", badge: "bg-white text-red-700" },
 }
 
@@ -56,8 +56,8 @@ export const STRATEGY_HEADLINE: Record<WarningStrategyCode, { title: string; act
     action: "Tanda ini belum terbukti akurat. Amati tanda lain dan cek BMKG sebelum melaut.",
   },
   MAXIMUM_ALERT: {
-    title: "Tunda melaut",
-    action: "Amankan alat tangkap dan hubungi Panglima Laot atau ketua kelompok sebelum berangkat.",
+    title: "Lakukan persiapan sekarang",
+    action: "Jangan hanya berhati-hati: cek kapal dan mesin, sesuaikan alat tangkap, dan bawa pelampung sebelum berangkat.",
   },
 }
 
@@ -78,7 +78,7 @@ export const STRATEGY_LEVEL: Record<WarningStrategyCode, RiskLevel> = {
   STANDARD: "SIAGA",
   EXTRA_WARNING: "SIAGA",
   ENHANCED_MONITORING: "WASPADA",
-  MAXIMUM_ALERT: "SIAGA",
+  MAXIMUM_ALERT: "WASPADA", // WASPADA-I, 23 Nov 2026
 }
 
 /**
