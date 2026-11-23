@@ -45,9 +45,9 @@ describe("forecast window line (matrix row 2)", () => {
 })
 
 describe("AMAN card (matrix row 1)", () => {
-  it("'Diperbarui HH.MM WIB' is the last line, also for unregistered users", () => {
-    const l = lines({ ...base, final: "NORMAL", bmkg: { official: null, forecastLevel: "NORMAL" }, personal: false, now: Date.UTC(2026, 10, 23, 1, 5) })
-    expect(l[l.length - 1]).toBe("Diperbarui 08.05 WIB")
-    expect(l[l.length - 2]).toBe("Daftar agar dapat peringatan khusus untuk Anda.")
+  it("no 'Diperbarui' line in the message (the card footer shows it next to Perbarui)", () => {
+    const l = lines({ ...base, final: "NORMAL", bmkg: { official: null, forecastLevel: "NORMAL" }, personal: false })
+    expect(l.some((x) => /diperbarui/i.test(x))).toBe(false)
+    expect(l[l.length - 1]).toBe("Daftar agar dapat peringatan khusus untuk Anda.")
   })
 })

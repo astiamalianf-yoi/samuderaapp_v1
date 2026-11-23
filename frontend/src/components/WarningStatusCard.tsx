@@ -170,7 +170,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
           {acked ? "✓ Sudah dibaca" : "Saya mengerti"}
         </button>
       )}
-      <Footer updatedAt={blocks.flat().some((l) => /diperbarui/i.test(l)) ? null : updatedAt} loading={loading} onRefresh={() => refresh()} />
+      <Footer updatedAt={updatedAt} loading={loading} onRefresh={() => refresh()} />
     </section>
   )
 }
