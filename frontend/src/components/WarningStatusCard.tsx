@@ -106,7 +106,10 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     }
     if (level === "NORMAL") level = "WASPADA"
   }
+  // "Untuk Anda" badge: his own strategy for the active warning. The wording ("Untuk Anda:" lines,
+  // no "Daftar agar…" line) follows registration, also when there is no fishermen's warning (rows 1–3).
   const isPersonal = !!personal?.warning_strategy && !!profile
+  const isRegistered = !!registration?.token || !!profile
   const blocks = buildWarningMessage({
     beach: beachLabel,
     final: level,
@@ -118,7 +121,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
       weather: bmkg?.weather ?? null,
     },
     channel: "app",
-    personal: isPersonal,
+    personal: isRegistered,
   })
   const s = LEVELS[level]
   const [head, ...rest] = blocks
