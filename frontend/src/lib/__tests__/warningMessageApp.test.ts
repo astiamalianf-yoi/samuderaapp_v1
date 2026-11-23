@@ -36,10 +36,10 @@ describe("forecast window line (matrix row 2)", () => {
   const at = (h: number, m = 0) => Date.UTC(2026, 10, 23, h - 7, m)
   it("shows the BMKG forecast window", () => {
     const l = lines({ ...base, personal: true, now: at(8, 5), bmkg: { ...base.bmkg, period: { start: at(8), end: at(15) } } })
-    expect(l).toContain("Prakiraan 08.00–15.00 WIB · diperbarui 08.05 WIB")
+    expect(l).toContain("Prakiraan 08.00–15.00 WIB")
   })
   it("falls back to 'saat ini' without a window", () => {
     const l = lines({ ...base, personal: true, now: at(8, 5) })
-    expect(l.some((x) => x.includes("Prakiraan BMKG saat ini · diperbarui 08.05 WIB"))).toBe(true)
+    expect(l.some((x) => x === "Prakiraan BMKG saat ini")).toBe(true)
   })
 })

@@ -120,14 +120,13 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 	else source = "prakiraan BMKG (belum ada laporan dari nelayan)";
 
 	const end = Math.max(lik?.endsAt ?? 0, official?.expires ?? 0) || null;
-	const sent = ""; // "· dikirim HH.MM" removed (matrix rows 3–4 revised 23 Nov)
 	let time: string;
-	if (lik) time = `Mulai ${timeWib(lik.startedAt)}${end ? ` · berlaku sampai ${timeWib(end)} WIB` : ""}${sent}`;
-	else if (official) time = `${official.effective ? `Mulai ${timeWib(official.effective)} · b` : "B"}erlaku sampai ${timeWib(official.expires)} WIB${sent}`;
+	if (lik) time = `Mulai ${timeWib(lik.startedAt)}${end ? ` · berlaku sampai ${timeWib(end)} WIB` : ""}`;
+	else if (official) time = `${official.effective ? `Mulai ${timeWib(official.effective)} · b` : "B"}erlaku sampai ${timeWib(official.expires)} WIB`;
 	else {
 		const pr = p.bmkg.period;
 		const when = pr?.start && pr?.end ? `Prakiraan ${timeWib(pr.start)}–${timeWib(pr.end)} WIB` : "Prakiraan BMKG saat ini";
-		time = `${when}${wa ? sent : ` · diperbarui ${timeWib(now)} WIB`}`;
+		time = when; // update time is at the bottom of the card (matrix row 2, 23 Nov)
 	}
 
 	const block1 = ["**STATUS LAUT HARI INI**", `Lokasi: ${p.beach}`, `${H.emoji} **${H.label} · ${hazard}**`, `Sumber: ${source}`, `${clock}${time}`];
