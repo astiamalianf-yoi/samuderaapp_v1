@@ -11,7 +11,6 @@ import type { WeatherAlertProps } from "./WeatherAlertCard"
 import { getSign } from "../constants/signs"
 import { WhyPanel } from "./WhyPanel"
 import { BEACH_LOCATIONS } from "../constants/observationData"
-import { WHATSAPP_LAPOR_LINK } from "../config"
 
 const ACK_KEY = "samudra_acked_alerts"
 
@@ -124,7 +123,6 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     },
     channel: "app",
     personal: isRegistered,
-    reportUrl: WHATSAPP_LAPOR_LINK,
     now: updatedAt ?? undefined,
   })
   const s = LEVELS[level]

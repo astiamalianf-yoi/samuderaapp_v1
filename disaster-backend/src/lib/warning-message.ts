@@ -78,8 +78,8 @@ export const plain = (line: string) => line.replace(/\*\*/g, "");
 
 export function buildWarningMessage(p: WarningMessageInput): string[][] {
 	const wa = p.channel === "wa";
-	// WhatsApp group and unregistered app users report through the bot (wa.me link); registered app users press Lapor.
-	const viaWa = (wa || !p.personal) && !!p.reportUrl;
+	// Report in the channel the person is reading: WhatsApp -> wa.me link to the bot; app (registered or not) -> Lapor button.
+	const viaWa = wa && !!p.reportUrl;
 	const personal = !wa && !!p.personal;
 	const lik = p.lik ?? null;
 	const official = p.bmkg.official ?? null;
