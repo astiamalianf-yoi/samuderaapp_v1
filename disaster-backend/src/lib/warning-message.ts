@@ -49,6 +49,7 @@ export interface WarningMessageInput {
 	channel: "app" | "wa";
 	/** Registered fisherman with his own strategy (app card only): "Untuk Anda". */
 	personal?: boolean;
+	/** Kept for callers; the message itself has no update time (the card footer shows it). */
 	now?: number;
 	/** WhatsApp report link (wa.me/…?text=LAPOR) and the Kejadian page URL. */
 	reportUrl?: string | null;
@@ -76,7 +77,6 @@ const lowerFirst = (s: string) => s.split(", ").map((x) => x.charAt(0).toLowerCa
 export const plain = (line: string) => line.replace(/\*\*/g, "");
 
 export function buildWarningMessage(p: WarningMessageInput): string[][] {
-	const now = p.now ?? Date.now();
 	const wa = p.channel === "wa";
 	// WhatsApp group and unregistered app users report through the bot (wa.me link); registered app users press Lapor.
 	const viaWa = (wa || !p.personal) && !!p.reportUrl;
