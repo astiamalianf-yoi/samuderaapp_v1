@@ -67,8 +67,8 @@ export const timeWib = (ms?: number | null) =>
 	ms ? new Date(ms).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", ".") : "";
 
 const shortBeach = (b: string) => b.replace(/^pantai\s+/i, "");
-/** Sign names inside a sentence: "Ada kilat" -> "ada kilat". */
-const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+/** Sign names inside a sentence: "Ada kilat, Langit mendung" -> "ada kilat, langit mendung". */
+const lowerFirst = (s: string) => s.split(", ").map((x) => x.charAt(0).toLowerCase() + x.slice(1)).join(", ");
 
 /** Removes the **bold** markers (WhatsApp text has no bold markup). */
 export const plain = (line: string) => line.replace(/\*\*/g, "");
