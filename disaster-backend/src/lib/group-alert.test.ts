@@ -145,6 +145,11 @@ describe("group message from the beach state", () => {
 		expect(m).toContain("Lakukan sekarang, jangan hanya berhati-hati:");
 		expect(m).not.toMatch(/Wn-9|pantai_lhoknga/);
 	});
+	test("signs in the codebook wording, several joined with '; '", () => {
+		const m = noBold(formatGroupAlert({ beachLocation: "pantai_lampuuk", codes: ["Wn-4", "Wn-9"], likLevel: "WASPADA", finalLevel: "WASPADA",
+			strategyCode: "ACTIONABLE", reporterCount: 2, startedAt: t(8, 0), endsAt: t(9, 0), now: NOW }));
+		expect(m).toContain("nelayan melihat gelombang laut berubah pola dari kecil dan sering hingga besar dan rapat; hujan atau langit tertutup awan tebal, saat angin timur, tanda alam yang biasanya muncul sebelum angin kencang.");
+	});
 	test("STANDARD + official BMKG: BAHAYA with the trusted label", () => {
 		const m = noBold(formatGroupAlert({ beachLocation: "pantai_lampuuk", codes: ["Wn-3"], likLevel: "SIAGA", finalLevel: "EKSTREM",
 			strategyCode: "STANDARD", bmkgWarnings: [OFFICIAL], reporterCount: 2, startedAt: t(8, 0), endsAt: t(15, 0), now: NOW }));

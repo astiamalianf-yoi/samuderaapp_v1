@@ -97,7 +97,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
     const traits = strategyTraits(strategy?.code)
     lik = {
       level: likLevel === "NORMAL" ? "WASPADA" : likLevel,
-      signs: codes.map(warningSignText).join(", "),
+      signs: codes.map(warningSignText).join("; "),
       reporters: Math.max(1, Number(event?.reporterCount) || 1),
       highTrust: traits.highTrust,
       inaction: traits.inaction,

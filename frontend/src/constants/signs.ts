@@ -73,11 +73,10 @@ export const TIER_LABEL: Record<TrustTier, string> = {
 }
 
 /**
- * Sign name inside a warning message. Lightning is written out in full, because "ada kilat" alone
- * is too vague (matrix, 23 Nov); the other signs use their short name.
+ * Sign inside a warning message: the codebook description, the wording fishermen use and understand
+ * (matrix, 23 Nov), not the two-word short name. Several signs are joined with "; ".
  */
-export const WARNING_SIGN_TEXT: Record<string, string> = {
-  "WN-3": "Kilat muncul di salah satu sisi langit ataupun saling berbalas antara dua sisi",
+export const warningSignText = (code: string): string => {
+  const s = getSign(code)
+  return s?.description ?? s?.short ?? code
 }
-export const warningSignText = (code: string): string =>
-  WARNING_SIGN_TEXT[code.toUpperCase()] ?? getSign(code)?.short ?? code

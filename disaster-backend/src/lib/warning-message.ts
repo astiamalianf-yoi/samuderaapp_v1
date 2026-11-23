@@ -28,7 +28,7 @@ export interface WarningMessageInput {
 	lik?: {
 		/** The level of the strategy message (personal or community). */
 		level: MsgLevel;
-		/** Signs, e.g. "Ada kilat, Awan tebal". */
+		/** Signs in the codebook wording, joined with "; ". */
 		signs: string;
 		reporters: number;
 		highTrust: boolean;
@@ -70,8 +70,8 @@ export const timeWib = (ms?: number | null) =>
 	ms ? new Date(ms).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", ".") : "";
 
 const shortBeach = (b: string) => b.replace(/^pantai\s+/i, "");
-/** Sign names inside a sentence: "Ada kilat, Langit mendung" -> "ada kilat, langit mendung". */
-const lowerFirst = (s: string) => s.split(", ").map((x) => x.charAt(0).toLowerCase() + x.slice(1)).join(", ");
+/** Signs inside a sentence (joined with "; "): "Langit mendung namun …; Hujan atau …" -> "langit mendung namun …; hujan atau …". */
+const lowerFirst = (s: string) => s.split("; ").map((x) => x.charAt(0).toLowerCase() + x.slice(1)).join("; ");
 
 /** Removes the **bold** markers (WhatsApp text has no bold markup). */
 export const plain = (line: string) => line.replace(/\*\*/g, "");

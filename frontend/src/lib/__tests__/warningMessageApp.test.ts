@@ -53,11 +53,12 @@ describe("AMAN card (matrix row 1)", () => {
   })
 })
 
-describe("lightning sign in the warning (matrix, 23 Nov)", () => {
+describe("signs in the codebook wording (matrix, 23 Nov)", () => {
   it("is written out in full inside the sentence", async () => {
     const { warningSignText } = await import("../../constants/signs")
     expect(warningSignText("Wn-3")).toBe("Kilat muncul di salah satu sisi langit ataupun saling berbalas antara dua sisi")
-    expect(warningSignText("Wn-8")).toBe("Langit mendung")
+    expect(warningSignText("Wn-8")).toBe("Langit mendung namun tidak terlalu gelap")
+    expect(warningSignText("Wn-4")).toBe("Gelombang laut berubah pola dari kecil dan sering hingga besar dan rapat")
     const l = lines({ ...base, personal: true, lik: { level: "WASPADA", signs: warningSignText("Wn-3"), reporters: 1, highTrust: false, inaction: false, startedAt: Date.now(), endsAt: Date.now() + 3600_000 } })
     expect(l.some((x) => x.includes("nelayan melihat kilat muncul di salah satu sisi langit ataupun saling berbalas antara dua sisi"))).toBe(true)
   })

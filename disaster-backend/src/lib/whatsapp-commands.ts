@@ -243,9 +243,25 @@ export function signLabel(code: string): string {
 	return LIK_LABELS[code.toUpperCase()] ?? code;
 }
 
-/** Sign name inside a warning message; keep equal to frontend/src/constants/signs.ts WARNING_SIGN_TEXT. */
+/** Sign inside a warning message: the codebook description (fishermen's own wording); keep equal to SIGNS[].description in frontend/src/constants/signs.ts. */
 const WARNING_SIGN_TEXT: Record<string, string> = {
 	"WN-3": "Kilat muncul di salah satu sisi langit ataupun saling berbalas antara dua sisi",
+	"WN-8": "Langit mendung namun tidak terlalu gelap",
+	"WN-1": "Awan tampak turun ke bawah membentuk gumpalan 3 kali",
+	"WN-2": "Awan bergumpal dalam beberapa kelompok yang tampak saling mendekat atau menyatu",
+	"WN-7": "Pada masa peralihan angin barat ke angin timur",
+	"WN-13": "Bintang tidak terlihat di malam hari, saat angin timur",
+	"WN-4": "Gelombang laut berubah pola dari kecil dan sering hingga besar dan rapat",
+	"WN-9": "Hujan atau langit tertutup awan tebal, saat angin timur",
+	"WN-6": "Burung camar terbang tergesa sambil bersuara keras",
+	"WN-5": "Lumba-lumba mendekati perahu, seolah menggiring perahu",
+	"WN-10": "Cuaca cerah tanpa awan, saat angin barat",
+	"WN-11": "Suara dentuman terdengar 1 atau 7 kali",
+	"WN-12": "Banyak bintang di malam hari berkelap kelip, saat angin barat",
+	"WN-14": "Bintang terlihat mendekati atau sejajar dengan bulan",
+	"WN-15": "Kecoak berterbangan di dalam kapal",
+	"WN-16": "Bulan terlihat di antara penjepit bintang Kalajengking",
+	"WN-17": "Paus muncul ke permukaan laut dan mengibaskan ekornya",
 };
 export function warningSignLabel(code: string): string {
 	return WARNING_SIGN_TEXT[code.toUpperCase()] ?? signLabel(code);
