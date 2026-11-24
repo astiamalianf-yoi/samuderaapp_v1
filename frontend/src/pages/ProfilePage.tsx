@@ -391,7 +391,7 @@ function ActivityCard({ token }: { token: string }) {
 
 /**
  * "Profil Anda": the overall model class as colour and plain words (never Actionable/Inaction), the
- * three answers that moved HIS result most (per-fisherman SHAP of the Random Forest) and, folded,
+ * five answers that moved HIS result most (per-fisherman SHAP of the Random Forest) and, folded,
  * all his answers. Present only when the server enables it.
  */
 function ProfileViewCard({ view }: { view: ProfileView }) {

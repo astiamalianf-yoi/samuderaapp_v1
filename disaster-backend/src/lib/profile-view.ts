@@ -5,7 +5,7 @@ import type { FishermanProfile } from "./personal-warning";
 
 /**
  * "Profil Anda" on the Profil page. The box shows the overall model class as a colour (never the
- * words Actionable/Inaction), the three answers that most moved HIS result (per-fisherman SHAP of
+ * words Actionable/Inaction), the five answers that most moved HIS result (top five, as in Paper 2) (per-fisherman SHAP of
  * the Random Forest, the same method as Paper 2) and all his answers. On by default for now;
  * PROFILE_CLASS_VISIBLE=false hides it (no class data is sent).
  */
@@ -34,7 +34,7 @@ export type ProfileView = {
 	overall: "actionable" | "inaction" | null;
 	/** where the class came from: the Random Forest, or no model for his home beach (always Inaction) */
 	basis: "random_forest" | "no_location_model" | null;
-	/** up to three answers that moved his result most; up = towards Actionable ("mendukung") */
+	/** up to five answers that moved his result most (top five, as in Paper 2); up = towards Actionable ("mendukung") */
 	top: { key: AnswerKey; push: "up" | "down" }[];
 	/** all his answers (effective values: registration answers raised by his activity) */
 	answers: { key: AnswerKey; value: number; min?: number; max?: number }[];
@@ -43,7 +43,7 @@ export type ProfileView = {
 /** Contributions smaller than this barely move him and are not shown as a reason. */
 const MIN_SHOWN = 0.005;
 
-export function topReasons(e: Explanation | null | undefined, n = 3): ProfileView["top"] {
+export function topReasons(e: Explanation | null | undefined, n = 5): ProfileView["top"] {
 	if (!e?.contributions) return [];
 	return Object.entries(e.contributions)
 		.filter((x): x is [AnswerKey, number] => typeof x[1] === "number" && Math.abs(x[1]) >= MIN_SHOWN)

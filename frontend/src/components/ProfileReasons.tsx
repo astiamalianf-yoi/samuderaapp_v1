@@ -3,7 +3,7 @@ import type { ProfileView } from "../services/fishermenService"
 
 import { ANSWER_TEXT, num } from "../lib/profileText"
 
-/** The three answers that moved his result most, with ↑ (to mendukung) or ↓ (to perlu perhatian). */
+/** The five answers that moved his result most (top five, as in Paper 2), with ↑ (to mendukung) or ↓ (to perlu perhatian). */
 export function TopReasons({ view, title = "Yang paling memengaruhi hasil Anda:" }: { view: ProfileView; title?: string }) {
   const byKey = Object.fromEntries((view.answers ?? []).map((a) => [a.key, a]))
   const top = (view.top ?? []).filter((t) => byKey[t.key])

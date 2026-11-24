@@ -26,6 +26,8 @@ const top = [
   { key: "usage_frequency", push: "up" },
   { key: "lik_combination_count", push: "down" },
   { key: "disaster_interaction", push: "up" },
+  { key: "age", push: "up" },
+  { key: "fishing_role", push: "down" },
 ]
 
 function mockMe(extra: object) {
@@ -41,7 +43,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe("Profil Anda", () => {
-  it("shows the overall result, his top three reasons and all answers, never the class words", async () => {
+  it("shows the overall result, his top five reasons (as in Paper 2) and all answers, never the class words", async () => {
     mockMe({ profile_view: { overall: "inaction", basis: "random_forest", top, answers } })
     render(<MemoryRouter><ProfilePage /></MemoryRouter>)
     const box = await screen.findByLabelText("Profil Anda")
@@ -50,7 +52,7 @@ describe("Profil Anda", () => {
     expect(screen.getByTestId("profile-overall").textContent).toContain("perlu perhatian")
     expect(screen.getByTestId("profile-overall").textContent).not.toContain("Keseluruhan")
     const items = screen.getByTestId("profile-top").querySelectorAll("li")
-    expect(items).toHaveLength(3)
+    expect(items).toHaveLength(5)
     expect(items[1].getAttribute("data-push")).toBe("down")
     expect(items[1].textContent).toContain("Jumlah tanda alam yang dipakai")
     expect(items[1].textContent).toContain("5 tanda")

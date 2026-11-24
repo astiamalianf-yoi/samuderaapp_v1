@@ -9,15 +9,17 @@ const P = {
 } as FishermanProfile;
 
 describe("Profil Anda", () => {
-	test("top reasons: the three largest SHAP values, with their direction", () => {
+	test("top reasons: the five largest SHAP values (top five, as in Paper 2), with their direction", () => {
 		const top = topReasons({
 			base_value: 0.5,
-			contributions: { usage_frequency: 0.098, lik_combination_count: -0.092, disaster_interaction: 0.015, age: 0.012, fishing_role: -0.001 },
+			contributions: { usage_frequency: 0.098, lik_combination_count: -0.092, disaster_interaction: 0.015, age: 0.012, fishing_role: -0.009, fishing_duration: 0.007, head_of_community: 0.001 },
 		});
 		expect(top).toEqual([
 			{ key: "usage_frequency", push: "up" },
 			{ key: "lik_combination_count", push: "down" },
 			{ key: "disaster_interaction", push: "up" },
+			{ key: "age", push: "up" },
+			{ key: "fishing_role", push: "down" },
 		]);
 	});
 
