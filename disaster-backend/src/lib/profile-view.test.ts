@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { profileAnswers, profileViewEnabled, topReasons } from "./profile-view";
+import { profileAnswers, profileSummary, profileViewEnabled, topReasons } from "./profile-view";
 import type { FishermanProfile } from "./personal-warning";
 
 const P = {
@@ -15,12 +15,18 @@ describe("Profil Anda", () => {
 			contributions: { usage_frequency: 0.098, lik_combination_count: -0.092, disaster_interaction: 0.015, age: 0.012, fishing_role: -0.009, fishing_duration: 0.007, head_of_community: 0.001 },
 		});
 		expect(top).toEqual([
-			{ key: "usage_frequency", push: "up" },
-			{ key: "lik_combination_count", push: "down" },
-			{ key: "disaster_interaction", push: "up" },
-			{ key: "age", push: "up" },
-			{ key: "fishing_role", push: "down" },
+			{ key: "usage_frequency", push: "up", contribution: 0.098 },
+			{ key: "lik_combination_count", push: "down", contribution: -0.092 },
+			{ key: "disaster_interaction", push: "up", contribution: 0.015 },
+			{ key: "age", push: "up", contribution: 0.012 },
+			{ key: "fishing_role", push: "down", contribution: -0.009 },
 		]);
+	});
+
+	test("summary: how many signs reach the threshold (the rule behind the colour)", () => {
+		const s = profileSummary({ base_value: 0.4812, contributions: {} }, 0.62, { "Wn-1": 0.7, "Wn-2": 0.65, "Wn-3": 0.5, "Wn-4": null });
+		expect(s).toEqual({ base: 0.481, mean: 0.62, signsUp: 2, signsTotal: 3, threshold: 0.6 });
+		expect(profileSummary(null, null, null)).toBeNull();
 	});
 
 	test("tiny contributions are not given as a reason; no explanation gives none", () => {

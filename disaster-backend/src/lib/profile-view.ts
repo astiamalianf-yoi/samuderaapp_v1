@@ -34,8 +34,20 @@ export type ProfileView = {
 	overall: "actionable" | "inaction" | null;
 	/** where the class came from: the Random Forest, or no model for his home beach (always Inaction) */
 	basis: "random_forest" | "no_location_model" | null;
-	/** up to five answers that moved his result most (top five, as in Paper 2); up = towards Actionable ("mendukung") */
-	top: { key: AnswerKey; push: "up" | "down" }[];
+	/** up to five answers that moved his result most (top five, as in Paper 2); up = towards Actionable ("mendukung").
+	 *  contribution = his SHAP value on P(Actionable) (probability points, mean over the ranked signs). */
+	top: { key: AnswerKey; push: "up" | "down"; contribution: number }[];
+	/** how the colour was decided: P(Actionable) per sign vs the model threshold, majority of signs */
+	summary?: {
+		/** average P(Actionable) of all fishermen in the training data (SHAP base value) */
+		base: number | null;
+		/** his average P(Actionable) over the signs */
+		mean: number | null;
+		/** signs whose P(Actionable) reaches the threshold (each such sign gives "mendukung") */
+		signsUp: number;
+		signsTotal: number;
+		threshold: number;
+	} | null;
 	/** all his answers (effective values: registration answers raised by his activity) */
 	answers: { key: AnswerKey; value: number; min?: number; max?: number }[];
 };
@@ -49,10 +61,26 @@ export function topReasons(e: Explanation | null | undefined, n = 5): ProfileVie
 		.filter((x): x is [AnswerKey, number] => typeof x[1] === "number" && Math.abs(x[1]) >= MIN_SHOWN)
 		.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
 		.slice(0, n)
-		.map(([key, v]) => ({ key, push: v > 0 ? "up" : "down" }));
+		.map(([key, v]) => ({ key, push: v > 0 ? "up" : "down", contribution: Math.round(v * 1000) / 1000 }));
 }
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
+
+/** Operating threshold of the Random Forest (SHAP-model-api/src/engine/model/rf_config.json). */
+export const OPERATING_THRESHOLD = Number(process.env.ML_OPERATING_THRESHOLD ?? 0.6);
+
+/** "7 of 10 signs reach 60 %": the exact rule behind the colour (majority of the per-sign classes). */
+export function profileSummary(e: Explanation | null | undefined, mean: number | null, perSign: Record<string, number | null> | null): ProfileView["summary"] {
+	const ps = Object.values(perSign ?? {}).filter((p): p is number => typeof p === "number");
+	if (!ps.length) return null;
+	return {
+		base: typeof e?.base_value === "number" ? Math.round(e.base_value * 1000) / 1000 : null,
+		mean: typeof mean === "number" ? mean : null,
+		signsUp: ps.filter((p) => p >= OPERATING_THRESHOLD).length,
+		signsTotal: ps.length,
+		threshold: OPERATING_THRESHOLD,
+	};
+}
 
 export function profileAnswers(p: FishermanProfile): ProfileView["answers"] {
 	return ANSWER_KEYS.map((key) =>
@@ -69,6 +97,8 @@ function lastRow(fishermanId: string) {
 			source: fishermanClassHistory.source,
 			ep: fishermanClassHistory.effectiveProfile,
 			explanation: fishermanClassHistory.explanation,
+			mean: fishermanClassHistory.meanProbability,
+			perSign: fishermanClassHistory.perSign,
 		})
 		.from(fishermanClassHistory)
 		.where(eq(fishermanClassHistory.fishermanId, fishermanId))
@@ -86,6 +116,7 @@ export function profileView(fishermanId: string, p: FishermanProfile | null): Pr
 		overall,
 		basis,
 		top: basis === "random_forest" ? topReasons(last?.explanation as Explanation | null) : [],
+		summary: basis === "random_forest" ? profileSummary(last?.explanation as Explanation | null, last?.mean ?? null, last?.perSign ?? null) : null,
 		answers: profileAnswers(p),
 	};
 }

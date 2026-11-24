@@ -23,11 +23,11 @@ const answers = [
   { key: "head_of_community", value: 0 },
 ]
 const top = [
-  { key: "usage_frequency", push: "up" },
-  { key: "lik_combination_count", push: "down" },
-  { key: "disaster_interaction", push: "up" },
-  { key: "age", push: "up" },
-  { key: "fishing_role", push: "down" },
+  { key: "usage_frequency", push: "up", contribution: 0.098 },
+  { key: "lik_combination_count", push: "down", contribution: -0.049 },
+  { key: "disaster_interaction", push: "up", contribution: 0.015 },
+  { key: "age", push: "up", contribution: 0.012 },
+  { key: "fishing_role", push: "down", contribution: -0.009 },
 ]
 
 function mockMe(extra: object) {
@@ -44,7 +44,7 @@ afterEach(() => vi.restoreAllMocks())
 
 describe("Profil Anda", () => {
   it("shows the overall result, his top five reasons (as in Paper 2) and all answers, never the class words", async () => {
-    mockMe({ profile_view: { overall: "inaction", basis: "random_forest", top, answers } })
+    mockMe({ profile_view: { overall: "inaction", basis: "random_forest", top, answers, summary: { base: 0.48, mean: 0.52, signsUp: 3, signsTotal: 10, threshold: 0.6 } } })
     render(<MemoryRouter><ProfilePage /></MemoryRouter>)
     const box = await screen.findByLabelText("Profil Anda")
     expect(box.getAttribute("data-overall")).toBe("inaction")
@@ -56,6 +56,15 @@ describe("Profil Anda", () => {
     expect(items[1].getAttribute("data-push")).toBe("down")
     expect(items[1].textContent).toContain("Jumlah tanda alam yang dipakai")
     expect(items[1].textContent).toContain("5 tanda")
+    expect(items[0].textContent).toContain("+9,8 poin (100%)")
+    expect(items[1].textContent).toContain("−4,9 poin (50%)")
+    expect(items[0].textContent).toContain("titik balik 4,75 kali per bulan")
+    expect(items[0].textContent).toContain("≤ 4,75: perlu perhatian · > 4,75: mendukung")
+    expect(items[1].querySelector('[data-testid="profile-tipping"]')).toBeNull()
+    const sum = screen.getByTestId("profile-summary").textContent ?? ""
+    expect(sum).toContain("52%")
+    expect(sum).toContain("rata-rata nelayan 48%")
+    expect(sum).toContain("3 dari 10 tanda alam")
     const all = screen.getByTestId("profile-answers")
     expect(all.querySelectorAll("dt")).toHaveLength(10)
     expect(all.textContent).toContain("Pemilik perahu")

@@ -15,7 +15,9 @@ export interface ProfileView {
   /** "no_location_model": his home beach has no local model yet, so he is treated as Inaction */
   basis?: "random_forest" | "no_location_model" | null
   /** up to five answers that moved his result most (per-fisherman SHAP); up = towards "mendukung" */
-  top: { key: string; push: "up" | "down" }[]
+  top: { key: string; push: "up" | "down"; contribution?: number }[]
+  /** how the colour was decided: P(mendukung) per sign vs the threshold, majority of signs */
+  summary?: { base: number | null; mean: number | null; signsUp: number; signsTotal: number; threshold: number } | null
   /** all his answers (registration answers raised by his activity) */
   answers: { key: string; value: number; min?: number; max?: number }[]
 }
