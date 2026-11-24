@@ -60,7 +60,8 @@ describe("Profil Anda", () => {
     expect(items[1].textContent).toContain("−4,9 poin (50%)")
     expect(items[0].textContent).toContain("titik balik 4,75 kali per bulan")
     expect(items[0].textContent).toContain("≤ 4,75: perlu perhatian · > 4,75: mendukung")
-    expect(items[1].querySelector('[data-testid="profile-tipping"]')).toBeNull()
+    expect(items[1].textContent).toContain("titik balik 3,5 tanda")
+    expect(items[4].textContent).toContain("Pemilik perahu: perlu perhatian · Tekong / nakhoda atau ABK: mendukung")
     const sum = screen.getByTestId("profile-summary").textContent ?? ""
     expect(sum).toContain("52%")
     expect(sum).toContain("rata-rata nelayan 48%")

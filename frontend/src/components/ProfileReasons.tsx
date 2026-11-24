@@ -69,7 +69,7 @@ export function TopReasons({ view, title = "Yang paling memengaruhi hasil Anda:"
       </ol>
       <p className="text-xs text-gray-600 leading-relaxed">
         Poin = berapa jawaban ini menaikkan (↑) atau menurunkan (↓) peluang Anda masuk “mendukung”; persen dibanding pengaruh terbesar (100%).
-        Titik balik = nilai jawaban tempat pengaruhnya berubah arah (Paper 2).
+        Titik balik = nilai jawaban tempat pengaruhnya biasanya berubah arah, dari data 245 nelayan Aceh.
       </p>
       {s && s.signsTotal > 0 && (
         <p className="rounded-xl bg-white/80 border border-gray-200 p-3 text-sm text-gray-800 leading-relaxed" data-testid="profile-summary">
