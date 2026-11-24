@@ -7,8 +7,10 @@ import { AppShell } from "../components/layout/AppShell"
 import { BEACH_LOCATIONS } from "../constants/observationData"
 import { reportService, type BeachStatus } from "../services/reportService"
 import { LEVELS } from "../lib/warning"
-import { getSign } from "../constants/signs"
+import { getSign, warningSignText } from "../constants/signs"
 import { useSelectedBeach } from "../hooks/useAppState"
+import { useNavigate } from "react-router-dom"
+import { buildWarningMessage, plain, strategyTraits } from "../lib/warningMessage"
 import type { BeachLocation, RiskLevel } from "../types/api"
 
 /**
@@ -43,8 +45,49 @@ function icon(level: RiskLevel) {
   })
 }
 
+/**
+ * The popup says what the Beranda card says (same builder, community wording): the level with the
+ * danger, Sumber and the time line ("Mulai … · berlaku sampai …" or "Prakiraan HH.MM–HH.MM WIB"),
+ * then the BMKG forecast as a forecast (not as a warning).
+ */
+export function popupLines(st: BeachStatus | undefined, label: string): { head: string[]; forecast: string | null } {
+  const lik = st?.lik
+    ? {
+        level: st.lik.level,
+        signs: st.lik.codes.map(warningSignText).join("; "),
+        reporters: st.lik.reporters ?? 1,
+        highTrust: strategyTraits(st.lik.strategy).highTrust,
+        inaction: strategyTraits(st.lik.strategy).inaction,
+        startedAt: st.lik.triggeredAt,
+        endsAt: st.lik.endsAt ?? null,
+      }
+    : null
+  const w = st?.bmkg.warnings[0]
+  const blocks = buildWarningMessage({
+    beach: label,
+    final: st?.level ?? "NORMAL",
+    lik,
+    bmkg: {
+      official: w ? { event: w.event, expires: w.expires, effective: w.effective ?? null } : null,
+      forecastLevel: st?.bmkg.forecastLevel ?? (w ? "NORMAL" : st?.bmkg.level ?? "NORMAL"),
+      windKmh: st?.bmkg.windSpeed ?? null,
+      weather: st?.bmkg.weather ?? null,
+      period: st?.bmkg.periodStart && st?.bmkg.periodEnd ? { start: st.bmkg.periodStart, end: st.bmkg.periodEnd } : null,
+    },
+    channel: "app",
+  })
+  // block 1 without "STATUS LAUT HARI INI" and "Lokasi" (the popup title is the beach)
+  const head = blocks[0].slice(2).map(plain).filter((l) => !l.startsWith("Prakiraan BMKG:"))
+  const b = st?.bmkg
+  const forecast = b && (b.weather || b.windSpeed != null)
+    ? `Prakiraan BMKG: ${[b.weather, b.windSpeed != null ? `angin ±${Math.round(b.windSpeed)} km/jam${b.windDirection ? ` dari ${b.windDirection}` : ""}` : null, b.temperature != null ? `${b.temperature}°C` : null].filter(Boolean).join(" · ")}`
+    : null
+  return { head, forecast }
+}
+
 export function MapPage() {
-  const [beach] = useSelectedBeach()
+  const [beach, setBeach] = useSelectedBeach()
+  const navigate = useNavigate()
   const [status, setStatus] = useState<BeachStatus[]>([])
   const [me, setMe] = useState<[number, number] | null>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -104,27 +147,20 @@ export function MapPage() {
           {BEACH_LOCATIONS.map((b) => {
             const st = status.find((x) => x.beach === b.value)
             const lvl: RiskLevel = st?.level ?? "NORMAL"
-            const fmt = (ms: number | null) => ms ? new Date(ms).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }) : null
-            const source = st?.lik && st.bmkg.level !== "NORMAL" ? "Peringatan dari nelayan dan BMKG"
-              : st?.lik ? "Peringatan dari nelayan" : st && st.bmkg.level !== "NORMAL" ? "Peringatan dari BMKG" : null
+            const { head, forecast } = popupLines(st, b.label)
             return (
               <Marker key={b.value} position={BEACH_COORDS[b.value]} icon={icon(lvl)}>
                 <Popup>
-                  <div className="text-base space-y-1 min-w-[200px]">
+                  <div className="text-base space-y-1 min-w-[220px]" data-testid="map-popup">
                     <p className="font-bold text-lg">{b.label}</p>
-                    <p><b>Status:</b> {LEVELS[lvl].label}</p>
-                    {source && <p className="text-sm font-semibold text-gray-700">{source}</p>}
+                    <p className="font-extrabold">{head[0]}</p>
+                    {head.slice(1).map((l) => <p key={l} className="text-sm">{l}</p>)}
                     {st?.lik && (
-                      <p>🐟 Tanda alam: {st.lik.codes.map((c) => getSign(c)?.short ?? c).join(", ")}</p>
+                      <p className="text-sm">Tanda alam: {st.lik.codes.map((c) => getSign(c)?.short ?? c).join(", ")}</p>
                     )}
-                    {st?.bmkg.warnings.map((w) => (
-                      <p key={w.event + w.expires}>⚠️ BMKG: {w.event}{fmt(w.expires) ? ` sampai ${fmt(w.expires)} WIB` : ""}</p>
-                    ))}
-                    {st?.bmkg.weather && (
-                      <p className="text-sm text-gray-700">
-                        {st.bmkg.weather}{st.bmkg.windSpeed != null ? ` · Angin ${st.bmkg.windSpeed} km/j ${st.bmkg.windDirection ?? ""}` : ""}{st.bmkg.temperature != null ? ` · ${st.bmkg.temperature}°C` : ""}
-                      </p>
-                    )}
+                    {forecast && <p className="text-sm text-gray-700">{forecast}</p>}
+                    <button type="button" onClick={() => { setBeach(b.value); navigate("/") }}
+                      className="mt-1 text-sm font-bold text-sky-800 underline">Lihat di Beranda</button>
                   </div>
                 </Popup>
               </Marker>

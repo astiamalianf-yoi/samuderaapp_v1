@@ -150,10 +150,13 @@ export const reportService = {
 export type BeachStatus = {
   beach: BeachLocation;
   level: "NORMAL" | "WASPADA" | "SIAGA" | "EKSTREM";
-  lik: { level: "NORMAL" | "WASPADA" | "SIAGA" | "EKSTREM"; codes: string[]; triggeredAt: number } | null;
+  lik: { level: "NORMAL" | "WASPADA" | "SIAGA" | "EKSTREM"; codes: string[]; triggeredAt: number; endsAt?: number | null; reporters?: number; strategy?: string | null } | null;
   bmkg: {
     level: "NORMAL" | "WASPADA" | "SIAGA" | "EKSTREM";
-    warnings: { event: string; expires: number | null }[];
+    forecastLevel?: "NORMAL" | "WASPADA" | "SIAGA" | "EKSTREM";
+    periodStart?: number | null;
+    periodEnd?: number | null;
+    warnings: { event: string; expires: number | null; effective?: number | null }[];
     weather: string | null;
     windSpeed: number | null;
     windDirection: string | null;

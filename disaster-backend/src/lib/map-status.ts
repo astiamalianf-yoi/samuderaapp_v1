@@ -28,9 +28,15 @@ export function toLevelIndex(v: unknown): number {
 export type BeachStatus = {
 	beach: string;
 	level: Level;
-	lik: { level: Level; codes: string[]; triggeredAt: number } | null;
+	/** reporters, endsAt and strategy (community) so the popup uses the same wording as the Beranda card. */
+	lik: { level: Level; codes: string[]; triggeredAt: number; endsAt?: number | null; reporters?: number; strategy?: string | null } | null;
 	bmkg: {
 		level: Level;
+		/** BMKG forecast level alone (wind / weather), without the official warning. */
+		forecastLevel?: Level;
+		/** Forecast window with bad weather (BMKG 3-hourly slots). */
+		periodStart?: number | null;
+		periodEnd?: number | null;
 		warnings: { event: string; expires: number | null; effective?: number | null }[];
 		weather: string | null;
 		windSpeed: number | null;
@@ -46,11 +52,12 @@ export async function beachStatus(beach: string, now = Date.now()): Promise<Beac
 		getBmkgData(beach).catch(() => null),
 	]);
 
-	let bmkg = nowcast.length ? 2 : 0;
+	let fc = 0;
 	if (forecast) {
-		if (forecast.windSpeed >= WIND_SIAGA_KMH) bmkg = Math.max(bmkg, 2);
-		else if (forecast.windSpeed >= WIND_WASPADA_KMH || !forecast.isSafe) bmkg = Math.max(bmkg, 1);
+		if (forecast.windSpeed >= WIND_SIAGA_KMH) fc = 2;
+		else if (forecast.windSpeed >= WIND_WASPADA_KMH || !forecast.isSafe) fc = 1;
 	}
+	const bmkg = Math.max(nowcast.length ? 2 : 0, fc);
 
 	const ev = (active?.alertEvent ?? null) as Record<string, any> | null;
 	const distributed = active ? (ev?.decision?.shouldDistribute ?? true) : false;
@@ -65,6 +72,9 @@ export async function beachStatus(beach: string, now = Date.now()): Promise<Beac
 			level: LEVELS[Math.max(likLevel, 1)]!,
 			codes: (ev?.ml?.active_warning as string[] | undefined) ?? active.codes,
 			triggeredAt: active.triggeredAt,
+			endsAt: active.expiresAt ?? null,
+			reporters: Math.max(1, Number(ev?.reporterCount) || 1),
+			strategy: (ev?.ml?.warning_strategy?.code as string | undefined) ?? null,
 		};
 	}
 
@@ -74,6 +84,9 @@ export async function beachStatus(beach: string, now = Date.now()): Promise<Beac
 		lik,
 		bmkg: {
 			level: LEVELS[bmkg]!,
+			forecastLevel: LEVELS[fc]!,
+			periodStart: forecast?.periodStart ?? null,
+			periodEnd: forecast?.periodEnd ?? null,
 			warnings: nowcast.map((w) => ({ event: w.event, expires: w.expires, effective: w.effective })),
 			weather: forecast?.weather ?? null,
 			windSpeed: forecast?.windSpeed ?? null,
