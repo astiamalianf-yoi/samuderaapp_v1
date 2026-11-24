@@ -88,7 +88,9 @@ export const fishermanReports = sqliteTable("fisherman_reports", {
 /**
  * His answers after his own sign report (Beranda cards, or WhatsApp !tindakan / !angin), within
  * 24 hours of the report. kind "response": what he did (codebook No. 29 options); kind "hazard":
- * whether strong wind came ("came" with the incident he reported, or "not_came"). Research only:
+ * whether strong wind came ("came" with the incident he reported, or "not_came"); kind "crosscheck":
+ * the same question asked to the other fishermen of that beach (report_id = the latest report of
+ * another fisherman they answered about). Research only:
  * the Trust Index accuracy still needs a different fisherman's incident.
  */
 export const reportFollowups = sqliteTable("report_followups", {

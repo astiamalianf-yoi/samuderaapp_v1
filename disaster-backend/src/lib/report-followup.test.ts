@@ -82,6 +82,49 @@ describe("follow-up after his own sign report", () => {
 	});
 });
 
+describe("cross-check: the others of the beach are asked", () => {
+	test("another fisherman's report (app or WhatsApp) opens one neutral question per beach", () => {
+		const a = fisherman(), b = fisherman(), me = fisherman();
+		const r1 = report(a, new Date(Date.now() - 3 * H), "pantai_lhoknga", "WHATSAPP");
+		const r2 = report(b, new Date(Date.now() - H), "pantai_lhoknga");
+		const c = R.crossCheckFor(me, "pantai_lhoknga")!;
+		expect(c.reporters).toBe(2);
+		expect(c.reportId).toBe(r2.id);
+		expect(c.since).toBe(R.pendingFollowup(a)!.reportedAt);
+		expect(Date.parse(c.until) - Date.parse(R.pendingFollowup(b)!.reportedAt)).toBe(24 * H);
+		expect(R.crossCheckFor(me, "pantai_ulee_lheue")).toBeNull();
+		expect(r1.id).toBeLessThan(r2.id);
+	});
+
+	test("the reporter himself gets his own questions, not the cross-check", () => {
+		const a = fisherman(), b = fisherman();
+		report(a, new Date(Date.now() - 2 * H), "pantai_lhoknga");
+		report(b, new Date(Date.now() - H), "pantai_lhoknga");
+		expect(R.crossCheckFor(b, "pantai_lhoknga")).toBeNull();
+		expect(R.pendingFollowup(b)!.needHazard).toBe(true);
+	});
+
+	test("'Tidak ada' or an incident there closes it; a new report later opens it again", () => {
+		const a = fisherman(), me = fisherman(), other = fisherman();
+		report(a, new Date(Date.now() - 2 * H), "pantai_ulee_lheue");
+		expect(R.answerCrossCheck({ fishermanId: me, beach: "pantai_ulee_lheue", channel: "APP" })).toEqual({ ok: true });
+		expect(R.crossCheckFor(me, "pantai_ulee_lheue")).toBeNull();
+		expect(R.answerCrossCheck({ fishermanId: me, beach: "pantai_ulee_lheue", channel: "APP" })).toEqual({ ok: false, error: "no_question" });
+		const inc = S.saveIncident({ fishermanId: other, beach: "pantai_ulee_lheue", type: "angin_kencang" });
+		expect(R.crossCheckFor(other, "pantai_ulee_lheue")).toBeNull();
+		const row = sqlite.query("SELECT value, incident_id FROM report_followups WHERE fisherman_id = ? AND kind = 'crosscheck'").get(other) as any;
+		expect(row).toEqual({ value: "came", incident_id: inc.id });
+	});
+
+	test("gone 24 h after the last report", () => {
+		const a = fisherman(), me = fisherman();
+		report(a, new Date(Date.now() - 25 * H), "pantai_sepi");
+		expect(R.crossCheckFor(me, "pantai_sepi", new Date())).toBeNull();
+		report(a, new Date(Date.now() - 23 * H), "pantai_sepi");
+		expect(R.crossCheckFor(me, "pantai_sepi", new Date())).not.toBeNull();
+	});
+});
+
 describe("WhatsApp words", () => {
 	test("!tindakan by number or by words", () => {
 		expect(R.parseTindakan("!tindakan 3")).toBe("secure_gear");

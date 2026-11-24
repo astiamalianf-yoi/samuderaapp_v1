@@ -45,6 +45,15 @@ export interface PendingFollowup {
   needHazard: boolean
 }
 
+/** Asked to the other fishermen of his home beach after someone else's sign report (neutral: no sign named). */
+export interface CrossCheck {
+  beach: BeachLocation
+  reportId: number
+  since: string
+  until: string
+  reporters: number
+}
+
 /** Codebook No. 29 options, in the order of the question. */
 export const RESPONSE_OPTIONS: { key: string; label: string }[] = [
   { key: "none", label: "Tidak melakukan apa-apa" },
@@ -102,16 +111,16 @@ export const fishermenService = {
 
   async followup(token: string) {
     const res = await fetch(`${API_BASE_URL}/api/fishermen/me/followup`, { headers: { "X-Fisherman-Token": token } })
-    return json<{ ok: true; pending: PendingFollowup | null }>(res)
+    return json<{ ok: true; pending: PendingFollowup | null; crosscheck?: CrossCheck | null }>(res)
   },
 
-  async answerFollowup(token: string, body: { reportId: number; kind: "response" | "hazard"; value: string }) {
+  async answerFollowup(token: string, body: { reportId: number; kind: "response" | "hazard" | "crosscheck"; value: string }) {
     const res = await fetch(`${API_BASE_URL}/api/fishermen/me/followup`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Fisherman-Token": token },
       body: JSON.stringify(body),
     })
-    return json<{ ok: true; pending: PendingFollowup | null }>(res)
+    return json<{ ok: true; pending: PendingFollowup | null; crosscheck?: CrossCheck | null }>(res)
   },
 
   async reportIncident(token: string, body: {

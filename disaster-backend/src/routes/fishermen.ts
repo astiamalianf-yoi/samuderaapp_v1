@@ -6,7 +6,7 @@ import { deleteFishermanIdentity, findFishermanByToken, registerFisherman, toPub
 import { currentEffectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { classIsStale, profileView, profileViewEnabled } from "../lib/profile-view";
 import { recordClass } from "../lib/class-history";
-import { answerFollowup, pendingFollowup } from "../lib/report-followup";
+import { answerCrossCheck, answerFollowup, crossCheckFor, pendingFollowup } from "../lib/report-followup";
 
 const route = new Hono();
 
@@ -84,7 +84,8 @@ route.delete("/fishermen/me", (c) => {
 route.get("/fishermen/me/followup", (c) => {
 	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
 	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
-	return c.json({ ok: true, pending: pendingFollowup(f.id) });
+	// The others of his home beach: "angin kencang datang?" after someone else's sign report.
+	return c.json({ ok: true, pending: pendingFollowup(f.id), crosscheck: crossCheckFor(f.id, f.homeBeach) });
 });
 
 /** POST /api/fishermen/me/followup { reportId, kind: "response" | "hazard", value } (X-Fisherman-Token) */
@@ -93,6 +94,13 @@ route.post("/fishermen/me/followup", async (c) => {
 	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
 	const body = await c.req.json<Record<string, unknown>>().catch(() => null);
 	const kind = body?.kind;
+	if (kind === "crosscheck") {
+		// "Ya" is an incident report (Lapor kejadian); only "Tidak ada" is answered here.
+		if (body?.value !== "not_came") return c.json({ ok: false, error: "invalid_value" }, 400);
+		const res = answerCrossCheck({ fishermanId: f.id, beach: f.homeBeach, channel: "APP" });
+		if (!res.ok) return c.json(res, 409);
+		return c.json({ ok: true, pending: pendingFollowup(f.id), crosscheck: crossCheckFor(f.id, f.homeBeach) });
+	}
 	if (kind !== "response" && kind !== "hazard") return c.json({ ok: false, error: "invalid_kind" }, 400);
 	// "Ya, datang" is an incident report (Lapor kejadian), not an answer here.
 	if (kind === "hazard" && body?.value !== "not_came") return c.json({ ok: false, error: "invalid_value" }, 400);

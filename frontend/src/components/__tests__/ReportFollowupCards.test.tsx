@@ -49,4 +49,21 @@ describe("Beranda: questions after his own sign report", () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(screen.queryByTestId("followup-cards")).toBeNull()
   })
+
+  it("the others of the beach get one neutral question; 'Tidak ada' closes it", async () => {
+    const cc = { beach: "pantai_lampuuk", reportId: 9, since: new Date(now - 7200_000).toISOString(), until: new Date(now + 22 * 3600_000).toISOString(), reporters: 2 }
+    const f = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(ok({ pending: null, crosscheck: cc }))
+      .mockResolvedValueOnce(ok({ pending: null, crosscheck: null }))
+    render(<MemoryRouter><ReportFollowupCards registration={reg} /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByTestId("followup-crosscheck")).toBeTruthy())
+    const card = screen.getByTestId("followup-crosscheck").textContent ?? ""
+    expect(card).toContain("Apakah ada angin kencang di")
+    expect(card).not.toContain("Ada kilat")
+    expect(screen.queryByTestId("followup-response")).toBeNull()
+    fireEvent.click(screen.getByText("Tidak ada"))
+    expect(screen.queryByTestId("followup-crosscheck")).toBeNull()
+    await waitFor(() => expect(f).toHaveBeenCalledTimes(2))
+    expect(JSON.parse(String(f.mock.calls[1][1]?.body))).toEqual({ reportId: 9, kind: "crosscheck", value: "not_came" })
+  })
 })

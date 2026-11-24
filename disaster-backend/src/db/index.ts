@@ -142,7 +142,7 @@ function createTablesIfNotExist(sqlite: Database) {
 			channel TEXT NOT NULL,
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		);
-		CREATE UNIQUE INDEX IF NOT EXISTS report_followups_report_kind ON report_followups (report_id, kind);
+		CREATE UNIQUE INDEX IF NOT EXISTS report_followups_report_fisherman_kind ON report_followups (report_id, fisherman_id, kind);
 
 		CREATE TABLE IF NOT EXISTS fisherman_class_history (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,

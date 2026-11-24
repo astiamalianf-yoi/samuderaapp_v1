@@ -20,7 +20,7 @@ import { findFishermanByPhone, normalizePhone, phoneHash } from "../lib/fisherme
 import { saveIncident } from "../lib/incident-store";
 import { holdForRegistration } from "../lib/wa-sync";
 import { recordClass } from "../lib/class-history";
-import { RESPONSES, answerFollowup, parseAngin, parseTindakan, pendingFollowup, whatsappFollowupPrompt } from "../lib/report-followup";
+import { RESPONSES, answerCrossCheck, answerFollowup, crossCheckFor, parseAngin, parseTindakan, pendingFollowup, whatsappFollowupPrompt } from "../lib/report-followup";
 
 const route = new Hono();
 
@@ -249,7 +249,7 @@ function followupLines(data: { registered?: boolean }, sender?: string): string[
 	return p ? whatsappFollowupPrompt(p) : [];
 }
 
-const NO_OPEN_REPORT = "ℹ️ Tidak ada laporan tanda alam Anda dalam 24 jam terakhir, Bang. Kirim *!lapor* dulu jika melihat tanda alam.";
+const NO_OPEN_REPORT = "ℹ️ Tidak ada laporan tanda alam di pantai Anda dalam 24 jam terakhir, Bang. Kirim *!lapor* jika melihat tanda alam, atau *!kejadian* jika ada bahaya.";
 const NOT_REGISTERED = "ℹ️ Nomor ini belum terdaftar. Daftar di aplikasi SAMUDRA dengan nomor WhatsApp ini, supaya jawaban Anda tercatat.";
 
 /** "!tindakan 3": what he did after the sign he reported (within 24 h). */
@@ -274,7 +274,24 @@ export function handleAngin(text: string, sender?: string): string {
 	const value = parseAngin(text);
 	if (!value) return "Angin kencang datang, Bang? Balas *!angin ya* atau *!angin tidak*";
 	const p = pendingFollowup(f.id);
-	if (!p) return NO_OPEN_REPORT;
+	if (!p) {
+		// Not his own report: the cross-check of his home beach (asked in the app, answerable here).
+		const cc = crossCheckFor(f.id, f.homeBeach);
+		if (!cc) return NO_OPEN_REPORT;
+		const name = BEACH_DISPLAY[cc.beach] ?? cc.beach;
+		if (value === "came") {
+			saveIncident({ fishermanId: f.id, beach: cc.beach, type: "angin_kencang", channel: "WHATSAPP" });
+			void recordClass(f, "incident");
+			return [
+				"✅ Kejadian dicatat, Bang. Hati-hati di laut.",
+				`Kejadian: ${INCIDENT_NAMES.angin_kencang}`,
+				`Pantai: ${name}`,
+				"Butuh bantuan dari nelayan lain? Kirim *!tolong*. Darurat: Basarnas *115* atau *112*.",
+			].join("\n");
+		}
+		answerCrossCheck({ fishermanId: f.id, beach: cc.beach, channel: "WHATSAPP" });
+		return `✅ Terima kasih, Bang. Dicatat: tidak ada angin kencang di ${name}.`;
+	}
 	if (!p.needHazard) return "ℹ️ Jawaban untuk laporan ini sudah tercatat, Bang.";
 	const beachName = BEACH_DISPLAY[p.beach] ?? p.beach;
 	if (value === "came") {

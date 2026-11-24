@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, ne } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 import { fishermanReports, incidents, reportFollowups } from "../db/schema";
 
@@ -114,6 +114,7 @@ export function linkIncidentToFollowup(fishermanId: string, beach: string, incid
 			))
 			.orderBy(desc(fishermanReports.createdAt), desc(fishermanReports.id))
 			.get();
+		linkIncidentToCrossCheck(fishermanId, beach, incidentId, channel, at);
 		if (!report || report.beach !== beach) return;
 		db.insert(reportFollowups)
 			.values({ reportId: report.id, fishermanId, kind: "hazard", value: "came", incidentId, channel })
@@ -122,6 +123,98 @@ export function linkIncidentToFollowup(fishermanId: string, beach: string, incid
 	} catch (err) {
 		console.warn("[report-followup] incident not linked:", err);
 	}
+}
+
+/**
+ * Cross-check: the other registered fishermen of a beach are asked in the app (never in the
+ * WhatsApp group) whether strong wind came after someone else reported a sign there (app or
+ * WhatsApp report). The question is neutral: it does not name the sign, so the answer is an
+ * independent check. One question per beach, from the first of those reports in the last 24 h;
+ * it disappears when he answers (or reports an incident there) and 24 h after the last report.
+ * A fisherman who reported a sign there himself gets his own questions instead.
+ */
+export type CrossCheck = { beach: string; reportId: number; since: string; until: string; reporters: number };
+
+function othersReports(fishermanId: string, beach: string, now: Date) {
+	return getDb()
+		.select({ id: fishermanReports.id, fishermanId: fishermanReports.fishermanId, createdAt: fishermanReports.createdAt })
+		.from(fishermanReports)
+		.where(and(
+			eq(fishermanReports.beach, beach),
+			ne(fishermanReports.fishermanId, fishermanId),
+			gte(fishermanReports.createdAt, sqliteTime(new Date(now.getTime() - FOLLOWUP_WINDOW_MS))),
+			lte(fishermanReports.createdAt, sqliteTime(now)),
+		))
+		.orderBy(asc(fishermanReports.createdAt), asc(fishermanReports.id))
+		.all();
+}
+
+function ownReportAt(fishermanId: string, beach: string, now: Date): boolean {
+	return Boolean(getDb()
+		.select({ id: fishermanReports.id })
+		.from(fishermanReports)
+		.where(and(
+			eq(fishermanReports.fishermanId, fishermanId),
+			eq(fishermanReports.beach, beach),
+			gte(fishermanReports.createdAt, sqliteTime(new Date(now.getTime() - FOLLOWUP_WINDOW_MS))),
+		))
+		.get());
+}
+
+export function crossCheckFor(fishermanId: string, beach: string, now = new Date()): CrossCheck | null {
+	const others = othersReports(fishermanId, beach, now);
+	if (others.length === 0 || ownReportAt(fishermanId, beach, now)) return null;
+	const first = others[0]!;
+	const last = others[others.length - 1]!;
+	const db = getDb();
+	const answered = db
+		.select({ id: reportFollowups.id })
+		.from(reportFollowups)
+		.where(and(eq(reportFollowups.fishermanId, fishermanId), eq(reportFollowups.kind, "crosscheck"), gte(reportFollowups.createdAt, first.createdAt)))
+		.get();
+	const incident = db
+		.select({ id: incidents.id })
+		.from(incidents)
+		.where(and(eq(incidents.fishermanId, fishermanId), eq(incidents.beach, beach), gte(incidents.createdAt, first.createdAt)))
+		.get();
+	if (answered || incident) return null;
+	return {
+		beach,
+		reportId: last.id,
+		since: isoOf(first.createdAt),
+		until: new Date(Date.parse(isoOf(last.createdAt)) + FOLLOWUP_WINDOW_MS).toISOString(),
+		reporters: new Set(others.map((r) => r.fishermanId)).size,
+	};
+}
+
+/** "Tidak ada angin kencang" to the cross-check of his beach. */
+export function answerCrossCheck(o: { fishermanId: string; beach: string; channel: string; now?: Date }): { ok: true } | { ok: false; error: "no_question" } {
+	const c = crossCheckFor(o.fishermanId, o.beach, o.now ?? new Date());
+	if (!c) return { ok: false, error: "no_question" };
+	getDb()
+		.insert(reportFollowups)
+		.values({ reportId: c.reportId, fishermanId: o.fishermanId, kind: "crosscheck", value: "not_came", channel: o.channel })
+		.onConflictDoNothing()
+		.run();
+	return { ok: true };
+}
+
+/** His incident at a beach where others reported a sign answers the cross-check: "came". */
+function linkIncidentToCrossCheck(fishermanId: string, beach: string, incidentId: string, channel: string, at: Date) {
+	const others = othersReports(fishermanId, beach, at);
+	if (others.length === 0 || ownReportAt(fishermanId, beach, at)) return;
+	const first = others[0]!;
+	const done = getDb()
+		.select({ id: reportFollowups.id })
+		.from(reportFollowups)
+		.where(and(eq(reportFollowups.fishermanId, fishermanId), eq(reportFollowups.kind, "crosscheck"), gte(reportFollowups.createdAt, first.createdAt)))
+		.get();
+	if (done) return;
+	getDb()
+		.insert(reportFollowups)
+		.values({ reportId: others[others.length - 1]!.id, fishermanId, kind: "crosscheck", value: "came", incidentId, channel })
+		.onConflictDoNothing()
+		.run();
 }
 
 /** Text for WhatsApp: the two questions after a report, answered with !tindakan and !angin. */
