@@ -44,6 +44,8 @@ export type ProfileView = {
 		base: number | null;
 		/** sum of the SHAP of all his 10 answers (base + answersTotal + sign effects = mean) */
 		answersTotal: number | null;
+		/** SHAP of each of his 10 answers (for "Jawaban lain" in the waterfall) */
+		contributions: Partial<Record<AnswerKey, number>>;
 		/** his average P(Actionable) over the signs */
 		mean: number | null;
 		/** signs whose P(Actionable) reaches the threshold (each such sign gives "mendukung") */
@@ -80,6 +82,7 @@ export function profileSummary(e: Explanation | null | undefined, mean: number |
 	if (!ps.length) return null;
 	return {
 		base: typeof e?.base_value === "number" ? Math.round(e.base_value * 1000) / 1000 : null,
+		contributions: Object.fromEntries(Object.entries(e?.contributions ?? {}).filter((x): x is [string, number] => typeof x[1] === "number").map(([k, v]) => [k, Math.round(v * 1000) / 1000])),
 		answersTotal: e?.contributions ? Math.round(Object.values(e.contributions).reduce((x: number, v) => x + (typeof v === "number" ? v : 0), 0) * 1000) / 1000 : null,
 		mean: typeof mean === "number" ? mean : null,
 		signsUp: ps.filter((p) => p >= OPERATING_THRESHOLD).length,

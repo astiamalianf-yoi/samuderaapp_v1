@@ -7,6 +7,8 @@ import { getSign } from "../constants/signs"
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 /** SHAP on P(mendukung) in probability points, e.g. +0.098 -> "+9,8 poin". */
+/** gap to the 60% line in points, e.g. 0.016 -> "1,6 poin" */
+const gap = (v: number) => `${(Math.round(v * 1000) / 10).toFixed(1).replace(".", ",")} poin`
 const points = (v: number) => `${v > 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1).replace(".", ",")} poin`
 
 /**
@@ -78,7 +80,7 @@ export function TopReasons({ view, title = "Yang paling memengaruhi hasil Anda:"
   )
 }
 
-type Step = { label: string; delta: number }
+type Step = { label: string; delta: number; note?: string; parts?: { label: string; delta: number }[] }
 
 /** Short answer names for the waterfall rows (full names are in the list above). */
 const SHORT: Record<string, string> = {
@@ -102,9 +104,12 @@ function SignSummary({ s, top }: { s: NonNullable<ProfileView["summary"]>; top: 
     for (const t of top) if (t.contribution != null) steps.push({ label: SHORT[t.key] ?? ANSWER_TEXT[t.key]?.label ?? t.key, delta: t.contribution })
     if (s.answersTotal != null) {
       const others = s.answersTotal - shown
-      if (Math.abs(others) >= 0.0005) steps.push({ label: "Jawaban lain", delta: others })
+      const topKeys = new Set(top.map((t) => t.key))
+      const parts = Object.entries(s.contributions ?? {}).filter(([k]) => !topKeys.has(k))
+        .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).map(([k, v]) => ({ label: SHORT[k] ?? ANSWER_TEXT[k]?.label ?? k, delta: v }))
+      if (Math.abs(others) >= 0.0005) steps.push({ label: `Jawaban lain (${parts.length || "lainnya"})`, delta: others, parts })
       const signs = s.mean - s.base - s.answersTotal
-      if (Math.abs(signs) >= 0.0005) steps.push({ label: "Pengaruh tanda alam", delta: signs })
+      if (Math.abs(signs) >= 0.0005) steps.push({ label: "Pengaruh tanda alam", delta: signs, note: "Dari tanda-tanda alam itu sendiri, sama untuk semua nelayan; bukan dari jawaban Anda." })
     }
   }
   // scale: zoom to the range that matters, always including the 60% line
@@ -119,7 +124,7 @@ function SignSummary({ s, top }: { s: NonNullable<ProfileView["summary"]>; top: 
   return (
     <div className="rounded-xl bg-white/80 border border-gray-200 p-3 space-y-3" data-testid="profile-summary">
       <p className="text-sm text-gray-800 leading-relaxed">
-        {s.mean != null && <>Peluang Anda masuk “mendukung”: <b>{pct(s.mean)}</b> (perlu {pct(s.threshold)}), jadi hasilnya <b>{ok ? "“mendukung”" : "“perlu perhatian”"}</b>.</>}
+        {s.mean != null && <>Peluang Anda masuk “mendukung”: <b>{pct(s.mean)}</b> (perlu {pct(s.threshold)}), {ok ? <>lebih {gap(s.mean - s.threshold)}</> : <>kurang {gap(s.threshold - s.mean)}</>}, jadi hasilnya <b>{ok ? "“mendukung”" : "“perlu perhatian”"}</b>.</>}
       </p>
       {steps.length > 0 && s.base != null && s.mean != null && (
         <div>
@@ -130,7 +135,7 @@ function SignSummary({ s, top }: { s: NonNullable<ProfileView["summary"]>; top: 
               const from = cur; cur += st.delta
               const up = st.delta > 0
               return (
-                <WRow key={st.label} label={st.label} text={points(st.delta)} up={up}
+                <WRow key={st.label} label={st.label} text={points(st.delta)} up={up} note={st.note} parts={st.parts}
                   bar={<span className={`absolute inset-y-0 rounded ${up ? "bg-teal-500" : "bg-amber-500"}`} style={{ left: x(Math.min(from, cur)), width: w(from, cur) }} />}
                   line={x(s.threshold)} />
               )
@@ -166,17 +171,30 @@ function SignSummary({ s, top }: { s: NonNullable<ProfileView["summary"]>; top: 
   )
 }
 
-function WRow({ label, text, bar, line, up, strong }: { label: string; text: string; bar: ReactNode; line: string; up?: boolean; strong?: boolean }) {
+function WRow({ label, text, bar, line, up, strong, note, parts }: { label: string; text: string; bar: ReactNode; line: string; up?: boolean; strong?: boolean; note?: string; parts?: { label: string; delta: number }[] }) {
+  const head = (
+    <span className="flex items-baseline justify-between gap-2">
+      <span className={strong ? "font-bold text-gray-900" : "text-gray-700"}>{parts?.length ? <span className="underline decoration-dotted">{label}</span> : label}</span>
+      <span className={`${strong ? "font-bold" : "font-semibold"} ${up === undefined ? "text-gray-700" : up ? "text-teal-700" : "text-amber-700"}`}>{text}</span>
+    </span>
+  )
   return (
     <li className="text-xs">
-      <span className="flex items-baseline justify-between gap-2">
-        <span className={strong ? "font-bold text-gray-900" : "text-gray-700"}>{label}</span>
-        <span className={`${strong ? "font-bold" : "font-semibold"} ${up === undefined ? "text-gray-700" : up ? "text-teal-700" : "text-amber-700"}`}>{text}</span>
-      </span>
+      {parts?.length ? (
+        <details data-testid="profile-other-answers">
+          <summary className="cursor-pointer list-none">{head}</summary>
+          <ul className="mt-1 mb-1 ml-3 space-y-0.5 text-[11px] text-gray-600">
+            {parts.map((p) => (
+              <li key={p.label} className="flex justify-between gap-2"><span>{p.label}</span><span className={p.delta > 0 ? "text-teal-700" : p.delta < 0 ? "text-amber-700" : ""}>{points(p.delta)}</span></li>
+            ))}
+          </ul>
+        </details>
+      ) : head}
       <span className="relative mt-0.5 block h-3 rounded bg-gray-50" aria-hidden>
         {bar}
         <span className="absolute -inset-y-0.5 w-0.5 bg-gray-800" style={{ left: line }} />
       </span>
+      {note && <span className="mt-0.5 block text-[11px] text-gray-500">{note}</span>}
     </li>
   )
 }
