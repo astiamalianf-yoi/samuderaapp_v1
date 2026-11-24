@@ -4,6 +4,9 @@ import { initDb as getDb } from "../db";
 import { fishermanClassHistory, type fishermen } from "../db/schema";
 import { answersOf, effectiveProfile, loadActivity } from "./adaptive-profile";
 
+/** Operating threshold of the Random Forest (SHAP-model-api/src/engine/model/rf_config.json). */
+export const OPERATING_THRESHOLD = Number(process.env.ML_OPERATING_THRESHOLD ?? 0.6);
+
 /** The 10 ranked signs of Paper 2 (High: Wn-3, 8, 1, 2, 7; Low: Wn-13, 4, 9, 6, 5). */
 export const RANKED_SIGNS = ["Wn-1", "Wn-2", "Wn-3", "Wn-4", "Wn-5", "Wn-6", "Wn-7", "Wn-8", "Wn-9", "Wn-13"];
 
@@ -23,7 +26,9 @@ export type ClassSnapshot = {
 
 /**
  * P(actionable) of the Random Forest for this fisherman over the 10 ranked signs, using his
- * effective (adaptive) profile and home beach. behaviouralClass = 1 when most signs are >= tau.
+ * effective (adaptive) profile and home beach. behaviouralClass = 1 when his AVERAGE P(actionable)
+ * over the 10 signs is >= tau (decided 24 Nov 2026, option A): the SHAP waterfall of "Profil Anda"
+ * (base + his answers + sign effects = average) then explains the colour exactly.
  */
 export async function computeClass(f: Fisherman, fetchImpl: typeof fetch = fetch): Promise<ClassSnapshot | null> {
 	const answers = answersOf(f.profile);
@@ -42,11 +47,11 @@ export async function computeClass(f: Fisherman, fetchImpl: typeof fetch = fetch
 	const perSign: Record<string, number | null> = {};
 	for (const s of signs) perSign[s.code] = s.probability_actionable ?? null;
 	const probs = signs.map((s) => s.probability_actionable).filter((p): p is number => typeof p === "number");
-	const classes = signs.map((s) => s.behavioral_class).filter((c): c is number => typeof c === "number");
+	const mean = probs.length ? probs.reduce((x, y) => x + y, 0) / probs.length : null;
 	return {
 		effectiveProfile: profile as unknown as Record<string, number>,
-		meanProbability: probs.length ? Math.round((probs.reduce((x, y) => x + y, 0) / probs.length) * 1000) / 1000 : null,
-		behaviouralClass: classes.length ? (classes.filter((c) => c === 1).length * 2 >= classes.length ? 1 : 0) : null,
+		meanProbability: mean != null ? Math.round(mean * 1000) / 1000 : null,
+		behaviouralClass: mean != null ? (mean >= OPERATING_THRESHOLD ? 1 : 0) : signs.some((s) => s.behavioral_class === 0) ? 0 : null,
 		perSign,
 		source: body ? (signs.some((s) => s.probability_actionable == null) ? "no_location_model" : "random_forest") : "model_unavailable",
 		explanation,

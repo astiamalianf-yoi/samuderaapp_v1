@@ -17,7 +17,7 @@ export interface ProfileView {
   /** up to five answers that moved his result most (per-fisherman SHAP); up = towards "mendukung" */
   top: { key: string; push: "up" | "down"; contribution?: number }[]
   /** how the colour was decided: P(mendukung) per sign vs the threshold, majority of signs */
-  summary?: { base: number | null; mean: number | null; signsUp: number; signsTotal: number; threshold: number; perSign?: { code: string; p: number }[] } | null
+  summary?: { base: number | null; answersTotal?: number | null; mean: number | null; signsUp: number; signsTotal: number; threshold: number; perSign?: { code: string; p: number }[] } | null
   /** all his answers (registration answers raised by his activity) */
   answers: { key: string; value: number; min?: number; max?: number }[]
 }

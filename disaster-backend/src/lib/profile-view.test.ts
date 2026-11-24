@@ -25,7 +25,7 @@ describe("Profil Anda", () => {
 
 	test("summary: how many signs reach the threshold (the rule behind the colour)", () => {
 		const s = profileSummary({ base_value: 0.4812, contributions: {} }, 0.62, { "Wn-1": 0.7, "Wn-2": 0.65, "Wn-3": 0.5, "Wn-4": null });
-		expect(s).toEqual({ base: 0.481, mean: 0.62, signsUp: 2, signsTotal: 3, threshold: 0.6,
+		expect(s).toEqual({ base: 0.481, answersTotal: 0, mean: 0.62, signsUp: 2, signsTotal: 3, threshold: 0.6,
 			perSign: [{ code: "Wn-1", p: 0.7 }, { code: "Wn-2", p: 0.65 }, { code: "Wn-3", p: 0.5 }] });
 		expect(profileSummary(null, null, null)).toBeNull();
 	});

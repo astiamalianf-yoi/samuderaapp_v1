@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 import { fishermanClassHistory } from "../db/schema";
 import type { FishermanProfile } from "./personal-warning";
+import { OPERATING_THRESHOLD } from "./class-history";
 
 /**
  * "Profil Anda" on the Profil page. The box shows the overall model class as a colour (never the
@@ -41,6 +42,8 @@ export type ProfileView = {
 	summary?: {
 		/** average P(Actionable) of all fishermen in the training data (SHAP base value) */
 		base: number | null;
+		/** sum of the SHAP of all his 10 answers (base + answersTotal + sign effects = mean) */
+		answersTotal: number | null;
 		/** his average P(Actionable) over the signs */
 		mean: number | null;
 		/** signs whose P(Actionable) reaches the threshold (each such sign gives "mendukung") */
@@ -68,16 +71,16 @@ export function topReasons(e: Explanation | null | undefined, n = 5): ProfileVie
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
-/** Operating threshold of the Random Forest (SHAP-model-api/src/engine/model/rf_config.json). */
-export const OPERATING_THRESHOLD = Number(process.env.ML_OPERATING_THRESHOLD ?? 0.6);
+export { OPERATING_THRESHOLD };
 
-/** "7 of 10 signs reach 60 %": the exact rule behind the colour (majority of the per-sign classes). */
+/** The colour rule (average P(Actionable) >= threshold) and the per-sign check, for the waterfall and chart. */
 export function profileSummary(e: Explanation | null | undefined, mean: number | null, perSign: Record<string, number | null> | null): ProfileView["summary"] {
 	const entries = Object.entries(perSign ?? {}).filter((x): x is [string, number] => typeof x[1] === "number");
 	const ps = entries.map(([, p]) => p);
 	if (!ps.length) return null;
 	return {
 		base: typeof e?.base_value === "number" ? Math.round(e.base_value * 1000) / 1000 : null,
+		answersTotal: e?.contributions ? Math.round(Object.values(e.contributions).reduce((x: number, v) => x + (typeof v === "number" ? v : 0), 0) * 1000) / 1000 : null,
 		mean: typeof mean === "number" ? mean : null,
 		signsUp: ps.filter((p) => p >= OPERATING_THRESHOLD).length,
 		signsTotal: ps.length,
@@ -111,10 +114,14 @@ function lastRow(fishermanId: string) {
 		.get();
 }
 
+const basisOf = (src: string | null | undefined) => (src === "no_location_model" ? "no_location_model" : src === "random_forest" ? "random_forest" : null);
+
 export function profileView(fishermanId: string, p: FishermanProfile | null): ProfileView | null {
 	if (!profileViewEnabled() || !p) return null;
 	const last = lastRow(fishermanId);
-	const overall = last?.cls === 1 ? "actionable" : last?.cls === 0 ? "inaction" : null;
+	// colour = average P(Actionable) >= threshold (option A, 24 Nov); older rows stored the majority of signs
+	const cls = basisOf(last?.source) === "random_forest" && typeof last?.mean === "number" ? (last.mean >= OPERATING_THRESHOLD ? 1 : 0) : last?.cls;
+	const overall = cls === 1 ? "actionable" : cls === 0 ? "inaction" : null;
 	const basis = last?.source === "no_location_model" ? "no_location_model" : last?.source === "random_forest" ? "random_forest" : null;
 	return {
 		overall,

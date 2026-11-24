@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { ArrowDown, ArrowUp } from "lucide-react"
 import type { ProfileView } from "../services/fishermenService"
 
@@ -41,7 +42,7 @@ export function TopReasons({ view, title = "Yang paling memengaruhi hasil Anda:"
                 <span className="text-base font-bold text-gray-900">{ANSWER_TEXT[t.key]?.show(a) ?? num(a.value)}</span>
                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${up ? "bg-teal-100 text-teal-800" : "bg-amber-100 text-amber-800"}`} data-testid="profile-contribution">
                   {up ? <ArrowUp className="w-3.5 h-3.5" aria-hidden /> : <ArrowDown className="w-3.5 h-3.5" aria-hidden />}
-                  <span className="sr-only">{up ? "mendorong ke mendukung:" : "mendorong ke perlu perhatian:"}</span>
+                  <span className="sr-only">{up ? "menaikkan peluang mendukung:" : "menurunkan peluang mendukung:"}</span>
                   {c != null && share != null ? <>{points(c)} ({pct(share)})</> : up ? "mendukung" : "perlu perhatian"}
                 </span>
               </div>
@@ -69,36 +70,85 @@ export function TopReasons({ view, title = "Yang paling memengaruhi hasil Anda:"
         })}
       </ol>
       <p className="text-xs text-gray-600 leading-relaxed">
-        Poin = berapa jawaban ini menaikkan (↑) atau menurunkan (↓) peluang Anda masuk “mendukung”; persen dibanding pengaruh terbesar (100%).
+        Poin = berapa jawaban ini menaikkan (↑) atau menurunkan (↓) peluang Anda masuk “mendukung”, dihitung dari rata-rata nelayan; persen dibanding pengaruh terbesar (100%). ↑ belum berarti “mendukung”: lihat perhitungan di bawah.
         Titik balik = nilai jawaban tempat pengaruhnya biasanya berubah arah, dari data 245 nelayan Aceh.
       </p>
-      {s && s.signsTotal > 0 && <SignSummary s={s} />}
+      {s && s.signsTotal > 0 && <SignSummary s={s} top={top} />}
     </>
   )
 }
 
+type Step = { label: string; delta: number }
+
+/** Short answer names for the waterfall rows (full names are in the list above). */
+const SHORT: Record<string, string> = {
+  usage_frequency: "Memakai tanda alam", lik_combination_count: "Jumlah tanda alam", usage_duration: "Lama memakai tanda",
+  disaster_interaction: "Kejadian angin kencang", disaster_experience_count: "Jenis bencana", age: "Usia",
+  fishing_experience: "Lama jadi nelayan", fishing_role: "Peran di perahu", fishing_duration: "Lama sekali melaut",
+  head_of_community: "Ketua kelompok",
+}
+
 /**
- * The exact rule behind the colour: his chance of "mendukung" against the model threshold (60%),
- * and per sign which ones reach it (majority of the signs decides).
+ * The exact rule behind the colour (decided 24 Nov 2026): his average chance of "mendukung" over the
+ * 10 ranked signs must reach the model threshold (60%). Shown as a SHAP waterfall that adds up
+ * exactly: rata-rata nelayan + his answers + the effect of the signs = his chance; then his chance
+ * per sign (used for the warning when that sign is reported).
  */
-function SignSummary({ s }: { s: NonNullable<ProfileView["summary"]> }) {
-  const need = Math.ceil(s.signsTotal / 2)
-  const ok = s.signsUp >= need
+function SignSummary({ s, top }: { s: NonNullable<ProfileView["summary"]>; top: ProfileView["top"] }) {
+  const ok = s.mean != null && s.mean >= s.threshold
+  const steps: Step[] = []
+  if (s.base != null && s.mean != null) {
+    const shown = top.reduce((x, t) => x + (t.contribution ?? 0), 0)
+    for (const t of top) if (t.contribution != null) steps.push({ label: SHORT[t.key] ?? ANSWER_TEXT[t.key]?.label ?? t.key, delta: t.contribution })
+    if (s.answersTotal != null) {
+      const others = s.answersTotal - shown
+      if (Math.abs(others) >= 0.0005) steps.push({ label: "Jawaban lain", delta: others })
+      const signs = s.mean - s.base - s.answersTotal
+      if (Math.abs(signs) >= 0.0005) steps.push({ label: "Pengaruh tanda alam", delta: signs })
+    }
+  }
+  // scale: zoom to the range that matters, always including the 60% line
+  let run = s.base ?? 0
+  const pts = [run, s.threshold, s.mean ?? run]
+  for (const st of steps) { run += st.delta; pts.push(run) }
+  const lo = Math.max(0, Math.floor((Math.min(...pts) - 0.05) * 20) / 20)
+  const hi = Math.min(1, Math.ceil((Math.max(...pts) + 0.05) * 20) / 20)
+  const x = (v: number) => `${((v - lo) / (hi - lo)) * 100}%`
+  const w = (a: number, b: number) => `${Math.max(0.8, (Math.abs(b - a) / (hi - lo)) * 100)}%`
+  let cur = s.base ?? 0
   return (
     <div className="rounded-xl bg-white/80 border border-gray-200 p-3 space-y-3" data-testid="profile-summary">
       <p className="text-sm text-gray-800 leading-relaxed">
-        {s.mean != null && <>Peluang Anda masuk “mendukung”: <b>{pct(s.mean)}</b> (perlu {pct(s.threshold)}). </>}
-        <b>{s.signsUp} dari {s.signsTotal} tanda alam</b> mencapai {pct(s.threshold)};{" "}
-        {ok ? <>cukup, karena perlu setidaknya {need}, jadi hasilnya “mendukung”.</> : <>perlu setidaknya {need} agar hasilnya “mendukung”.</>}
+        {s.mean != null && <>Peluang Anda masuk “mendukung”: <b>{pct(s.mean)}</b> (perlu {pct(s.threshold)}), jadi hasilnya <b>{ok ? "“mendukung”" : "“perlu perhatian”"}</b>.</>}
       </p>
+      {steps.length > 0 && s.base != null && s.mean != null && (
+        <div>
+          <p className="text-xs font-semibold text-gray-700 mb-1.5">Perhitungan peluang Anda</p>
+          <ul className="space-y-1.5" data-testid="profile-waterfall">
+            <WRow label="Rata-rata nelayan" text={pct(s.base)} bar={<span className="absolute inset-y-0 rounded bg-gray-400" style={{ left: 0, width: x(s.base) }} />} line={x(s.threshold)} />
+            {steps.map((st) => {
+              const from = cur; cur += st.delta
+              const up = st.delta > 0
+              return (
+                <WRow key={st.label} label={st.label} text={points(st.delta)} up={up}
+                  bar={<span className={`absolute inset-y-0 rounded ${up ? "bg-teal-500" : "bg-amber-500"}`} style={{ left: x(Math.min(from, cur)), width: w(from, cur) }} />}
+                  line={x(s.threshold)} />
+              )
+            })}
+            <WRow label="Peluang Anda" strong text={pct(s.mean)} up={ok}
+              bar={<span className={`absolute inset-y-0 rounded ${ok ? "bg-teal-600" : "bg-amber-600"}`} style={{ left: 0, width: x(s.mean) }} />} line={x(s.threshold)} />
+          </ul>
+          <p className="mt-1.5 text-[11px] text-gray-600">Mulai dari rata-rata nelayan, tiap jawaban menambah atau mengurangi peluang. Garis hitam = {pct(s.threshold)}: hasilnya “mendukung” bila Peluang Anda mencapai garis ini. Skala {pct(lo)}–{pct(hi)}.</p>
+        </div>
+      )}
       {s.perSign && s.perSign.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-700 mb-1.5">Peluang Anda untuk tiap tanda alam</p>
+          <p className="text-xs font-semibold text-gray-700 mb-1.5">Peluang Anda untuk tiap tanda alam ({s.signsUp} dari {s.signsTotal} mencapai {pct(s.threshold)})</p>
           <ul className="space-y-1.5" data-testid="profile-signs">
             {s.perSign.map(({ code, p }) => {
               const up = p >= s.threshold
               return (
-                <li key={code} className="grid grid-cols-[minmax(0,7.5rem)_1fr_2.5rem] items-center gap-2 text-xs" data-up={up}>
+                <li key={code} className="grid grid-cols-[minmax(0,8rem)_1fr_2.5rem] items-center gap-2 text-xs" data-up={up}>
                   <span className="truncate text-gray-700" title={getSign(code)?.short ?? code}>{getSign(code)?.short ?? code}</span>
                   <span className="relative h-3 rounded-full bg-gray-100" aria-hidden>
                     <span className={`absolute inset-y-0 left-0 rounded-full ${up ? "bg-teal-500" : "bg-amber-500"}`} style={{ width: `${Math.max(2, p * 100)}%` }} />
@@ -109,9 +159,24 @@ function SignSummary({ s }: { s: NonNullable<ProfileView["summary"]> }) {
               )
             })}
           </ul>
-          <p className="mt-1.5 text-[11px] text-gray-600">Garis hitam = {pct(s.threshold)}. Hijau: mencapai {pct(s.threshold)} · oranye: belum.</p>
+          <p className="mt-1.5 text-[11px] text-gray-600">Rata-rata dari daftar ini = Peluang Anda. Saat ada peringatan, peringatan untuk Anda memakai peluang tanda yang dilaporkan.</p>
         </div>
       )}
     </div>
+  )
+}
+
+function WRow({ label, text, bar, line, up, strong }: { label: string; text: string; bar: ReactNode; line: string; up?: boolean; strong?: boolean }) {
+  return (
+    <li className="text-xs">
+      <span className="flex items-baseline justify-between gap-2">
+        <span className={strong ? "font-bold text-gray-900" : "text-gray-700"}>{label}</span>
+        <span className={`${strong ? "font-bold" : "font-semibold"} ${up === undefined ? "text-gray-700" : up ? "text-teal-700" : "text-amber-700"}`}>{text}</span>
+      </span>
+      <span className="relative mt-0.5 block h-3 rounded bg-gray-50" aria-hidden>
+        {bar}
+        <span className="absolute -inset-y-0.5 w-0.5 bg-gray-800" style={{ left: line }} />
+      </span>
+    </li>
   )
 }

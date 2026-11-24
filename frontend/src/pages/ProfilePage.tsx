@@ -437,7 +437,7 @@ function ProfileViewCard({ view }: { view: ProfileView }) {
         </details>
       )}
 
-      <p className="text-sm text-gray-600">Hasil ini dihitung dari gabungan semua jawaban dan aktivitas Anda. Peringatan untuk Anda mengikuti warna kotak ini, dan bisa berubah sendiri saat Anda melapor.</p>
+      <p className="text-sm text-gray-600">Hasil ini dihitung dari gabungan semua jawaban dan aktivitas Anda, dan bisa berubah sendiri saat Anda melapor. Saat ada peringatan, cara peringatan untuk Anda memakai peluang Anda untuk tanda alam yang dilaporkan (daftar tanda di atas).</p>
     </section>
   )
 }
