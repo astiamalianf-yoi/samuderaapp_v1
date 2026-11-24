@@ -121,7 +121,10 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 	// With a BMKG forecast (WASPADA or SIAGA) and fishermen's signs together, the warning lasts to the
 	// end of the forecast window (matrix rows 6/9/11/14 and 16–19, agreed 24 Nov 2026).
 	const fcEnd = lik && (fcSiaga || fcWaspada) ? p.bmkg.period?.end ?? 0 : 0;
-	const end = Math.max(lik?.endsAt ?? 0, official?.expires ?? 0, fcEnd) || null;
+	// While an official BMKG warning is active, the card is valid until that warning ends: then the level is
+	// worked out again from what is still valid (e.g. BAHAYA until 17.30, then the fishermen's sign with the
+	// forecast, matrix rows 18/19, until 18.00, then AMAN; agreed 24 Nov 2026).
+	const end = (official?.expires && lik ? official.expires : Math.max(lik?.endsAt ?? 0, official?.expires ?? 0, fcEnd)) || null;
 	const fcWin = p.bmkg.period?.start && p.bmkg.period?.end ? ` pada ${timeWib(p.bmkg.period.start)}–${timeWib(p.bmkg.period.end)} WIB` : "";
 	let time: string;
 	if (lik) time = `Mulai ${timeWib(lik.startedAt)}${end ? ` · berlaku sampai ${timeWib(end)} WIB` : ""}`;
