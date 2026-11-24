@@ -33,6 +33,27 @@ export interface Activity {
   channels_30d?: { app: number; whatsapp: number }
 }
 
+/** The two Beranda questions after his own sign report of the last 24 h (app or WhatsApp). */
+export interface PendingFollowup {
+  reportId: number
+  beach: BeachLocation
+  signs: string[]
+  channel: string
+  reportedAt: string
+  until: string
+  needResponse: boolean
+  needHazard: boolean
+}
+
+/** Codebook No. 29 options, in the order of the question. */
+export const RESPONSE_OPTIONS: { key: string; label: string }[] = [
+  { key: "none", label: "Tidak melakukan apa-apa" },
+  { key: "careful", label: "Berhati-hati (amati tanda lain)" },
+  { key: "secure_gear", label: "Amankan alat tangkap" },
+  { key: "adjust_time", label: "Sesuaikan jadwal melaut" },
+  { key: "repair_boat", label: "Perbaiki perahu" },
+]
+
 export type IncidentType = "angin_kencang" | "gelombang_ekstrem" | "badai" | "arus_kuat"
 
 export class RegistrationError extends Error {
@@ -77,6 +98,20 @@ export const fishermenService = {
   async me(token: string) {
     const res = await fetch(`${API_BASE_URL}/api/fishermen/me`, { headers: { "X-Fisherman-Token": token } })
     return json<{ ok: true; fisherman: PublicFisherman; activity: Activity; profile_view?: ProfileView }>(res)
+  },
+
+  async followup(token: string) {
+    const res = await fetch(`${API_BASE_URL}/api/fishermen/me/followup`, { headers: { "X-Fisherman-Token": token } })
+    return json<{ ok: true; pending: PendingFollowup | null }>(res)
+  },
+
+  async answerFollowup(token: string, body: { reportId: number; kind: "response" | "hazard"; value: string }) {
+    const res = await fetch(`${API_BASE_URL}/api/fishermen/me/followup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Fisherman-Token": token },
+      body: JSON.stringify(body),
+    })
+    return json<{ ok: true; pending: PendingFollowup | null }>(res)
   },
 
   async reportIncident(token: string, body: {

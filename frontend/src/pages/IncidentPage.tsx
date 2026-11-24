@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { CheckCircle2, CloudLightning, MapPin, MessageCircle, Phone, Siren, Waves, Wind, MoveRight } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BeachPicker } from "../components/BeachPicker"
@@ -69,7 +69,15 @@ type Result = { help: boolean; helpSent: boolean; helpReason: string | null }
 export function IncidentPage() {
   const registration = useRegistration()
   const [beach, setBeach] = useSelectedBeach()
-  const [type, setType] = useState<IncidentType | null>(null)
+  // From the Beranda question "Angin kencang datang?": the beach of his report and strong wind, ready to send.
+  const [params] = useSearchParams()
+  const presetType = TYPES.find((t) => t.key === params.get("type"))?.key ?? null
+  const presetBeach = params.get("beach")
+  useEffect(() => {
+    if (presetBeach && presetBeach !== beach && getBeachMeta(presetBeach as typeof beach)) setBeach(presetBeach as typeof beach)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetBeach])
+  const [type, setType] = useState<IncidentType | null>(presetType)
   const [needHelp, setNeedHelp] = useState(false)
   const [shareGps, setShareGps] = useState(true)
   // Location is looked up as soon as he asks for help (not only on "Kirim"), so it is ready in time

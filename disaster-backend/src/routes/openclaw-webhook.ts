@@ -20,6 +20,7 @@ import { findFishermanByPhone, normalizePhone, phoneHash } from "../lib/fisherme
 import { saveIncident } from "../lib/incident-store";
 import { holdForRegistration } from "../lib/wa-sync";
 import { recordClass } from "../lib/class-history";
+import { RESPONSES, answerFollowup, parseAngin, parseTindakan, pendingFollowup, whatsappFollowupPrompt } from "../lib/report-followup";
 
 const route = new Hono();
 
@@ -203,6 +204,7 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 					? `⚠️ Peringatan ${riskLabel} dikirim ke grup (dilaporkan oleh ${alertEvent.reporterCount} nelayan).`
 					: `ℹ️ Peringatan ${riskLabel} untuk pantai ini masih berlaku. Laporan Anda ikut memperpanjangnya, tanpa pesan baru ke grup.`,
 				...syncNote(data, sender),
+				...followupLines(data, sender),
 			].join("\n");
 		}
 
@@ -231,11 +233,66 @@ async function handleLapor(text: string, chatId: string, sender?: string): Promi
 				: []),
 			"Menunggu laporan lain untuk mencapai threshold.",
 			...syncNote(data, sender),
+			...followupLines(data, sender),
 		].join("\n");
 	} catch (err) {
 		console.error("[openclaw-webhook] lapor fetch error:", err);
 		return "Maaf Bang, gagal mengirim laporan. Coba lagi nanti ya.";
 	}
+}
+
+/** The two follow-up questions under the receipt of a registered fisherman's report. */
+function followupLines(data: { registered?: boolean }, sender?: string): string[] {
+	if (!data.registered) return [];
+	const f = findFishermanByPhone(sender);
+	const p = f ? pendingFollowup(f.id) : null;
+	return p ? whatsappFollowupPrompt(p) : [];
+}
+
+const NO_OPEN_REPORT = "ℹ️ Tidak ada laporan tanda alam Anda dalam 24 jam terakhir, Bang. Kirim *!lapor* dulu jika melihat tanda alam.";
+const NOT_REGISTERED = "ℹ️ Nomor ini belum terdaftar. Daftar di aplikasi SAMUDRA dengan nomor WhatsApp ini, supaya jawaban Anda tercatat.";
+
+/** "!tindakan 3": what he did after the sign he reported (within 24 h). */
+export function handleTindakan(text: string, sender?: string): string {
+	const f = findFishermanByPhone(sender);
+	if (!f) return NOT_REGISTERED;
+	const value = parseTindakan(text);
+	if (!value) {
+		return ["Apa yang Anda lakukan, Bang? Balas *!tindakan* dan nomornya:",
+			...Object.values(RESPONSES).map((v, i) => `   ${i + 1}. ${v}`)].join("\n");
+	}
+	const res = answerFollowup({ fishermanId: f.id, kind: "response", value, channel: "WHATSAPP" });
+	if (!res.ok) return res.error === "already_answered" ? "ℹ️ Tindakan untuk laporan ini sudah tercatat, Bang." : NO_OPEN_REPORT;
+	return [`✅ Terima kasih, Bang. Tindakan dicatat: ${RESPONSES[value]}.`,
+		...(res.pending?.needHazard ? ["Angin kencang datang? Balas *!angin ya* atau *!angin tidak*"] : [])].join("\n");
+}
+
+/** "!angin ya" (an incident: strong wind at the beach of his report) or "!angin tidak". */
+export function handleAngin(text: string, sender?: string): string {
+	const f = findFishermanByPhone(sender);
+	if (!f) return NOT_REGISTERED;
+	const value = parseAngin(text);
+	if (!value) return "Angin kencang datang, Bang? Balas *!angin ya* atau *!angin tidak*";
+	const p = pendingFollowup(f.id);
+	if (!p) return NO_OPEN_REPORT;
+	if (!p.needHazard) return "ℹ️ Jawaban untuk laporan ini sudah tercatat, Bang.";
+	const beachName = BEACH_DISPLAY[p.beach] ?? p.beach;
+	if (value === "came") {
+		// The same as "!kejadian angin kencang": an incident, which also answers the question.
+		saveIncident({ fishermanId: f.id, beach: p.beach, type: "angin_kencang", channel: "WHATSAPP" });
+		void recordClass(f, "incident");
+		return [
+			"✅ Kejadian dicatat, Bang. Hati-hati di laut.",
+			`Kejadian: ${INCIDENT_NAMES.angin_kencang}`,
+			`Pantai: ${beachName}`,
+			"Butuh bantuan dari nelayan lain? Kirim *!tolong*. Darurat: Basarnas *115* atau *112*.",
+			...(p.needResponse ? ["Apa yang Anda lakukan? Balas *!tindakan* dan nomornya (1–5)."] : []),
+		].join("\n");
+	}
+	const res = answerFollowup({ fishermanId: f.id, kind: "hazard", value: "not_came", channel: "WHATSAPP", reportId: p.reportId });
+	if (!res.ok) return NO_OPEN_REPORT;
+	return ["✅ Terima kasih, Bang. Dicatat: angin kencang tidak datang.",
+		...(res.pending?.needResponse ? ["Apa yang Anda lakukan? Balas *!tindakan* dan nomornya (1–5)."] : [])].join("\n");
 }
 
 async function handlePeringatan(text: string, chatId: string, sender?: string): Promise<string> {
@@ -328,7 +385,9 @@ route.post("/openclaw/webhook", async (c) => {
 			const command = isHelpCommand(lowerText) ? "tolong"
 				: lowerText.startsWith("!lapor") ? "lapor"
 				: lowerText.startsWith("!kejadian") ? "kejadian"
-				: lowerText.startsWith("!peringatan") ? "peringatan" : null;
+				: lowerText.startsWith("!peringatan") ? "peringatan"
+				: lowerText.startsWith("!tindakan") ? "tindakan"
+				: lowerText.startsWith("!angin") ? "angin" : null;
 			const isCommand = command !== null;
 			const replyTarget = to || from;
 
@@ -358,6 +417,11 @@ route.post("/openclaw/webhook", async (c) => {
 					if (isGroupChat(replyTarget) && phone) target = `+${phone}`;
 				} else if (command === "kejadian") {
 					reply = await handleKejadian(cleanText, sender, replyTarget);
+				} else if (command === "tindakan" || command === "angin") {
+					reply = command === "tindakan" ? handleTindakan(cleanText, sender) : handleAngin(cleanText, sender);
+					// His answers are his own: in a group, the reply goes to him privately.
+					const phone = normalizePhone(sender);
+					if (isGroupChat(replyTarget) && phone) target = `+${phone}`;
 				} else {
 					reply = await handlePeringatan(cleanText, replyTarget, sender);
 				}

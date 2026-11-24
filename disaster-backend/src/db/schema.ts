@@ -86,6 +86,23 @@ export const fishermanReports = sqliteTable("fisherman_reports", {
 });
 
 /**
+ * His answers after his own sign report (Beranda cards, or WhatsApp !tindakan / !angin), within
+ * 24 hours of the report. kind "response": what he did (codebook No. 29 options); kind "hazard":
+ * whether strong wind came ("came" with the incident he reported, or "not_came"). Research only:
+ * the Trust Index accuracy still needs a different fisherman's incident.
+ */
+export const reportFollowups = sqliteTable("report_followups", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	reportId: integer("report_id").notNull().references(() => fishermanReports.id),
+	fishermanId: text("fisherman_id").notNull(),
+	kind: text("kind").notNull(),
+	value: text("value").notNull(),
+	incidentId: text("incident_id"),
+	channel: text("channel").notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/**
  * WhatsApp reports and incidents from a number that is not registered yet, kept under the keyed
  * hash of the number (never the number). When that number registers in the app, they move into
  * his history with their original time, so app and WhatsApp give one history per fisherman.

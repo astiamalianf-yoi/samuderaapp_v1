@@ -3,6 +3,7 @@ import { ArrowRight, Megaphone, Siren } from "lucide-react"
 import { AppShell, WhatsAppGroupCard } from "../components/layout/AppShell"
 import { BeachPicker } from "../components/BeachPicker"
 import { WarningStatusCard } from "../components/WarningStatusCard"
+import { ReportFollowupCards } from "../components/ReportFollowupCards"
 import { BmkgMarineCard } from "../components/BmkgMarineCard"
 import { PushNotificationCard } from "../components/PushNotificationCard"
 import { WeatherAlertList } from "../components/WeatherAlertList"
@@ -24,6 +25,8 @@ export function HomePage() {
         <BeachPicker value={beach} onChange={setBeach} homeBeach={homeBeach} />
 
         <WarningStatusCard beach={beach} bmkg={bmkg} weatherAlerts={weather.alerts} />
+
+        <ReportFollowupCards registration={registration} />
 
         <Link to={registration ? "/lapor" : "/profil"}
           className="flex items-center gap-4 rounded-2xl bg-orange-600 text-white p-4 shadow-md active:scale-[0.99]">

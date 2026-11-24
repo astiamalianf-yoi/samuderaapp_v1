@@ -6,6 +6,7 @@ import { deleteFishermanIdentity, findFishermanByToken, registerFisherman, toPub
 import { currentEffectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { classIsStale, profileView, profileViewEnabled } from "../lib/profile-view";
 import { recordClass } from "../lib/class-history";
+import { answerFollowup, pendingFollowup } from "../lib/report-followup";
 
 const route = new Hono();
 
@@ -74,6 +75,33 @@ route.delete("/fishermen/me", (c) => {
 	deleteFishermanIdentity(f);
 	console.log("[fishermen] identity deleted at his request:", f.id);
 	return c.json({ ok: true, deleted: true });
+});
+
+/**
+ * GET /api/fishermen/me/followup (X-Fisherman-Token): the two Beranda questions after his own sign
+ * report of the last 24 h (app or WhatsApp). { pending: null } when there is nothing to ask.
+ */
+route.get("/fishermen/me/followup", (c) => {
+	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
+	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
+	return c.json({ ok: true, pending: pendingFollowup(f.id) });
+});
+
+/** POST /api/fishermen/me/followup { reportId, kind: "response" | "hazard", value } (X-Fisherman-Token) */
+route.post("/fishermen/me/followup", async (c) => {
+	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
+	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
+	const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+	const kind = body?.kind;
+	if (kind !== "response" && kind !== "hazard") return c.json({ ok: false, error: "invalid_kind" }, 400);
+	// "Ya, datang" is an incident report (Lapor kejadian), not an answer here.
+	if (kind === "hazard" && body?.value !== "not_came") return c.json({ ok: false, error: "invalid_value" }, 400);
+	const res = answerFollowup({
+		fishermanId: f.id, kind, value: String(body?.value ?? ""), channel: "APP",
+		reportId: typeof body?.reportId === "number" ? body.reportId : undefined,
+	});
+	if (!res.ok) return c.json(res, res.error === "invalid_value" ? 400 : 409);
+	return c.json(res);
 });
 
 /** PUT /api/fishermen/me { homeBeach?, profile? } (X-Fisherman-Token) */

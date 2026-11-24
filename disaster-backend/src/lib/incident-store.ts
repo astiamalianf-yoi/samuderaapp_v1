@@ -2,6 +2,7 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 import { fishermanReports, incidents } from "../db/schema";
 import { CONFIRM_WINDOW_MS } from "./trust-index";
+import { linkIncidentToFollowup } from "./report-followup";
 
 const sqliteTime = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
 
@@ -29,7 +30,7 @@ export function saveIncident(o: {
 	lat?: number | null; lon?: number | null; at?: Date; channel?: string;
 }) {
 	const at = o.at ?? new Date();
-	return getDb()
+	const row = getDb()
 		.insert(incidents)
 		.values({
 			fishermanId: o.fishermanId,
@@ -43,4 +44,6 @@ export function saveIncident(o: {
 		})
 		.returning()
 		.get();
+	linkIncidentToFollowup(o.fishermanId, o.beach, row.id, o.channel ?? "APP", at);
+	return row;
 }
