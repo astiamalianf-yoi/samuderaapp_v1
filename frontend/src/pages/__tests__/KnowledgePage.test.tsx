@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { KnowledgePage } from "../KnowledgePage"
 import { liveSigns } from "../../hooks/useTrustIndex"
-import { SIGNS } from "../../constants/signs"
+import { SIGNS, SIGN_SCIENCE } from "../../constants/signs"
 
 const row = (code: string, tier: string, ti: number, extra = {}) => ({
   code, tier, trustIndex: ti, accuracy: 80, records: 30, surveyRecords: 17, appRecords: 13, appReports: 20, appConfirmed: 15, ranked: tier !== "Unranked", ...extra,
@@ -54,5 +54,26 @@ describe("Tanda Alam: live Trust Index", () => {
     expect(p).toContain("2 laporan masih menunggu 24 jam untuk dinilai")
     expect(p).toContain("25 Nov")
     expect(p).toContain("09.04 WIB")
+  })
+
+  it("each sign has a scientific explanation with an honest evidence level", () => {
+    for (const s of SIGNS) expect(SIGN_SCIENCE[s.code]?.text.length).toBeGreaterThan(20)
+    expect(SIGN_SCIENCE["Wn-5"].evidence).toBe("belum")
+    expect(SIGN_SCIENCE["Wn-1"].text).toContain("cumulonimbus")
+  })
+
+  it("short list: 'Belum cukup data' is folded, a tap shows the science and the action", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 500 }))
+    render(<MemoryRouter><KnowledgePage /></MemoryRouter>)
+    expect(screen.queryByText("Paus muncul")).toBeNull()
+    fireEvent.click(screen.getByTestId("show-unranked"))
+    fireEvent.click(screen.getByText("Lumba-lumba mendekat"))
+    expect(screen.getByTestId("sign-science").textContent).toContain("Belum ada penjelasan ilmiah")
+    fireEvent.click(screen.getByText("Awan turun"))
+    const d = screen.getByTestId("sign-detail").textContent ?? ""
+    expect(d).toContain("cumulonimbus")
+    expect(d).toContain("Didukung sains")
+    expect(d).toContain("Amankan alat tangkap")
+    expect(screen.getByText("Paus muncul")).toBeTruthy()
   })
 })
