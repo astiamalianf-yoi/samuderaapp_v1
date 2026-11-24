@@ -52,11 +52,16 @@ function MoveIcon({ s }: { s: LiveSign }) {
 const num = (v: number, d = 0) => v.toLocaleString("id-ID", { maximumFractionDigits: d, minimumFractionDigits: d })
 
 /** Pengetahuan Nelayan: the local-knowledge signs, grouped by the live Trust Index. */
+/** "25 Nov 09.04 WIB" */
+const waktu = (iso: string) =>
+  new Date(iso).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", ".") + " WIB"
+
 export function KnowledgePage() {
   const [open, setOpen] = useState<string | null>(null)
   const trust = useTrustIndex()
   const signs = liveSigns(trust)
-  const appReports = trust?.signs.reduce((n, s) => n + s.appReports, 0) ?? 0
+  const appReports = trust?.signs.reduce((n, s) => n + s.appReports + (s.appPending ?? 0), 0) ?? 0
+  const hours = trust?.confirmWindowHours ?? 24
   return (
     <AppShell title="Tanda Alam">
       <div className="space-y-6">
@@ -64,11 +69,11 @@ export function KnowledgePage() {
           <h1 className="text-2xl font-black">Pengetahuan nelayan</h1>
           <p className="text-base text-gray-700">
             Tanda-tanda angin kencang dari pengalaman nelayan. Kepercayaan dinilai dari survei 245 nelayan di Aceh,
-            lalu diperbarui dari laporan di aplikasi: tanda yang sering dilaporkan, dan yang kemudian diikuti laporan
-            angin kencang dari nelayan lain, makin dipercaya.
+            lalu diperbarui dari laporan nelayan di aplikasi dan WhatsApp: tanda yang sering dilaporkan langsung dihitung,
+            dan tanda yang dalam 24 jam diikuti laporan angin kencang dari nelayan lain makin dipercaya.
           </p>
           {trust?.mode === "adaptive" && appReports > 0 && (
-            <p className="text-sm text-gray-500 mt-1">Termasuk {num(appReports)} laporan tanda dari aplikasi.</p>
+            <p className="text-sm text-gray-500 mt-1">Termasuk {num(appReports)} laporan tanda dari nelayan (aplikasi + WhatsApp).</p>
           )}
           {trust && (
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 mt-2" aria-label="Keterangan">
@@ -105,7 +110,18 @@ export function KnowledgePage() {
                             <span className="block text-sm text-gray-600">
                               Indeks kepercayaan {num(s.trust.trustIndex, 1)} · terbukti {num(s.trust.accuracy)}% ·{" "}
                               {num(s.trust.surveyRecords)} dari survei
-                              {s.trust.appReports > 0 && <>, {num(s.trust.appReports)} laporan aplikasi ({num(s.trust.appConfirmed)} diikuti angin kencang)</>}
+                              {s.trust.appReports + (s.trust.appPending ?? 0) > 0 && (
+                                <>
+                                  , {num(s.trust.appReports + (s.trust.appPending ?? 0))} laporan nelayan (aplikasi + WhatsApp)
+                                  {s.trust.appReports > 0 && <>: {num(s.trust.appConfirmed)} dari {num(s.trust.appReports)} diikuti angin kencang</>}
+                                  {(s.trust.appPending ?? 0) > 0 && (
+                                    <span className="block" data-testid="trust-pending">
+                                      {num(s.trust.appPending ?? 0)} laporan masih menunggu {hours} jam untuk dinilai
+                                      {s.trust.appPendingUntil && <> (mulai {waktu(s.trust.appPendingUntil)})</>}; sudah dihitung sebagai pemakaian tanda.
+                                    </span>
+                                  )}
+                                </>
+                              )}
                             </span>
                           )}
                           <span className="block text-gray-500">({TIER_LABEL[s.tier]} · {s.code})</span>

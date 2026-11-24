@@ -61,7 +61,18 @@ describe("app records", () => {
 
 	test("repeats within 5 minutes are one prediction; reports still in their window wait", () => {
 		const reports = [rep("a", T0), rep("a", T0 + 60_000), rep("a", T0 + 10 * H), rep("a", now - H)];
-		expect(buildAppRecords(reports, [], now)).toEqual([{ sign: "Wn-3", predictions: 2, confirmed: 0 }]);
+		expect(buildAppRecords(reports, [], now)).toEqual([{ sign: "Wn-3", predictions: 2, confirmed: 0, pending: 1, pendingUntil: now + 23 * H }]);
+	});
+
+	test("a waiting report counts for Util at once but not for Acc", () => {
+		const waiting: AppRecord[] = Array.from({ length: 10 }, () => ({ sign: "Wn-10", predictions: 0, confirmed: 0, pending: 1, pendingUntil: T0 }));
+		const before = computeTrustIndex([]).signs.find((x) => x.code === "Wn-10")!;
+		const after = computeTrustIndex(waiting).signs.find((x) => x.code === "Wn-10")!;
+		expect(after.records).toBe(before.records + 10);
+		expect(after.accuracy).toBe(before.accuracy);
+		expect(after.appPending).toBe(10);
+		expect(after.appReports).toBe(0);
+		expect(after.appPendingUntil).toBe(new Date(T0).toISOString());
 	});
 
 	test("one record per fisherman, sign and month", () => {

@@ -14,7 +14,9 @@
  * - His predictions: his reports of the sign (repeats within 5 minutes are one report).
  * - Followed by strong wind: a *different* fisherman reported a strong-wind or storm incident
  *   ("Lapor kejadian") at the same beach within the confirmation window after the report.
- *   A report is only judged once its window has passed.
+ * - Util counts a record as soon as the report arrives (24 Nov 2026); only Acc waits: a report
+ *   is judged once its window has passed, and a record with no judged report yet is left out of
+ *   the Acc average (it is "waiting").
  * With no app data the index is exactly Table 2 of Paper 2.
  */
 import { and, gte, inArray } from "drizzle-orm";
@@ -59,8 +61,9 @@ export const ALL_SIGNS = Object.keys(SURVEY_BASELINE);
 export const PAPER_HIGH = ["Wn-3", "Wn-8", "Wn-1", "Wn-2", "Wn-7"];
 export const PAPER_LOW = ["Wn-13", "Wn-4", "Wn-9", "Wn-6", "Wn-5"];
 
-/** One app record: fisherman × sign × month. */
-export type AppRecord = { sign: string; predictions: number; confirmed: number };
+/** One app record: fisherman × sign × month. predictions = judged reports; pending = reports still
+ *  in their confirmation window (pendingUntil = when the first of them is judged, ms). */
+export type AppRecord = { sign: string; predictions: number; confirmed: number; pending?: number; pendingUntil?: number | null };
 export type SignReport = { fishermanId: string; beach: string; signs: string[]; at: number };
 export type IncidentEvent = { fishermanId: string; beach: string; type: string; at: number };
 
@@ -73,6 +76,10 @@ export type SignTrust = {
 	appRecords: number;
 	appReports: number;
 	appConfirmed: number;
+	/** reports still waiting for their confirmation window (counted in Util, not yet in Acc) */
+	appPending: number;
+	/** when the first waiting report is judged (ISO), null if none */
+	appPendingUntil: string | null;
 	ranked: boolean;
 	tier: "High" | "Low" | "Unranked";
 };
@@ -94,7 +101,6 @@ export function buildAppRecords(reports: SignReport[], events: IncidentEvent[], 
 	// Reports grouped per fisherman × sign × beach, so repeats within 5 minutes are one prediction.
 	const groups = new Map<string, number[]>();
 	for (const r of reports) {
-		if (r.at + windowMs > now) continue; // not judged yet
 		for (const raw of r.signs) {
 			const sign = normCode(raw);
 			if (!SURVEY_BASELINE[sign]) continue;
@@ -109,11 +115,17 @@ export function buildAppRecords(reports: SignReport[], events: IncidentEvent[], 
 		for (const t of times.sort((a, b) => a - b)) {
 			if (t - last < REPEAT_MS) continue;
 			last = t;
-			const confirmed = strong.some((e) => e.beach === beach && e.fishermanId !== fishermanId && e.at > t && e.at <= t + windowMs);
 			const rk = `${fishermanId}|${sign}|${monthWib(t)}`;
 			const rec = records.get(rk) ?? { sign, predictions: 0, confirmed: 0 };
-			rec.predictions += 1;
-			if (confirmed) rec.confirmed += 1;
+			if (t + windowMs > now) {
+				// still in its window: counts for Util now, judged for Acc later
+				rec.pending = (rec.pending ?? 0) + 1;
+				rec.pendingUntil = Math.min(rec.pendingUntil ?? Infinity, t + windowMs);
+			} else {
+				const confirmed = strong.some((e) => e.beach === beach && e.fishermanId !== fishermanId && e.at > t && e.at <= t + windowMs);
+				rec.predictions += 1;
+				if (confirmed) rec.confirmed += 1;
+			}
 			records.set(rk, rec);
 		}
 	}
@@ -126,16 +138,21 @@ export function computeTrustIndex(appRecords: AppRecord[], mode: "adaptive" | "p
 	const rows = ALL_SIGNS.map((code) => {
 		const base = SURVEY_BASELINE[code]!;
 		const mine = app.filter((r) => r.sign === code);
-		const accSum = base.accuracySum + mine.reduce((s, r) => s + (100 * r.confirmed) / r.predictions, 0);
-		const records = base.records + mine.length;
+		const judged = mine.filter((r) => r.predictions > 0);
+		const accSum = base.accuracySum + judged.reduce((s, r) => s + (100 * r.confirmed) / r.predictions, 0);
+		const accN = base.records + judged.length;
+		const records = base.records + mine.length; // Util: every record, judged or waiting
+		const until = Math.min(...mine.map((r) => r.pendingUntil ?? Infinity));
 		return {
 			code,
-			accuracy: records ? accSum / records : 0,
+			accuracy: accN ? accSum / accN : 0,
 			records,
 			surveyRecords: base.records,
 			appRecords: mine.length,
 			appReports: mine.reduce((s, r) => s + r.predictions, 0),
 			appConfirmed: mine.reduce((s, r) => s + r.confirmed, 0),
+			appPending: mine.reduce((s, r) => s + (r.pending ?? 0), 0),
+			appPendingUntil: Number.isFinite(until) ? new Date(until).toISOString() : null,
 		};
 	});
 	const norm = (vals: number[]) => {

@@ -20,12 +20,12 @@ describe("Tanda Alam: live Trust Index", () => {
     const signs = [row("Wn-10", "High", 60), row("Wn-3", "High", 55), ...SIGNS.filter((s) => !["Wn-10", "Wn-3"].includes(s.code)).map((s) => row(s.code, s.tier === "High" ? "High" : s.tier, 20))]
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ok: true, mode: "adaptive", signs, confirmWindowHours: 24, computedAt: "x" })))
     render(<MemoryRouter><KnowledgePage /></MemoryRouter>)
-    await waitFor(() => expect(screen.getByText(/laporan tanda dari aplikasi/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/laporan tanda dari nelayan \(aplikasi \+ WhatsApp\)/)).toBeTruthy())
     const high = screen.getByRole("heading", { name: "Sangat dipercaya" }).closest("section")!
     expect(high.textContent).toContain("Cerah tanpa awan")
     fireEvent.click(screen.getByText("Cerah tanpa awan"))
     expect(screen.getByText(/Indeks kepercayaan 60,0/)).toBeTruthy()
-    expect(screen.getByText(/15 diikuti angin kencang/)).toBeTruthy()
+    expect(screen.getByText(/15 dari 20 diikuti angin kencang/)).toBeTruthy()
     expect(JSON.parse(localStorage.getItem("samudra.trustIndex")!).signs.length).toBe(17)
   })
 
@@ -35,12 +35,24 @@ describe("Tanda Alam: live Trust Index", () => {
       ...SIGNS.filter((s) => !["Wn-10", "Wn-3", "Wn-8"].includes(s.code)).map((s) => row(s.code, s.tier, 20))]
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ok: true, mode: "adaptive", signs, confirmWindowHours: 24, computedAt: "x" })))
     render(<MemoryRouter><KnowledgePage /></MemoryRouter>)
-    await waitFor(() => expect(screen.getByText(/laporan tanda dari aplikasi/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/laporan tanda dari nelayan \(aplikasi \+ WhatsApp\)/)).toBeTruthy())
     const card = (name: string) => screen.getByText(name).closest("button")!
     expect(card("Cerah tanpa awan").className).toContain("border-l-sky-700")
     expect(card("Cerah tanpa awan").querySelector("[data-move]")!.getAttribute("data-move")).toBe("up")
     expect(card("Ada kilat").className).toContain("border-l-amber-500")
     expect(card("Ada kilat").textContent).toContain("Turun dari sangat dipercaya sejak survei")
     expect(card("Langit mendung").querySelector("[data-move]")!.getAttribute("data-move")).toBe("same")
+  })
+
+  it("waiting reports are shown with the time they are judged", async () => {
+    const signs = SIGNS.map((s) => row(s.code, s.tier, 20, s.code === "Wn-4" ? { appReports: 0, appConfirmed: 0, appPending: 2, appPendingUntil: "2026-11-25T02:04:14Z" } : {}))
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ok: true, mode: "adaptive", signs, confirmWindowHours: 24, computedAt: "x" })))
+    render(<MemoryRouter><KnowledgePage /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByText(/laporan tanda dari nelayan/)).toBeTruthy())
+    fireEvent.click(screen.getByText("Ombak besar & rapat"))
+    const p = screen.getByTestId("trust-pending").textContent ?? ""
+    expect(p).toContain("2 laporan masih menunggu 24 jam untuk dinilai")
+    expect(p).toContain("25 Nov")
+    expect(p).toContain("09.04 WIB")
   })
 })

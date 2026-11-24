@@ -12,6 +12,10 @@ export interface SignTrust {
   appRecords: number
   appReports: number
   appConfirmed: number
+  /** reports still in their confirmation window (counted in the number of uses, judged later) */
+  appPending?: number
+  /** when the first waiting report is judged (ISO) */
+  appPendingUntil?: string | null
   ranked: boolean
   tier: TrustTier
 }
