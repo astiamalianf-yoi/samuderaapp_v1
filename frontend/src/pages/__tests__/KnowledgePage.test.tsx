@@ -76,4 +76,16 @@ describe("Tanda Alam: live Trust Index", () => {
     expect(d).toContain("Amankan alat tangkap")
     expect(screen.getByText("Paus muncul")).toBeTruthy()
   })
+
+  it("the trust formula opens under 'Cara menilai kepercayaan'", () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 500 }))
+    render(<MemoryRouter><KnowledgePage /></MemoryRouter>)
+    expect(screen.queryByTestId("trust-formula")).toBeNull()
+    fireEvent.click(screen.getByText("Cara menilai kepercayaan"))
+    fireEvent.click(screen.getByText("Lihat rumus"))
+    const f = screen.getByTestId("trust-formula").textContent ?? ""
+    expect(f).toContain("75% × Akurasi + 25% × Pemakaian")
+    expect(f).toContain("kurang dari 20 catatan")
+    expect(f).toContain("setelah 24 jam")
+  })
 })

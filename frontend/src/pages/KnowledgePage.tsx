@@ -73,6 +73,7 @@ export function KnowledgePage() {
   const [open, setOpen] = useState<string | null>(null)
   const [showUnranked, setShowUnranked] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [showFormula, setShowFormula] = useState(false)
   const trust = useTrustIndex()
   const signs = liveSigns(trust)
   const appReports = trust?.signs.reduce((n, s) => n + s.appReports + (s.appPending ?? 0), 0) ?? 0
@@ -110,6 +111,21 @@ export function KnowledgePage() {
                 Penjelasan ilmiah: <b>Didukung sains</b> (sudah dijelaskan penelitian cuaca), <b>Sebagian dijelaskan</b> (ada
                 dasar ilmiah, tetapi belum pasti), <b>Belum ada penjelasan ilmiah</b> (dari pengalaman nelayan saja).
               </p>
+              <button onClick={() => setShowFormula(!showFormula)} aria-expanded={showFormula}
+                className="inline-flex items-center gap-1 font-semibold text-sky-800">
+                Lihat rumus <ChevronDown className={`w-4 h-4 transition-transform ${showFormula ? "rotate-180" : ""}`} aria-hidden />
+              </button>
+              {showFormula && (
+                <div className="rounded-lg bg-white border border-gray-200 p-2.5 space-y-1.5" data-testid="trust-formula">
+                  <p className="font-bold text-gray-900">Indeks kepercayaan = 75% × Akurasi + 25% × Pemakaian</p>
+                  <p><b>Akurasi</b>: rata-rata persen prediksi nelayan dengan tanda ini yang diikuti angin kencang (laporan dari aplikasi dinilai setelah {hours} jam).</p>
+                  <p><b>Pemakaian</b>: jumlah catatan tanda ini (survei + laporan nelayan), langsung dihitung.</p>
+                  <p>
+                    Kedua nilai dibandingkan antar 17 tanda (skala 0–1, min-max). Tanda dengan kurang dari 20 catatan masuk
+                    "Belum cukup data". "Sangat dipercaya" adalah tanda di atas jarak nilai terbesar di setengah atas urutan.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           {trust?.mode === "adaptive" && appReports > 0 && (
