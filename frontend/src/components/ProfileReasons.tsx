@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp } from "lucide-react"
 import type { ProfileView } from "../services/fishermenService"
 
 import { ANSWER_TEXT, num, tippingText } from "../lib/profileText"
+import { getSign } from "../constants/signs"
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 /** SHAP on P(mendukung) in probability points, e.g. +0.098 -> "+9,8 poin". */
@@ -71,12 +72,46 @@ export function TopReasons({ view, title = "Yang paling memengaruhi hasil Anda:"
         Poin = berapa jawaban ini menaikkan (↑) atau menurunkan (↓) peluang Anda masuk “mendukung”; persen dibanding pengaruh terbesar (100%).
         Titik balik = nilai jawaban tempat pengaruhnya biasanya berubah arah, dari data 245 nelayan Aceh.
       </p>
-      {s && s.signsTotal > 0 && (
-        <p className="rounded-xl bg-white/80 border border-gray-200 p-3 text-sm text-gray-800 leading-relaxed" data-testid="profile-summary">
-          {s.mean != null && <>Peluang Anda masuk “mendukung”: <b>{pct(s.mean)}</b>{s.base != null && <> (rata-rata nelayan {pct(s.base)})</>}. </>}
-          <b>{s.signsUp} dari {s.signsTotal} tanda alam</b> memberi peluang {pct(s.threshold)} atau lebih. Hasil “mendukung” bila setidaknya separuh tanda alam mencapai {pct(s.threshold)}.
-        </p>
-      )}
+      {s && s.signsTotal > 0 && <SignSummary s={s} />}
     </>
+  )
+}
+
+/**
+ * The exact rule behind the colour: his chance of "mendukung" against the model threshold (60%),
+ * and per sign which ones reach it (majority of the signs decides).
+ */
+function SignSummary({ s }: { s: NonNullable<ProfileView["summary"]> }) {
+  const need = Math.ceil(s.signsTotal / 2)
+  const ok = s.signsUp >= need
+  return (
+    <div className="rounded-xl bg-white/80 border border-gray-200 p-3 space-y-3" data-testid="profile-summary">
+      <p className="text-sm text-gray-800 leading-relaxed">
+        {s.mean != null && <>Peluang Anda masuk “mendukung”: <b>{pct(s.mean)}</b> (perlu {pct(s.threshold)}). </>}
+        <b>{s.signsUp} dari {s.signsTotal} tanda alam</b> mencapai {pct(s.threshold)};{" "}
+        {ok ? <>cukup, karena perlu setidaknya {need}, jadi hasilnya “mendukung”.</> : <>perlu setidaknya {need} agar hasilnya “mendukung”.</>}
+      </p>
+      {s.perSign && s.perSign.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-700 mb-1.5">Peluang Anda untuk tiap tanda alam</p>
+          <ul className="space-y-1.5" data-testid="profile-signs">
+            {s.perSign.map(({ code, p }) => {
+              const up = p >= s.threshold
+              return (
+                <li key={code} className="grid grid-cols-[minmax(0,7.5rem)_1fr_2.5rem] items-center gap-2 text-xs" data-up={up}>
+                  <span className="truncate text-gray-700" title={getSign(code)?.short ?? code}>{getSign(code)?.short ?? code}</span>
+                  <span className="relative h-3 rounded-full bg-gray-100" aria-hidden>
+                    <span className={`absolute inset-y-0 left-0 rounded-full ${up ? "bg-teal-500" : "bg-amber-500"}`} style={{ width: `${Math.max(2, p * 100)}%` }} />
+                    <span className="absolute -inset-y-0.5 w-0.5 bg-gray-800" style={{ left: `${s.threshold * 100}%` }} />
+                  </span>
+                  <span className={`text-right font-bold ${up ? "text-teal-700" : "text-amber-700"}`}>{pct(p)}</span>
+                </li>
+              )
+            })}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-gray-600">Garis hitam = {pct(s.threshold)}. Hijau: mencapai {pct(s.threshold)} · oranye: belum.</p>
+        </div>
+      )}
+    </div>
   )
 }

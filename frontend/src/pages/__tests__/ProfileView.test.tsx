@@ -44,7 +44,7 @@ afterEach(() => vi.restoreAllMocks())
 
 describe("Profil Anda", () => {
   it("shows the overall result, his top five reasons (as in Paper 2) and all answers, never the class words", async () => {
-    mockMe({ profile_view: { overall: "inaction", basis: "random_forest", top, answers, summary: { base: 0.48, mean: 0.52, signsUp: 3, signsTotal: 10, threshold: 0.6 } } })
+    mockMe({ profile_view: { overall: "inaction", basis: "random_forest", top, answers, summary: { base: 0.48, mean: 0.52, signsUp: 3, signsTotal: 10, threshold: 0.6, perSign: [{ code: "Wn-3", p: 0.7 }, { code: "Wn-2", p: 0.41 }] } } })
     render(<MemoryRouter><ProfilePage /></MemoryRouter>)
     const box = await screen.findByLabelText("Profil Anda")
     expect(box.getAttribute("data-overall")).toBe("inaction")
@@ -64,8 +64,13 @@ describe("Profil Anda", () => {
     expect(items[4].textContent).toContain("Pemilik perahu: perlu perhatian · Tekong / nakhoda atau ABK: mendukung")
     const sum = screen.getByTestId("profile-summary").textContent ?? ""
     expect(sum).toContain("52%")
-    expect(sum).toContain("rata-rata nelayan 48%")
+    expect(sum).toContain("(perlu 60%)")
     expect(sum).toContain("3 dari 10 tanda alam")
+    expect(sum).toContain("perlu setidaknya 5")
+    const rows = screen.getByTestId("profile-signs").querySelectorAll("li")
+    expect(rows).toHaveLength(2)
+    expect(rows[0].getAttribute("data-up")).toBe("true")
+    expect(rows[1].textContent).toContain("41%")
     const all = screen.getByTestId("profile-answers")
     expect(all.querySelectorAll("dt")).toHaveLength(10)
     expect(all.textContent).toContain("Pemilik perahu")

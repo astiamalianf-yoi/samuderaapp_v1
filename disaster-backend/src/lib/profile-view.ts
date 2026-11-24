@@ -47,6 +47,8 @@ export type ProfileView = {
 		signsUp: number;
 		signsTotal: number;
 		threshold: number;
+		/** P(Actionable) per ranked sign, highest first */
+		perSign: { code: string; p: number }[];
 	} | null;
 	/** all his answers (effective values: registration answers raised by his activity) */
 	answers: { key: AnswerKey; value: number; min?: number; max?: number }[];
@@ -71,7 +73,8 @@ export const OPERATING_THRESHOLD = Number(process.env.ML_OPERATING_THRESHOLD ?? 
 
 /** "7 of 10 signs reach 60 %": the exact rule behind the colour (majority of the per-sign classes). */
 export function profileSummary(e: Explanation | null | undefined, mean: number | null, perSign: Record<string, number | null> | null): ProfileView["summary"] {
-	const ps = Object.values(perSign ?? {}).filter((p): p is number => typeof p === "number");
+	const entries = Object.entries(perSign ?? {}).filter((x): x is [string, number] => typeof x[1] === "number");
+	const ps = entries.map(([, p]) => p);
 	if (!ps.length) return null;
 	return {
 		base: typeof e?.base_value === "number" ? Math.round(e.base_value * 1000) / 1000 : null,
@@ -79,6 +82,7 @@ export function profileSummary(e: Explanation | null | undefined, mean: number |
 		signsUp: ps.filter((p) => p >= OPERATING_THRESHOLD).length,
 		signsTotal: ps.length,
 		threshold: OPERATING_THRESHOLD,
+		perSign: entries.map(([code, p]) => ({ code, p: Math.round(p * 1000) / 1000 })).sort((a, b) => b.p - a.p),
 	};
 }
 
