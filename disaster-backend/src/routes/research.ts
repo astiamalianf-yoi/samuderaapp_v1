@@ -95,6 +95,8 @@ route.post("/research/uat/bmkg", async (c) => {
 	const windSpeed = b.windSpeed === undefined ? undefined : Number(b.windSpeed);
 	if (windSpeed !== undefined && !(windSpeed >= 0 && windSpeed < 300)) return c.json({ ok: false, error: "windSpeed must be 0-300 km/h" }, 400);
 	const sim = await setSimWeather(beach, { windSpeed, forecast, unavailable: b.unavailable === true }, Number(b.minutes) || undefined);
+	// As the monitor does every few minutes: an active fishermen's warning follows the new forecast window.
+	await triggerNowcastCheck().catch(() => null);
 	return c.json({ ok: true, beach, sim, bmkg: await getBmkgData(beach) });
 });
 

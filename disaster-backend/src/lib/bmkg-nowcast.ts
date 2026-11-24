@@ -14,6 +14,7 @@ import { formatGroupAlert, groupMessageFor } from "./group-alert";
 import { createHash } from "node:crypto";
 import { redis } from "./redis";
 import { getActiveWarning, syncActiveWarningWithBmkg } from "./crowdsource";
+import { forecastEndFor } from "./bmkg-fetch";
 import {
 	ALERTS_CHANNEL,
 	ALERTS_STREAM,
@@ -303,6 +304,8 @@ type Deps = {
 	likLevelFor?: (beach: string) => Promise<string | null>;
 	/** Sets the active fishermen's warning end from BMKG's end, or null when BMKG has none (default: crowdsource). */
 	syncLik?: (beach: string, bmkgEndMs: number | null, now: number) => Promise<unknown>;
+	/** End of the BMKG forecast window of fairly strong wind / bad weather (default: forecastEndFor), 0 if none. */
+	forecastEnd?: (beach: string, now: number) => Promise<number>;
 };
 
 async function storedLikLevel(beach: string): Promise<string | null> {
@@ -335,8 +338,11 @@ export async function runNowcastCheck(deps: Deps = {}, now = Date.now()) {
 		// A fishermen's warning active at this beach follows BMKG: until BMKG's end while BMKG warns,
 		// back to its own hour when BMKG ends or is withdrawn early (14 Nov 2026). When BMKG could not
 		// be read, a missing warning is not taken as ended.
+		// Also until the end of a BMKG forecast window of fairly strong wind or bad weather (24 Nov 2026).
 		if (warnings.length || !byBeach.incomplete) {
-			await (deps.syncLik ?? syncActiveWarningWithBmkg)(beach, warnings.length ? latestExpiry : null, now).catch(() => null);
+			const fcEnd = await (deps.forecastEnd ?? forecastEndFor)(beach, now).catch(() => 0);
+			const end = Math.max(warnings.length ? latestExpiry : 0, fcEnd);
+			await (deps.syncLik ?? syncActiveWarningWithBmkg)(beach, end > 0 ? end : null, now).catch(() => null);
 		}
 
 		const likFor = deps.likLevelFor ?? storedLikLevel;

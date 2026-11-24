@@ -202,3 +202,16 @@ export async function getBmkgForecastSlots(beach: string): Promise<unknown[][] |
 	await redis.set(cacheKey, JSON.stringify(cuaca), { EX: BMKG_CACHE_TTL_SECONDS }).catch(() => undefined);
 	return cuaca;
 }
+
+/**
+ * End of the BMKG forecast window with fairly strong wind or bad weather (WASPADA or SIAGA by
+ * forecast: wind >= 30 km/h or an unsafe forecast), or 0 when the forecast is calm or unknown.
+ * A fishermen's warning lasts at least until then (Warning Strategy Matrix rows 6/9/11/14 and
+ * 16–19, agreed 24 Nov 2026).
+ */
+export async function forecastEndFor(beach: string, now = Date.now()): Promise<number> {
+	const fc = await getBmkgData(beach).catch(() => null);
+	if (!fc) return 0;
+	const raised = (fc.windSpeed ?? 0) >= 30 || fc.isSafe === false;
+	return raised && fc.periodEnd && fc.periodEnd > now ? fc.periodEnd : 0;
+}

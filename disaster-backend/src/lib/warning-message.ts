@@ -114,11 +114,15 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 	const nel = lik ? `${lik.reporters} nelayan ${shortBeach(p.beach)}${lik.highTrust ? " (tanda alam terpercaya)" : ""}` : "";
 	let source: string;
 	if (official) source = lik ? `peringatan dini BMKG (resmi) + ${nel}` : "peringatan dini BMKG (resmi)";
-	else if (fcSiaga && lik) source = `prakiraan BMKG + ${nel}`;
+	else if ((fcSiaga || fcWaspada) && lik) source = `prakiraan BMKG + ${nel}`; // rows 6/9/11/14 and 16–19
 	else if (lik) source = nel;
 	else source = "prakiraan BMKG (belum ada laporan dari nelayan)";
 
-	const end = Math.max(lik?.endsAt ?? 0, official?.expires ?? 0) || null;
+	// With a BMKG forecast (WASPADA or SIAGA) and fishermen's signs together, the warning lasts to the
+	// end of the forecast window (matrix rows 6/9/11/14 and 16–19, agreed 24 Nov 2026).
+	const fcEnd = lik && (fcSiaga || fcWaspada) ? p.bmkg.period?.end ?? 0 : 0;
+	const end = Math.max(lik?.endsAt ?? 0, official?.expires ?? 0, fcEnd) || null;
+	const fcWin = p.bmkg.period?.start && p.bmkg.period?.end ? ` pada ${timeWib(p.bmkg.period.start)}–${timeWib(p.bmkg.period.end)} WIB` : "";
 	let time: string;
 	if (lik) time = `Mulai ${timeWib(lik.startedAt)}${end ? ` · berlaku sampai ${timeWib(end)} WIB` : ""}`;
 	else if (official) time = `${official.effective ? `Mulai ${timeWib(official.effective)} · b` : "B"}erlaku sampai ${timeWib(official.expires)} WIB`;
@@ -136,14 +140,15 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 		block2.push(`**Apa yang terjadi:** BMKG memperingatkan ${official.event.toLowerCase()} di wilayah ${p.beach}.${lik ? " Peringatan BMKG sejalan dengan tanda alam nelayan." : ""}`);
 		if (lik) block2.push(`Nelayan juga melihat ${lowerFirst(lik.signs)}.`);
 	} else if (fcSiaga) {
-		block2.push(`**Apa yang terjadi:** BMKG memperkirakan angin${wind != null ? ` ±${wind} km/jam` : " kencang"} di ${shortBeach(p.beach)}.${lik ? " Prakiraan BMKG sejalan dengan tanda alam nelayan." : ""}`);
+		block2.push(`**Apa yang terjadi:** BMKG memperkirakan angin${wind != null ? ` ±${wind} km/jam` : " kencang"} di ${shortBeach(p.beach)}${fcWin}.${lik ? " Prakiraan BMKG sejalan dengan tanda alam nelayan." : ""}`);
 		if (lik) block2.push(`Nelayan juga melihat ${lowerFirst(lik.signs)}.`);
 	} else if (lik) {
 		block2.push(`**Apa yang terjadi:** nelayan melihat ${lowerFirst(lik.signs)}, tanda alam yang biasanya muncul sebelum angin kencang.`);
-		const bm = fcWaspada
-			? wind != null && wind >= 30 ? `prakiraan angin ±${wind} km/jam.` : `prakiraan ${(p.bmkg.weather ?? "cuaca kurang baik").toLowerCase()}.`
-			: "tidak ada peringatan.";
-		block2.push(`BMKG: ${bm}`);
+		if (fcWaspada) {
+			// rows 16–19: the BMKG forecast and the fishermen's signs together
+			const what = wind != null && wind >= 30 ? `angin ±${wind} km/jam` : (p.bmkg.weather ?? "cuaca kurang baik").toLowerCase();
+			block2.push(`Prakiraan BMKG sejalan dengan tanda alam nelayan: ${what}${fcWin}.`);
+		} else block2.push("BMKG: tidak ada peringatan.");
 	}
 
 	// ---------- Impact
@@ -153,7 +158,9 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 		if (official) impact = `angin kencang dan ombak tinggi berbahaya untuk perahu kecil${petir ? "; petir berbahaya di laut terbuka" : ""}.`;
 		else if (fcSiaga) impact = `angin${wind != null ? ` ±${wind} km/jam` : " kencang"} dan ombak tinggi berbahaya untuk perahu kecil.`;
 		else impact = "angin kencang diperkirakan datang, berbahaya untuk perahu kecil.";
-	} else impact = lik ? "angin kencang diperkirakan datang." : "ombak lebih tinggi dari biasa, perahu kecil bisa sulit dikendalikan.";
+	} else impact = lik
+		? fcWaspada ? "angin kencang diperkirakan datang; ombak lebih tinggi dari biasa, perahu kecil bisa sulit dikendalikan." : "angin kencang diperkirakan datang."
+		: "ombak lebih tinggi dari biasa, perahu kecil bisa sulit dikendalikan.";
 	block2.push(`**Dampak untuk perahu:** ${impact}`);
 
 	// ---------- Actions
