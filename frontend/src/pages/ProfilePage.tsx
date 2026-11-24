@@ -2,8 +2,8 @@ import { useEffect, useState } from "react"
 import { Link, Navigate } from "react-router-dom"
 import { Activity as ActivityIcon, ArrowLeft, Home, Minus, Pencil, Phone, Plus, ShieldCheck, UserRound } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
-import { TopReasons } from "../components/ProfileReasons"
-import { ANSWER_TEXT, SIDE, num } from "../lib/profileText"
+import { AllAnswersTable, TopReasons } from "../components/ProfileReasons"
+import { SIDE } from "../lib/profileText"
 import { BEACH_LOCATIONS } from "../constants/observationData"
 import { useHomeBeach, useRegistration } from "../hooks/useAppState"
 import { normalizePhone, saveRegistration } from "../lib/registration"
@@ -425,14 +425,7 @@ function ProfileViewCard({ view }: { view: ProfileView }) {
       {view.answers?.length > 0 && (
         <details className="rounded-xl bg-white/70 border border-gray-200 p-3" data-testid="profile-answers">
           <summary className="cursor-pointer text-sm font-semibold text-sky-900">Lihat semua jawaban Anda ({view.answers.length})</summary>
-          <dl className="mt-2 divide-y divide-gray-100">
-            {view.answers.map((a) => (
-              <div key={a.key} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <dt className="text-gray-700">{ANSWER_TEXT[a.key]?.label ?? a.key}</dt>
-                <dd className="font-semibold text-gray-900 text-right whitespace-nowrap">{ANSWER_TEXT[a.key]?.show(a) ?? num(a.value)}</dd>
-              </div>
-            ))}
-          </dl>
+          <AllAnswersTable view={view} />
           <p className="mt-2 text-xs text-gray-600">Ada yang salah? Perbaiki lewat tombol Ubah profil di bawah.</p>
         </details>
       )}

@@ -198,3 +198,42 @@ function WRow({ label, text, bar, line, up, strong, note, parts }: { label: stri
     </li>
   )
 }
+
+/**
+ * "Lihat semua jawaban Anda": every answer with his value, the tipping point (side that pushes to
+ * "perlu perhatian") and his exact points, largest first. Lama menjadi nelayan has no reliable
+ * tipping point (direction stable in 34% of the resamples), so it shows "— (belum pasti)".
+ */
+export function AllAnswersTable({ view }: { view: ProfileView }) {
+  const c = view.summary?.contributions ?? Object.fromEntries((view.top ?? []).map((t) => [t.key, t.contribution ?? NaN]))
+  const rows = [...(view.answers ?? [])].sort((a, b) => Math.abs(c[b.key] ?? 0) - Math.abs(c[a.key] ?? 0))
+  return (
+    <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white" data-testid="profile-answers-table">
+      <div className="grid grid-cols-[1fr_5.75rem_2.75rem] gap-2 bg-gray-50 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600">
+        <span>Jawaban · Anda</span><span>Titik balik</span><span className="text-right">Poin</span>
+      </div>
+      <dl className="divide-y divide-gray-100">
+        {rows.map((a) => {
+          const v = c[a.key]
+          const tp = tippingText(a.key)
+          const has = typeof v === "number" && !Number.isNaN(v)
+          return (
+            <div key={a.key} className="grid grid-cols-[1fr_5.75rem_2.75rem] items-center gap-2 px-2.5 py-2 text-xs" data-key={a.key}>
+              <span className="min-w-0">
+                <dt className="text-gray-700 leading-snug" title={ANSWER_TEXT[a.key]?.label}>{SHORT[a.key] ?? ANSWER_TEXT[a.key]?.label ?? a.key}</dt>
+                <dd className="font-bold text-gray-900">{ANSWER_TEXT[a.key]?.show(a) ?? num(a.value)}</dd>
+              </span>
+              <span className="text-[11px] leading-snug text-gray-600">
+                {tp ? <>{tp.unsafe}<br /><span className="text-amber-700">perlu perhatian</span></> : <>— (belum pasti)</>}
+              </span>
+              <span className={`text-right font-bold whitespace-nowrap ${!has ? "text-gray-400" : v > 0 ? "text-teal-700" : v < 0 ? "text-amber-700" : "text-gray-500"}`}>
+                {has ? <>{v > 0 ? "↑" : v < 0 ? "↓" : ""} {points(v).replace(" poin", "")}</> : "—"}
+              </span>
+            </div>
+          )
+        })}
+      </dl>
+      <p className="px-2.5 py-1.5 text-[11px] text-gray-500 bg-gray-50">Poin dihitung dari rata-rata nelayan (lihat perhitungan di atas). Titik balik: sisi yang mendorong ke “perlu perhatian”.</p>
+    </div>
+  )
+}
