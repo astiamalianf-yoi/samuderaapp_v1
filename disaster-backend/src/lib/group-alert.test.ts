@@ -103,7 +103,7 @@ describe("agreed wording, rows 1–15", () => {
 		expect(m).toContain("🔴 BAHAYA · ANGIN KENCANG\nSumber: peringatan dini BMKG (resmi) + 1 nelayan Lampuuk (tanda alam terpercaya)");
 		expect(m).toContain("Untuk Anda: jangan melaut sampai 15.00 WIB. Ikat perahu dengan kuat");
 		expect(m).toContain("Di laut: kembali ke darat SEKARANG. Bila tidak bisa, kabari posisi Anda kepada rekan lainnya.");
-		expect(m).toContain('Dalam bahaya di laut? Tekan Kejadian → "Saya butuh bantuan sekarang" dan bagikan lokasi GPS Anda.');
+		expect(m).toContain('Dalam bahaya di laut? Tekan Minta bantuan, lokasi GPS Anda ikut terkirim.');
 		expect(m).toContain("ℹ️ BAHAYA karena nelayan dan BMKG sama-sama memberi peringatan.");
 	});
 	test("rows 13–14 SIAGA-I checklist", () => {

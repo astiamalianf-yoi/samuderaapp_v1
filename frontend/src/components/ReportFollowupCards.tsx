@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link } from "react-router-dom"
 import { ClipboardCheck, Wind } from "lucide-react"
 import { getSign } from "../constants/signs"
 import { getBeachMeta } from "../constants/observationData"
@@ -21,7 +20,8 @@ const waktu = (iso: string) =>
 
 /**
  * Beranda: two separate questions after his own sign report (app or WhatsApp), for 24 hours.
- * "Apa yang Anda lakukan?" (codebook No. 29) and "Angin kencang datang?" (Ya = Lapor kejadian).
+ * "Apa yang Anda lakukan?" (codebook No. 29) and "Angin kencang datang?" — one tap each; "Ya" is
+ * saved as a strong-wind incident at that beach.
  * Each card disappears as soon as it is answered; both disappear 24 h after the report.
  * The other fishermen of his home beach get one neutral cross-check question (no sign named) after
  * someone else's report there (app or WhatsApp); never in the WhatsApp group.
@@ -104,10 +104,10 @@ export function ReportFollowupCards({ registration }: { registration: Registrati
           </h2>
           <p className="text-sm text-gray-600">Pertanyaan untuk nelayan pantai ini. Jawaban Anda membantu menilai tanda alam.</p>
           <div className="grid grid-cols-2 gap-2">
-            <Link to={`/kejadian?type=angin_kencang&beach=${encodeURIComponent(cc.beach)}`}
-              className="min-h-12 rounded-xl bg-red-600 text-white flex items-center justify-center text-base font-bold px-2 text-center">
-              Ya, lapor kejadian
-            </Link>
+            <button type="button" disabled={busy} onClick={() => answer("crosscheck", "came")}
+              className="min-h-12 rounded-xl bg-red-600 text-white text-base font-bold px-2">
+              Ya, ada
+            </button>
             <button type="button" disabled={busy} onClick={() => answer("crosscheck", "not_came")}
               className="min-h-12 rounded-xl border-2 border-gray-300 bg-white text-base font-bold px-2">
               Tidak ada
@@ -160,10 +160,10 @@ function OwnCards({ p, busy, answer }: {
           </h2>
           {about}
           <div className="grid grid-cols-2 gap-2">
-            <Link to={`/kejadian?type=angin_kencang&beach=${encodeURIComponent(p.beach)}`}
-              className="min-h-12 rounded-xl bg-red-600 text-white flex items-center justify-center text-base font-bold px-2 text-center">
-              Ya, lapor kejadian
-            </Link>
+            <button type="button" disabled={busy} onClick={() => answer("hazard", "came")}
+              className="min-h-12 rounded-xl bg-red-600 text-white text-base font-bold px-2">
+              Ya, datang
+            </button>
             <button type="button" disabled={busy} onClick={() => answer("hazard", "not_came")}
               className="min-h-12 rounded-xl border-2 border-gray-300 bg-white text-base font-bold px-2">
               Tidak datang

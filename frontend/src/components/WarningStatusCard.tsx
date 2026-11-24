@@ -173,7 +173,7 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
   )
 }
 
-/** A message line: **bold** parts; "Lapor", "Kejadian" and the registration line are links. */
+/** A message line: **bold** parts; "Lapor", "Minta bantuan" and the registration line are links. */
 function Rich({ text }: { text: string }) {
   if (text.startsWith("Daftar agar dapat peringatan khusus")) {
     return <Link to="/profil" className="font-semibold underline">{text}</Link>
@@ -183,7 +183,7 @@ function Rich({ text }: { text: string }) {
     if (!p.startsWith("**")) return p
     const t = p.slice(2, -2)
     if (t === "Lapor") return <Link key={i} to="/lapor" className="font-bold underline">Lapor</Link>
-    if (t === "Kejadian") return <Link key={i} to="/kejadian" className="font-bold underline">Kejadian</Link>
+    if (t === "Minta bantuan") return <Link key={i} to="/kejadian" className="font-bold underline">Minta bantuan</Link>
     return <b key={i}>{t}</b>
   })
   return <>{parts}</>

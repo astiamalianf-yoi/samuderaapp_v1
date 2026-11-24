@@ -160,8 +160,8 @@ export function buildWarningMessage(p: WarningMessageInput): string[][] {
 	const inaction = !!lik?.inaction;
 	const until = end ? `sampai ${timeWib(end)} WIB` : "selama prakiraan angin kencang masih berlaku";
 	const kej = wa
-		? `Dalam bahaya di laut? Minta bantuan dan kirim lokasi GPS: ${p.kejadianUrl ?? "aplikasi SAMUDRA, menu Kejadian"}`
-		: `Dalam bahaya di laut? Tekan **Kejadian** → "Saya butuh bantuan sekarang" dan bagikan lokasi GPS Anda.`;
+		? `Dalam bahaya di laut? Minta bantuan dan kirim lokasi GPS: ${p.kejadianUrl ?? "aplikasi SAMUDRA, menu Minta bantuan"}`
+		: `Dalam bahaya di laut? Tekan **Minta bantuan**, lokasi GPS Anda ikut terkirim.`;
 	if (final === "WASPADA") {
 		const prep = `cek kapal dan mesin, sesuaikan alat tangkap, bawa pelampung${lik ? ", dan amati tanda alam lain" : ", dan amati tanda alam"}.`;
 		const sea = "tetap waspada dan amati tanda alam. Bila angin bertambah kencang atau cuaca semakin buruk, segera tarik alat tangkap.";

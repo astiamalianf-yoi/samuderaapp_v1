@@ -102,7 +102,7 @@ const HELP_COOLDOWN_SECONDS = 10 * 60;
 
 /**
  * Call for help on WhatsApp: the help message goes to the WhatsApp group of the beach (same text
- * as the app's "Saya butuh bantuan sekarang"), the incident is recorded, and the sender is asked
+ * as the app's "Minta bantuan" page), the incident is recorded, and the sender is asked
  * to share his location in that group (the bot cannot read a shared location).
  */
 export async function handleHelp(text: string, sender?: string, chatId?: string): Promise<string> {

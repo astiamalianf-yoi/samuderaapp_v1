@@ -48,8 +48,8 @@ export function HomePage() {
             <Siren className="w-7 h-7" aria-hidden />
           </span>
           <span className="flex-1">
-            <span className="block text-lg font-extrabold">Bahaya di laut?</span>
-            <span className="block text-base text-gray-700">Lapor kejadian bencana atau minta bantuan</span>
+            <span className="block text-lg font-extrabold">Butuh bantuan di laut?</span>
+            <span className="block text-base text-gray-700">Minta bantuan ke nelayan lain, atau telepon SAR</span>
           </span>
           <ArrowRight className="w-6 h-6" aria-hidden />
         </Link>

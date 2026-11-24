@@ -89,6 +89,16 @@ describe("Lapor kejadian / Minta bantuan", () => {
 		expect(sent.length).toBe(1);
 	});
 
+	test("one tap: help without choosing what happened is sent, and no incident is recorded", async () => {
+		const before = (sqlite.query("SELECT count(*) AS n FROM incidents").get() as { n: number }).n;
+		const r = await (await post({ beach: "pantai_lampuuk", needHelp: true })).json() as { helpSent: boolean; incidentId: string | null };
+		expect(r.helpSent).toBe(true);
+		expect(r.incidentId).toBeNull();
+		expect(sent[0]).toContain("Bahaya di laut (jenis belum disebut)");
+		expect((sqlite.query("SELECT count(*) AS n FROM incidents").get() as { n: number }).n).toBe(before);
+		expect((await post({ beach: "pantai_lampuuk", needHelp: false })).status).toBe(400);
+	});
+
 	test("needs registration; rejects unknown beach or type", async () => {
 		expect((await post({ beach: "pantai_lampuuk", type: "badai" }, "nope")).status).toBe(401);
 		expect((await post({ beach: "pantai_kuta", type: "badai" })).status).toBe(400);

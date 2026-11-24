@@ -9,10 +9,10 @@ import { fishermenService, type IncidentType } from "../services/fishermenServic
 
 /** Hazards at sea, codebook No. 12 codes B.2-B.5. */
 const TYPES: { key: IncidentType; label: string; icon: ReactNode }[] = [
-  { key: "angin_kencang", label: "Angin kencang di laut", icon: <Wind className="w-8 h-8" aria-hidden /> },
-  { key: "gelombang_ekstrem", label: "Gelombang ekstrem", icon: <Waves className="w-8 h-8" aria-hidden /> },
-  { key: "badai", label: "Badai / hujan lebat", icon: <CloudLightning className="w-8 h-8" aria-hidden /> },
-  { key: "arus_kuat", label: "Arus kuat", icon: <MoveRight className="w-8 h-8" aria-hidden /> },
+  { key: "angin_kencang", label: "Angin kencang di laut", icon: <Wind className="w-6 h-6 shrink-0" aria-hidden /> },
+  { key: "gelombang_ekstrem", label: "Gelombang ekstrem", icon: <Waves className="w-6 h-6 shrink-0" aria-hidden /> },
+  { key: "badai", label: "Badai / hujan lebat", icon: <CloudLightning className="w-6 h-6 shrink-0" aria-hidden /> },
+  { key: "arus_kuat", label: "Arus kuat", icon: <MoveRight className="w-6 h-6 shrink-0" aria-hidden /> },
 ]
 
 /** Emergency numbers (Basarnas 115, national emergency 112), always one tap away on this page. */
@@ -62,9 +62,10 @@ async function locate(): Promise<Gps> {
 type Result = { help: boolean; helpSent: boolean; helpReason: string | null }
 
 /**
- * "Lapor kejadian / Minta bantuan": a fisherman met dangerous weather at sea. The incident raises
- * his level of interaction with disaster (adaptive profile). With "Saya butuh bantuan", a help
- * message with his beach, GPS location and WhatsApp number goes to the WhatsApp group.
+ * "Minta bantuan": one tap sends a help message (beach, GPS location, WhatsApp number) to the
+ * WhatsApp group of the beach. What happened is optional; when chosen it is also recorded as an
+ * incident (adaptive profile, Trust Index). Hazards without a call for help are answered on
+ * Beranda (the cards after a sign report) or with !kejadian in WhatsApp.
  */
 export function IncidentPage() {
   const registration = useRegistration()
@@ -78,7 +79,8 @@ export function IncidentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetBeach])
   const [type, setType] = useState<IncidentType | null>(presetType)
-  const [needHelp, setNeedHelp] = useState(false)
+  // This page is always a call for help (Beranda "Butuh bantuan di laut?"); one tap sends it.
+  const needHelp = true
   const [shareGps, setShareGps] = useState(true)
   // Location is looked up as soon as he asks for help (not only on "Kirim"), so it is ready in time
   // and he can see whether it worked before sending.
@@ -92,9 +94,9 @@ export function IncidentPage() {
     return job
   }
   useEffect(() => {
-    if (needHelp && shareGps && gps.status === "idle") startGps()
+    if (shareGps && gps.status === "idle") startGps()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needHelp, shareGps])
+  }, [shareGps])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<Result | null>(null)
@@ -110,13 +112,13 @@ export function IncidentPage() {
 
   if (!registration) {
     return (
-      <AppShell title="Kejadian" showWhatsApp={false}>
+      <AppShell title="Minta bantuan" showWhatsApp={false}>
         <div className="space-y-5 pt-4">
           <h1 className="text-2xl font-black">Dalam bahaya di laut?</h1>
           <p className="text-lg">Telepon sekarang:</p>
           <CallButtons />
           <p className="text-base text-gray-700">
-            Untuk melapor kejadian dan mengirim permintaan bantuan ke grup WhatsApp, daftar dulu sekali.
+            Untuk mengirim permintaan bantuan ke grup WhatsApp nelayan, daftar dulu sekali.
           </p>
           <Link to="/profil" className="w-full min-h-14 flex items-center justify-center rounded-2xl bg-sky-900 text-white text-lg font-bold">
             Daftar sekarang
@@ -128,7 +130,7 @@ export function IncidentPage() {
 
   if (result) {
     return (
-      <AppShell title="Kejadian" showWhatsApp={false}>
+      <AppShell title="Minta bantuan" showWhatsApp={false}>
         <div className="flex flex-col items-center text-center gap-4 pt-8">
           <CheckCircle2 className="w-20 h-20 text-emerald-600" aria-hidden />
           <h1 className="text-3xl font-black">
@@ -160,10 +162,6 @@ export function IncidentPage() {
   }
 
   const send = async () => {
-    if (!type) {
-      setError("Pilih dulu apa yang terjadi.")
-      return
-    }
     setSending(true)
     setError(null)
     try {
@@ -172,7 +170,7 @@ export function IncidentPage() {
         where = gps.status === "ok" ? gps : await (gps.status === "searching" && gpsJob.current ? gpsJob.current : startGps())
       }
       const res = await fishermenService.reportIncident(registration.token, {
-        beach, type, needHelp,
+        beach, needHelp, ...(type ? { type } : {}),
         ...(where?.status === "ok" ? { lat: where.lat, lon: where.lon } : {}),
         ...(needHelp ? { locationStatus: !shareGps ? "not_shared" : where?.status === "denied" ? "denied" : where?.status === "ok" ? undefined : "unavailable" } : {}),
         ...(needHelp && registration.phone ? { contactPhone: registration.phone } : {}),
@@ -188,21 +186,65 @@ export function IncidentPage() {
   }
 
   return (
-    <AppShell title="Kejadian" showWhatsApp={false}>
-      <div className="space-y-6">
+    <AppShell title="Minta bantuan" showWhatsApp={false}>
+      <div className="space-y-5">
         <div>
-          <h1 className="text-2xl font-black">Lapor kejadian di laut</h1>
-          <p className="text-base text-gray-700">Mengalami bahaya di laut? Laporkan di sini, dan minta bantuan jika perlu.</p>
+          <h1 className="text-2xl font-black">Minta bantuan</h1>
+          <p className="text-base text-gray-700">
+            Pesan bantuan dikirim ke grup WhatsApp nelayan {beachName}, dengan lokasi
+            {registration.phone ? ` dan nomor WhatsApp Anda (••••${registration.phoneLast4})` : ""}, supaya nelayan terdekat bisa menolong.
+          </p>
         </div>
 
+        <div className="text-base space-y-1" role="status" data-testid="gps-status">
+          <label className="flex items-center gap-3">
+            <input type="checkbox" checked={shareGps} onChange={(e) => setShareGps(e.target.checked)} className="w-6 h-6" />
+            <span className="flex items-center gap-1"><MapPin className="w-5 h-5 text-red-700" aria-hidden /> Bagikan lokasi GPS saya</span>
+          </label>
+          {shareGps && gps.status === "searching" && <p className="text-gray-700">📡 Mencari lokasi Anda…</p>}
+          {shareGps && gps.status === "ok" && <p className="text-emerald-800 font-semibold">✅ Lokasi ditemukan (± {gps.accuracy} m)</p>}
+          {shareGps && gps.status === "denied" && (
+            <p className="text-red-800">
+              ⚠️ HP tidak mengizinkan lokasi. Izinkan lokasi di pengaturan HP, lalu{" "}
+              <button type="button" onClick={startGps} className="underline font-semibold">coba lagi</button>. Tanpa lokasi, pesan tetap terkirim.
+            </p>
+          )}
+          {shareGps && gps.status === "unavailable" && (
+            <p className="text-red-800">
+              ⚠️ Lokasi belum didapat. Nyalakan GPS di HP lalu{" "}
+              <button type="button" onClick={startGps} className="underline font-semibold">coba lagi</button>. Tanpa lokasi, pesan tetap terkirim.
+            </p>
+          )}
+        </div>
+
+        <button onClick={send} disabled={sending}
+          className="w-full min-h-20 rounded-2xl bg-red-600 text-white text-2xl font-extrabold disabled:opacity-60 flex items-center justify-center gap-3">
+          <Siren className="w-8 h-8" aria-hidden />
+          {sending ? "Mengirim…" : "Kirim permintaan bantuan"}
+        </button>
+
+        {error && (
+          <div className="space-y-3">
+            <p className="rounded-xl bg-red-50 border border-red-300 p-3 text-base text-red-800">{error}</p>
+            <a href={waFallback} className="min-h-14 flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-white text-lg font-bold">
+              <MessageCircle className="w-6 h-6" aria-hidden /> Kirim lewat WhatsApp
+            </a>
+          </div>
+        )}
+
+        <section className="space-y-2">
+          <p className="text-lg font-bold text-red-800">Darurat? Telepon juga:</p>
+          <CallButtons />
+        </section>
+
         <fieldset className="space-y-2">
-          <legend className="text-lg font-bold mb-2">Apa yang terjadi?</legend>
+          <legend className="text-base font-bold mb-1">Apa yang terjadi? <span className="font-normal text-gray-600">(boleh dilewati, pilih sebelum kirim)</span></legend>
           <div className="grid grid-cols-2 gap-2">
             {TYPES.map((t) => {
               const on = type === t.key
               return (
-                <button key={t.key} type="button" aria-pressed={on} onClick={() => setType(t.key)}
-                  className={`min-h-24 rounded-2xl border-2 p-3 flex flex-col items-center justify-center gap-1 text-center text-base font-bold ${
+                <button key={t.key} type="button" aria-pressed={on} onClick={() => setType(on ? null : t.key)}
+                  className={`min-h-14 rounded-xl border-2 px-2 flex items-center gap-2 text-left text-sm font-bold ${
                     on ? "bg-sky-900 border-sky-900 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
                   {t.icon}
                   {t.label}
@@ -213,67 +255,6 @@ export function IncidentPage() {
         </fieldset>
 
         <BeachPicker value={beach} onChange={setBeach} homeBeach={registration.homeBeach as typeof beach} />
-
-        <button type="button" role="switch" aria-checked={needHelp} onClick={() => setNeedHelp((v) => !v)}
-          className={`w-full min-h-16 rounded-2xl border-2 px-4 flex items-center gap-3 text-left text-lg font-extrabold ${
-            needHelp ? "bg-red-600 border-red-600 text-white" : "bg-white border-red-500 text-red-700"}`}>
-          <Siren className="w-8 h-8 shrink-0" aria-hidden />
-          <span className="flex-1">Saya butuh bantuan sekarang</span>
-          <span className={`w-12 h-7 rounded-full p-1 ${needHelp ? "bg-white/40" : "bg-gray-300"}`}>
-            <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${needHelp ? "translate-x-5" : ""}`} />
-          </span>
-        </button>
-
-        {needHelp && (
-          <section className="rounded-2xl bg-red-50 border-2 border-red-300 p-4 space-y-3">
-            <p className="text-lg font-bold text-red-800">Jika darurat, telepon dulu:</p>
-            <CallButtons />
-            <label className="flex items-center gap-3 text-base">
-              <input type="checkbox" checked={shareGps} onChange={(e) => setShareGps(e.target.checked)} className="w-6 h-6" />
-              <span className="flex items-center gap-1"><MapPin className="w-5 h-5 text-red-700" aria-hidden /> Bagikan lokasi GPS saya</span>
-            </label>
-            {shareGps && (
-              <div className="text-base" role="status" data-testid="gps-status">
-                {gps.status === "searching" && <p className="text-gray-700">📡 Mencari lokasi Anda…</p>}
-                {gps.status === "ok" && <p className="text-emerald-800 font-semibold">✅ Lokasi ditemukan (± {gps.accuracy} m)</p>}
-                {gps.status === "denied" && (
-                  <p className="text-red-800">
-                    ⚠️ HP tidak mengizinkan lokasi. Izinkan lokasi untuk aplikasi/peramban ini di pengaturan HP, lalu{" "}
-                    <button type="button" onClick={startGps} className="underline font-semibold">coba lagi</button>.
-                    Tanpa lokasi, pesan tetap terkirim.
-                  </p>
-                )}
-                {gps.status === "unavailable" && (
-                  <p className="text-red-800">
-                    ⚠️ Lokasi belum didapat. Nyalakan GPS/Lokasi di HP lalu{" "}
-                    <button type="button" onClick={startGps} className="underline font-semibold">coba lagi</button>.
-                    Tanpa lokasi, pesan tetap terkirim.
-                  </p>
-                )}
-              </div>
-            )}
-            <p className="text-sm text-gray-700">
-              Pesan bantuan dikirim ke grup WhatsApp dengan pantai, kejadian, lokasi
-              {registration.phone ? ` dan nomor WhatsApp Anda (••••${registration.phoneLast4})` : ""}, supaya nelayan terdekat bisa menolong.
-            </p>
-          </section>
-        )}
-
-        {error && (
-          <div className="space-y-3">
-            <p className="rounded-xl bg-red-50 border border-red-300 p-3 text-base text-red-800">{error}</p>
-            {needHelp && (
-              <a href={waFallback} className="min-h-14 flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-white text-lg font-bold">
-                <MessageCircle className="w-6 h-6" aria-hidden /> Kirim lewat WhatsApp
-              </a>
-            )}
-          </div>
-        )}
-
-        <button onClick={send} disabled={sending}
-          className={`w-full min-h-16 rounded-2xl text-white text-xl font-extrabold disabled:opacity-60 ${needHelp ? "bg-red-600" : "bg-sky-900"}`}>
-          {sending ? "Mengirim…" : needHelp ? "Kirim permintaan bantuan" : "Kirim laporan kejadian"}
-        </button>
       </div>
     </AppShell>
   )

@@ -22,8 +22,19 @@ describe("Beranda: questions after his own sign report", () => {
     expect(screen.getByTestId("followup-hazard")).toBeTruthy()
     expect(screen.getAllByText(/lewat WhatsApp/).length).toBe(2)
     expect(screen.getAllByText("Ada kilat").length).toBe(2)
-    const ya = screen.getByText("Ya, lapor kejadian").closest("a")!
-    expect(ya.getAttribute("href")).toBe("/kejadian?type=angin_kencang&beach=pantai_lampuuk")
+  })
+
+  it("'Ya, datang' is one tap: saved, card gone, no other page", async () => {
+    const f = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(ok({ pending: pending() }))
+      .mockResolvedValueOnce(ok({ pending: pending({ needHazard: false }) }))
+    render(<MemoryRouter><ReportFollowupCards registration={reg} /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByTestId("followup-hazard")).toBeTruthy())
+    fireEvent.click(screen.getByText("Ya, datang"))
+    expect(screen.queryByTestId("followup-hazard")).toBeNull()
+    await waitFor(() => expect(f).toHaveBeenCalledTimes(2))
+    expect(JSON.parse(String(f.mock.calls[1][1]?.body))).toEqual({ reportId: 7, kind: "hazard", value: "came" })
+    expect(screen.getByTestId("followup-response")).toBeTruthy()
   })
 
   it("an answered card disappears at once, the other stays", async () => {

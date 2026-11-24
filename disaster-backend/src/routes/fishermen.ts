@@ -6,6 +6,7 @@ import { deleteFishermanIdentity, findFishermanByToken, registerFisherman, toPub
 import { currentEffectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { classIsStale, profileView, profileViewEnabled } from "../lib/profile-view";
 import { recordClass } from "../lib/class-history";
+import { saveIncident } from "../lib/incident-store";
 import { answerCrossCheck, answerFollowup, crossCheckFor, pendingFollowup } from "../lib/report-followup";
 
 const route = new Hono();
@@ -95,21 +96,33 @@ route.post("/fishermen/me/followup", async (c) => {
 	const body = await c.req.json<Record<string, unknown>>().catch(() => null);
 	const kind = body?.kind;
 	if (kind === "crosscheck") {
-		// "Ya" is an incident report (Lapor kejadian); only "Tidak ada" is answered here.
-		if (body?.value !== "not_came") return c.json({ ok: false, error: "invalid_value" }, 400);
-		const res = answerCrossCheck({ fishermanId: f.id, beach: f.homeBeach, channel: "APP" });
-		if (!res.ok) return c.json(res, 409);
+		// One tap: "Ya, ada" is saved as a strong-wind incident at his beach (it answers the question
+		// and confirms the others' signs in the Trust Index); "Tidak ada" is saved as an answer.
+		const value = body?.value;
+		if (value !== "came" && value !== "not_came") return c.json({ ok: false, error: "invalid_value" }, 400);
+		if (!crossCheckFor(f.id, f.homeBeach)) return c.json({ ok: false, error: "no_question" }, 409);
+		if (value === "came") {
+			saveIncident({ fishermanId: f.id, beach: f.homeBeach, type: "angin_kencang", channel: "APP" });
+			void recordClass(f, "incident");
+		} else answerCrossCheck({ fishermanId: f.id, beach: f.homeBeach, channel: "APP" });
 		return c.json({ ok: true, pending: pendingFollowup(f.id), crosscheck: crossCheckFor(f.id, f.homeBeach) });
 	}
 	if (kind !== "response" && kind !== "hazard") return c.json({ ok: false, error: "invalid_kind" }, 400);
-	// "Ya, datang" is an incident report (Lapor kejadian), not an answer here.
-	if (kind === "hazard" && body?.value !== "not_came") return c.json({ ok: false, error: "invalid_value" }, 400);
+	// One tap: "Ya, datang" is saved as a strong-wind incident at the beach of his report.
+	if (kind === "hazard" && body?.value === "came") {
+		const p = pendingFollowup(f.id);
+		if (!p || !p.needHazard) return c.json({ ok: false, error: p ? "already_answered" : "no_report" }, 409);
+		if (typeof body?.reportId === "number" && body.reportId !== p.reportId) return c.json({ ok: false, error: "stale_report" }, 409);
+		saveIncident({ fishermanId: f.id, beach: p.beach, type: "angin_kencang", channel: "APP" });
+		void recordClass(f, "incident");
+		return c.json({ ok: true, pending: pendingFollowup(f.id), crosscheck: crossCheckFor(f.id, f.homeBeach) });
+	}
 	const res = answerFollowup({
 		fishermanId: f.id, kind, value: String(body?.value ?? ""), channel: "APP",
 		reportId: typeof body?.reportId === "number" ? body.reportId : undefined,
 	});
 	if (!res.ok) return c.json(res, res.error === "invalid_value" ? 400 : 409);
-	return c.json(res);
+	return c.json({ ...res, crosscheck: crossCheckFor(f.id, f.homeBeach) });
 });
 
 /** PUT /api/fishermen/me { homeBeach?, profile? } (X-Fisherman-Token) */

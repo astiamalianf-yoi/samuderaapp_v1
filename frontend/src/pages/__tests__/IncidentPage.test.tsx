@@ -50,8 +50,9 @@ describe("Lapor kejadian / Minta bantuan", () => {
       new Response(JSON.stringify({ ok: true, incidentId: "i1", helpSent: true, helpReason: null }), { status: 201 }))
     render(<MemoryRouter><IncidentPage /></MemoryRouter>)
     fireEvent.click(screen.getByText("Angin kencang di laut"))
-    fireEvent.click(screen.getByRole("switch"))
+    expect(screen.queryByRole("switch")).toBeNull() // always a call for help: no switch to turn on
     expect(screen.getAllByRole("link", { name: /115/ }).length).toBeGreaterThan(0)
+    await waitFor(() => expect(screen.getByTestId("gps-status").textContent).toContain("Lokasi ditemukan"))
     fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
     await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
     const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
@@ -59,19 +60,21 @@ describe("Lapor kejadian / Minta bantuan", () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/incidents")
   })
 
-  it("an incident without help does not send his number", async () => {
+  it("one tap: help without choosing what happened", async () => {
     register()
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (ok: PositionCallback) => ok({ coords: { latitude: 5.49, longitude: 95.24, accuracy: 9 } } as GeolocationPosition) },
+    })
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, incidentId: "i2", helpSent: false, helpReason: null }), { status: 201 }))
+      new Response(JSON.stringify({ ok: true, incidentId: null, helpSent: true, helpReason: null }), { status: 201 }))
     render(<MemoryRouter><IncidentPage /></MemoryRouter>)
-    fireEvent.click(screen.getByText("Badai / hujan lebat"))
-    fireEvent.click(screen.getByText("Kirim laporan kejadian"))
-    await waitFor(() => expect(screen.getByText("Kejadian tercatat")).toBeTruthy())
+    fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
+    await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
     const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
-    expect(body.needHelp).toBe(false)
-    expect(body.detectedBySign).toBeUndefined() // not asked: the server reads it from his own sign reports
-    expect(screen.queryByText(/tanda alam sebelum/)).toBeNull()
-    expect(body.contactPhone).toBeUndefined()
+    expect(body.needHelp).toBe(true)
+    expect(body.type).toBeUndefined()
+    expect(body.detectedBySign).toBeUndefined()
   })
 })
 
@@ -86,14 +89,13 @@ describe("codebook hazards (No. 12)", () => {
     expect(loadAnswers()!.hazards.sort()).toEqual(["gelombang_ekstrem", "pasang_tinggi"])
   })
 
-  it("GPS starts when help is switched on and shows the result before sending", async () => {
+  it("GPS starts when the page opens and shows the result before sending", async () => {
     register()
     Object.defineProperty(navigator, "geolocation", {
       configurable: true,
       value: { getCurrentPosition: (ok: PositionCallback) => ok({ coords: { latitude: 5.49, longitude: 95.24, accuracy: 12 } } as GeolocationPosition) },
     })
     render(<MemoryRouter><IncidentPage /></MemoryRouter>)
-    fireEvent.click(screen.getByRole("switch"))
     await waitFor(() => expect(screen.getByTestId("gps-status").textContent).toContain("Lokasi ditemukan (± 12 m)"))
   })
 
@@ -107,7 +109,6 @@ describe("codebook hazards (No. 12)", () => {
       new Response(JSON.stringify({ ok: true, incidentId: "i3", helpSent: true, helpReason: null }), { status: 201 }))
     render(<MemoryRouter><IncidentPage /></MemoryRouter>)
     fireEvent.click(screen.getByText("Angin kencang di laut"))
-    fireEvent.click(screen.getByRole("switch"))
     await waitFor(() => expect(screen.getByTestId("gps-status").textContent).toContain("tidak mengizinkan lokasi"))
     fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
     await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
