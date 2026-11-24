@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { saveIncident } from "../lib/incident-store";
 import { findFishermanByToken, normalizePhone } from "../lib/fishermen";
-import { INCIDENT_TYPES, type IncidentType } from "../lib/adaptive-profile";
+import { HELP_TYPES, type IncidentType } from "../lib/adaptive-profile";
 import { recordClass } from "../lib/class-history";
 import { sendOpenClawBeachAlert } from "../lib/openclaw";
 import { redis } from "../lib/redis";
@@ -16,6 +16,7 @@ export const INCIDENT_LABEL: Record<IncidentType, string> = {
 	gelombang_ekstrem: "Gelombang ekstrem",
 	badai: "Badai / hujan lebat",
 	arus_kuat: "Arus kuat",
+	masalah_kapal: "Masalah kapal / alat tangkap",
 };
 
 /** One help message per fisherman per 10 minutes (taps repeated in panic are sent once). */
@@ -58,7 +59,8 @@ const coord = (v: unknown, lim: number) => (typeof v === "number" && Number.isFi
 
 /**
  * POST /api/incidents { beach, type, needHelp, lat?, lon?, contactPhone? } (X-Fisherman-Token)
- * The app's "Minta bantuan" page always sends needHelp, type optional. An incident (with a type): strong wind / storm adds to his level of interaction with disaster (codebook
+ * The app's "Minta bantuan" page always sends needHelp and what happened (a hazard, or
+ * "masalah_kapal": boat / fishing gear, which is not a hazard). An incident: strong wind / storm adds to his level of interaction with disaster (codebook
  * No. 14); if he reported a sign before it, the hazard type counts as detected with LIK (No. 12).
  * A strong-wind or storm incident also confirms other fishermen's sign reports (Trust Index).
  * With needHelp, a help message goes to the WhatsApp group(s).
@@ -72,20 +74,19 @@ route.post("/incidents", async (c) => {
 	const beach = typeof body.beach === "string" ? body.beach : "";
 	if (!(ALLOWED_BEACH_LOCATIONS as readonly string[]).includes(beach)) return c.json({ ok: false, error: "invalid_beach" }, 400);
 	const needHelp = body.needHelp === true;
-	// A help request may be sent without choosing what happened (one tap); then no incident is recorded.
-	const type = INCIDENT_TYPES.includes(body.type as IncidentType) ? (body.type as IncidentType) : null;
-	if (!type && (!needHelp || (body.type != null && body.type !== ""))) return c.json({ ok: false, error: "invalid_type" }, 400);
+	const type = body.type as IncidentType;
+	if (!HELP_TYPES.includes(type)) return c.json({ ok: false, error: "invalid_type" }, 400);
 	const lat = coord(body.lat, 90);
 	const lon = coord(body.lon, 180);
 	const locationStatus = (["not_shared", "denied", "unavailable"] as const).find((v) => v === body.locationStatus) ?? null;
 
-	const row = type ? saveIncident({ fishermanId: fisherman.id, beach, type, needHelp, lat, lon }) : null;
+	const row = saveIncident({ fishermanId: fisherman.id, beach, type, needHelp, lat, lon });
 
 	let helpSent = false;
 	let helpReason: string | null = null;
 	if (needHelp) {
 		const fresh = await redis
-			.set(`incident:help:${fisherman.id}`, row?.id ?? "help", { NX: true, EX: HELP_COOLDOWN_SECONDS })
+			.set(`incident:help:${fisherman.id}`, row.id, { NX: true, EX: HELP_COOLDOWN_SECONDS })
 			.catch(() => "OK");
 		if (fresh === "OK") {
 			const phone = normalizePhone(typeof body.contactPhone === "string" ? body.contactPhone : null);
@@ -96,8 +97,8 @@ route.post("/incidents", async (c) => {
 			helpReason = "already_sent";
 		}
 	}
-	if (row) void recordClass(fisherman, "incident");
-	return c.json({ ok: true, incidentId: row?.id ?? null, helpSent, helpReason }, 201);
+	void recordClass(fisherman, "incident");
+	return c.json({ ok: true, incidentId: row.id, helpSent, helpReason }, 201);
 });
 
 export default route;

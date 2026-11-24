@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { CheckCircle2, CloudLightning, MapPin, MessageCircle, Phone, Siren, Waves, Wind, MoveRight } from "lucide-react"
+import { CheckCircle2, CloudLightning, MapPin, MessageCircle, Phone, Siren, Waves, Wind, MoveRight, Wrench } from "lucide-react"
 import { AppShell } from "../components/layout/AppShell"
 import { BeachPicker } from "../components/BeachPicker"
 import { getBeachMeta } from "../constants/observationData"
 import { useRegistration, useSelectedBeach } from "../hooks/useAppState"
 import { fishermenService, type IncidentType } from "../services/fishermenService"
 
-/** Hazards at sea, codebook No. 12 codes B.2-B.5. */
+/** What happened: hazards at sea (codebook No. 12 codes B.2-B.5), or a boat / gear problem. */
 const TYPES: { key: IncidentType; label: string; icon: ReactNode }[] = [
   { key: "angin_kencang", label: "Angin kencang di laut", icon: <Wind className="w-6 h-6 shrink-0" aria-hidden /> },
   { key: "gelombang_ekstrem", label: "Gelombang ekstrem", icon: <Waves className="w-6 h-6 shrink-0" aria-hidden /> },
   { key: "badai", label: "Badai / hujan lebat", icon: <CloudLightning className="w-6 h-6 shrink-0" aria-hidden /> },
   { key: "arus_kuat", label: "Arus kuat", icon: <MoveRight className="w-6 h-6 shrink-0" aria-hidden /> },
+  // Not a hazard: help with the boat or the fishing gear.
+  { key: "masalah_kapal", label: "Masalah kapal / alat tangkap", icon: <Wrench className="w-6 h-6 shrink-0" aria-hidden /> },
 ]
 
 /** Emergency numbers (Basarnas 115, national emergency 112), always one tap away on this page. */
@@ -162,6 +164,10 @@ export function IncidentPage() {
   }
 
   const send = async () => {
+    if (!type) {
+      setError("Pilih dulu apa yang terjadi.")
+      return
+    }
     setSending(true)
     setError(null)
     try {
@@ -170,7 +176,7 @@ export function IncidentPage() {
         where = gps.status === "ok" ? gps : await (gps.status === "searching" && gpsJob.current ? gpsJob.current : startGps())
       }
       const res = await fishermenService.reportIncident(registration.token, {
-        beach, needHelp, ...(type ? { type } : {}),
+        beach, type, needHelp,
         ...(where?.status === "ok" ? { lat: where.lat, lon: where.lon } : {}),
         ...(needHelp ? { locationStatus: !shareGps ? "not_shared" : where?.status === "denied" ? "denied" : where?.status === "ok" ? undefined : "unavailable" } : {}),
         ...(needHelp && registration.phone ? { contactPhone: registration.phone } : {}),
@@ -196,6 +202,32 @@ export function IncidentPage() {
           </p>
         </div>
 
+        <section className="space-y-2">
+          <p className="text-lg font-bold text-red-800">Darurat? Telepon dulu:</p>
+          <CallButtons />
+        </section>
+
+        <fieldset className="space-y-2">
+          <legend className="text-lg font-bold mb-1">1. Apa yang terjadi?</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {TYPES.map((t) => {
+              const on = type === t.key
+              return (
+                <button key={t.key} type="button" aria-pressed={on} onClick={() => { setType(t.key); setError(null) }}
+                  className={`min-h-14 rounded-xl border-2 px-2 flex items-center gap-2 text-left text-sm font-bold ${
+                    t.key === "masalah_kapal" ? "col-span-2" : ""} ${
+                    on ? "bg-sky-900 border-sky-900 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
+                  {t.icon}
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
+        </fieldset>
+
+        <section className="space-y-2">
+          <p className="text-lg font-bold">2. Di mana?</p>
+          <BeachPicker value={beach} onChange={setBeach} homeBeach={registration.homeBeach as typeof beach} />
         <div className="text-base space-y-1" role="status" data-testid="gps-status">
           <label className="flex items-center gap-3">
             <input type="checkbox" checked={shareGps} onChange={(e) => setShareGps(e.target.checked)} className="w-6 h-6" />
@@ -217,44 +249,24 @@ export function IncidentPage() {
           )}
         </div>
 
-        <button onClick={send} disabled={sending}
-          className="w-full min-h-20 rounded-2xl bg-red-600 text-white text-2xl font-extrabold disabled:opacity-60 flex items-center justify-center gap-3">
-          <Siren className="w-8 h-8" aria-hidden />
-          {sending ? "Mengirim…" : "Kirim permintaan bantuan"}
-        </button>
+        </section>
 
         {error && (
           <div className="space-y-3">
             <p className="rounded-xl bg-red-50 border border-red-300 p-3 text-base text-red-800">{error}</p>
-            <a href={waFallback} className="min-h-14 flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-white text-lg font-bold">
-              <MessageCircle className="w-6 h-6" aria-hidden /> Kirim lewat WhatsApp
-            </a>
+            {type && (
+              <a href={waFallback} className="min-h-14 flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-white text-lg font-bold">
+                <MessageCircle className="w-6 h-6" aria-hidden /> Kirim lewat WhatsApp
+              </a>
+            )}
           </div>
         )}
 
-        <section className="space-y-2">
-          <p className="text-lg font-bold text-red-800">Darurat? Telepon juga:</p>
-          <CallButtons />
-        </section>
-
-        <fieldset className="space-y-2">
-          <legend className="text-base font-bold mb-1">Apa yang terjadi? <span className="font-normal text-gray-600">(boleh dilewati, pilih sebelum kirim)</span></legend>
-          <div className="grid grid-cols-2 gap-2">
-            {TYPES.map((t) => {
-              const on = type === t.key
-              return (
-                <button key={t.key} type="button" aria-pressed={on} onClick={() => setType(on ? null : t.key)}
-                  className={`min-h-14 rounded-xl border-2 px-2 flex items-center gap-2 text-left text-sm font-bold ${
-                    on ? "bg-sky-900 border-sky-900 text-white" : "bg-white border-gray-300 text-gray-900"}`}>
-                  {t.icon}
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
-        </fieldset>
-
-        <BeachPicker value={beach} onChange={setBeach} homeBeach={registration.homeBeach as typeof beach} />
+        <button onClick={send} disabled={sending}
+          className="w-full min-h-16 rounded-2xl bg-red-600 text-white text-xl font-extrabold disabled:opacity-60 flex items-center justify-center gap-3">
+          <Siren className="w-7 h-7" aria-hidden />
+          {sending ? "Mengirim…" : "Kirim permintaan bantuan"}
+        </button>
       </div>
     </AppShell>
   )

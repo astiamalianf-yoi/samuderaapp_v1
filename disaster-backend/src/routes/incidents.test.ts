@@ -89,14 +89,12 @@ describe("Lapor kejadian / Minta bantuan", () => {
 		expect(sent.length).toBe(1);
 	});
 
-	test("one tap: help without choosing what happened is sent, and no incident is recorded", async () => {
-		const before = (sqlite.query("SELECT count(*) AS n FROM incidents").get() as { n: number }).n;
-		const r = await (await post({ beach: "pantai_lampuuk", needHelp: true })).json() as { helpSent: boolean; incidentId: string | null };
+	test("help for a boat or gear problem: sent and kept, but not a hazard", async () => {
+		const r = await (await post({ beach: "pantai_lampuuk", type: "masalah_kapal", needHelp: true })).json() as { helpSent: boolean; incidentId: string };
 		expect(r.helpSent).toBe(true);
-		expect(r.incidentId).toBeNull();
-		expect(sent[0]).toContain("Bahaya di laut (jenis belum disebut)");
-		expect((sqlite.query("SELECT count(*) AS n FROM incidents").get() as { n: number }).n).toBe(before);
-		expect((await post({ beach: "pantai_lampuuk", needHelp: false })).status).toBe(400);
+		expect(sent[0]).toContain("Masalah kapal / alat tangkap");
+		expect(sqlite.query("SELECT type FROM incidents WHERE id = ?").get(r.incidentId)).toEqual({ type: "masalah_kapal" });
+		expect((await post({ beach: "pantai_lampuuk", needHelp: true })).status).toBe(400);
 	});
 
 	test("needs registration; rejects unknown beach or type", async () => {

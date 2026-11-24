@@ -36,7 +36,13 @@ const toHazard = (h: unknown): HazardKey | null =>
 
 /** What happened at sea ("Lapor kejadian"); each is a codebook hazard at sea. */
 export const INCIDENT_TYPES = ["angin_kencang", "gelombang_ekstrem", "badai", "arus_kuat"] as const;
-export type IncidentType = (typeof INCIDENT_TYPES)[number];
+/**
+ * "Minta bantuan" may also be for a problem that is not a hazard: boat or fishing gear. It is kept
+ * with the incidents but is not a codebook hazard (No. 12), not strong wind (No. 14), and does not
+ * confirm signs in the Trust Index.
+ */
+export const HELP_TYPES = [...INCIDENT_TYPES, "masalah_kapal"] as const;
+export type IncidentType = (typeof HELP_TYPES)[number];
 /** No. 14 counts strong wind only (a storm brings strong wind; older "perahu_rusak" rows were strong-wind damage). */
 const INTERACTION_TYPES = new Set(["angin_kencang", "badai", "perahu_rusak"]);
 

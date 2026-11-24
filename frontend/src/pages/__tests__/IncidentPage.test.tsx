@@ -60,21 +60,24 @@ describe("Lapor kejadian / Minta bantuan", () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/incidents")
   })
 
-  it("one tap: help without choosing what happened", async () => {
+  it("what happened must be chosen; a boat or gear problem is an option; the send button is last", async () => {
     register()
     Object.defineProperty(navigator, "geolocation", {
       configurable: true,
       value: { getCurrentPosition: (ok: PositionCallback) => ok({ coords: { latitude: 5.49, longitude: 95.24, accuracy: 9 } } as GeolocationPosition) },
     })
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, incidentId: null, helpSent: true, helpReason: null }), { status: 201 }))
-    render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+      new Response(JSON.stringify({ ok: true, incidentId: "i9", helpSent: true, helpReason: null }), { status: 201 }))
+    const { container } = render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+    const buttons = [...container.querySelectorAll("button")]
+    expect(buttons[buttons.length - 1].textContent).toContain("Kirim permintaan bantuan")
+    fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
+    expect(screen.getByText("Pilih dulu apa yang terjadi.")).toBeTruthy()
+    expect(fetchMock).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText("Masalah kapal / alat tangkap"))
     fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
     await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
-    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
-    expect(body.needHelp).toBe(true)
-    expect(body.type).toBeUndefined()
-    expect(body.detectedBySign).toBeUndefined()
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({ type: "masalah_kapal", needHelp: true })
   })
 })
 

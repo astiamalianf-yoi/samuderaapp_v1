@@ -63,7 +63,8 @@ export const RESPONSE_OPTIONS: { key: string; label: string }[] = [
   { key: "repair_boat", label: "Perbaiki perahu" },
 ]
 
-export type IncidentType = "angin_kencang" | "gelombang_ekstrem" | "badai" | "arus_kuat"
+/** The four codebook hazards at sea, plus "masalah_kapal" (boat / gear problem: help only, not a hazard). */
+export type IncidentType = "angin_kencang" | "gelombang_ekstrem" | "badai" | "arus_kuat" | "masalah_kapal"
 
 export class RegistrationError extends Error {
   code: string
@@ -124,7 +125,7 @@ export const fishermenService = {
   },
 
   async reportIncident(token: string, body: {
-    beach: BeachLocation; type?: IncidentType; needHelp: boolean; lat?: number; lon?: number; contactPhone?: string
+    beach: BeachLocation; type: IncidentType; needHelp: boolean; lat?: number; lon?: number; contactPhone?: string
     locationStatus?: "not_shared" | "denied" | "unavailable"
   }) {
     const res = await fetch(`${API_BASE_URL}/api/incidents`, {

@@ -430,6 +430,8 @@ export const INCIDENT_KEYWORDS: [RegExp, string][] = [
 	[/\b(gelombang|ombak)\s*(besar|tinggi|ekstrem|ekstrim|ganas)\b/, "gelombang_ekstrem"],
 	[/\bbadai\b|\btopan\b|hujan\s*(lebat|deras|badai)/, "badai"],
 	[/\barus\s*(kuat|deras|kencang)\b/, "arus_kuat"],
+	// Not a hazard: help with the boat or the fishing gear.
+	[/\b(mesin|kapal|perahu|boat)\s*(rusak|mati|mogok|bocor)\b|\b(jaring|pukat|alat\s*tangkap)\s*(tersangkut|nyangkut|putus|rusak|hilang)\b/, "masalah_kapal"],
 ];
 
 export const INCIDENT_NAMES: Record<string, string> = {
@@ -437,6 +439,7 @@ export const INCIDENT_NAMES: Record<string, string> = {
 	gelombang_ekstrem: "Gelombang ekstrem",
 	badai: "Badai / hujan lebat",
 	arus_kuat: "Arus kuat",
+	masalah_kapal: "Masalah kapal / alat tangkap",
 };
 
 export type KejadianResult = { types: string[]; beachLocation: string | null };
