@@ -31,6 +31,7 @@ import trustIndexRoute from "./routes/trust-index";
 import incidentsRoute from "./routes/incidents";
 import researchRoute from "./routes/research";
 import { startNowcastMonitor } from "./lib/bmkg-nowcast";
+import { startBmkgSnapshotLogger } from "./lib/bmkg-snapshot";
 import { startAllClearMonitor } from "./lib/all-clear";
 import { startMorningSchedule } from "./routes/broadcast-morning";
 import { sendOpenClawToGroups } from "./lib/openclaw";
@@ -71,6 +72,8 @@ startMorningSchedule();
 startNowcastMonitor({ sendWhatsApp: (group, text) => sendOpenClawToGroups([group], text), publishIot: publishIotAlertForEvent });
 // One-time AMAN message to a beach group when its warning has ended (23 Nov 2026).
 startAllClearMonitor();
+// Hourly BMKG forecast per field beach, for the weather context of the field study (26 Nov 2026).
+startBmkgSnapshotLogger();
 
 await sub.subscribe(ALERTS_CHANNEL, async (message) => {
 	console.log("[sub] received alert from Redis, SSE clients:", sseClients.size, "WS clients:", wsClients.size);

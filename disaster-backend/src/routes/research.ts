@@ -5,7 +5,7 @@ import { BEACH_AREA, capAppliesToBeach, parseCap, triggerNowcastCheck } from "..
 import { addSimWarning, clearSims, getSimWeather, listSimWarnings, setSimWeather, SIM_ENABLED, simWarningCap } from "../lib/bmkg-sim";
 import { desc } from "drizzle-orm";
 import { initDb as getDb } from "../db";
-import { appEvents, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
+import { appEvents, bmkgSnapshots, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
 import { answersOf, effectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { isDeleted } from "../lib/fishermen";
 import { redis } from "../lib/redis";
@@ -99,6 +99,20 @@ route.get("/research/alerts.csv", async () => {
 		};
 	});
 	return sendCsv("alerts.csv", rows);
+});
+/** Hourly BMKG forecast per field beach (bmkg-snapshot.ts): wind, weather code, safe or not, simulated or not. */
+route.get("/research/bmkg-snapshots.csv", () => {
+	const rows = getDb().select().from(bmkgSnapshots).all().map((r) => {
+		let w: Record<string, unknown> = {};
+		try { w = typeof r.weather === "string" ? JSON.parse(r.weather) : (r.weather ?? {}); } catch { /* skip */ }
+		const ts = Date.parse(String(r.fetchedAt).replace(" ", "T") + "Z");
+		return {
+			fetched_at: r.fetchedAt, day_wib: Number.isFinite(ts) ? new Date(ts + 7 * 3600_000).toISOString().slice(0, 10) : "",
+			beach: w.beach ?? "", available: w.available ?? "", wind_kmh: w.windSpeed ?? "", wind_dir: w.windDirection ?? "",
+			weather_code: w.weatherCode ?? "", weather: w.weather ?? "", is_safe: w.isSafe ?? "", simulated: w.simulated ?? "",
+		};
+	});
+	return sendCsv("bmkg-snapshots.csv", rows);
 });
 route.get("/research/incidents.csv", () =>
 	sendCsv("incidents.csv", getDb().select().from(incidents).all() as unknown as Record<string, unknown>[]));
