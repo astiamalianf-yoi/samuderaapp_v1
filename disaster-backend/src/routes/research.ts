@@ -5,7 +5,7 @@ import { BEACH_AREA, capAppliesToBeach, parseCap, triggerNowcastCheck } from "..
 import { addSimWarning, clearSims, getSimWeather, listSimWarnings, setSimWeather, SIM_ENABLED, simWarningCap } from "../lib/bmkg-sim";
 import { desc } from "drizzle-orm";
 import { initDb as getDb } from "../db";
-import { appEvents, bmkgSnapshots, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
+import { appEvents, bmkgSnapshots, trustIndexHistory, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
 import { answersOf, effectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { isDeleted } from "../lib/fishermen";
 import { redis } from "../lib/redis";
@@ -113,6 +113,16 @@ route.get("/research/bmkg-snapshots.csv", () => {
 		};
 	});
 	return sendCsv("bmkg-snapshots.csv", rows);
+});
+/** Trust Index history: one line per sign per change (trust-history.ts). */
+route.get("/research/trust-index-history.csv", () => {
+	const rows: Record<string, unknown>[] = [];
+	for (const h of getDb().select().from(trustIndexHistory).all()) {
+		for (const s of (h.signs ?? []) as Record<string, unknown>[]) {
+			rows.push({ snapshot_id: h.id, created_at: h.createdAt, mode: h.mode, sign: s.code, trust_index: s.trustIndex, accuracy: s.accuracy, records: s.records, app_records: s.appRecords, tier: s.tier });
+		}
+	}
+	return sendCsv("trust-index-history.csv", rows);
 });
 route.get("/research/incidents.csv", () =>
 	sendCsv("incidents.csv", getDb().select().from(incidents).all() as unknown as Record<string, unknown>[]));

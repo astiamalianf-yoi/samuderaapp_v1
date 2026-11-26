@@ -32,6 +32,7 @@ import incidentsRoute from "./routes/incidents";
 import researchRoute from "./routes/research";
 import { startNowcastMonitor } from "./lib/bmkg-nowcast";
 import { startBmkgSnapshotLogger } from "./lib/bmkg-snapshot";
+import { startTrustIndexLogger } from "./lib/trust-history";
 import { startAllClearMonitor } from "./lib/all-clear";
 import { startMorningSchedule } from "./routes/broadcast-morning";
 import { sendOpenClawToGroups } from "./lib/openclaw";
@@ -74,6 +75,8 @@ startNowcastMonitor({ sendWhatsApp: (group, text) => sendOpenClawToGroups([group
 startAllClearMonitor();
 // Hourly BMKG forecast per field beach, for the weather context of the field study (26 Nov 2026).
 startBmkgSnapshotLogger();
+// Trust Index history (a row when a score or a tier changes), checked hourly (26 Nov 2026).
+startTrustIndexLogger();
 
 await sub.subscribe(ALERTS_CHANNEL, async (message) => {
 	console.log("[sub] received alert from Redis, SSE clients:", sseClients.size, "WS clients:", wsClients.size);

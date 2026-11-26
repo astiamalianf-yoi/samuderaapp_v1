@@ -167,3 +167,14 @@ export const appEvents = sqliteTable("app_events", {
 	day: text("day").notNull(),
 	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 });
+
+/** Trust Index of the strong-wind signs, one row each time a score or a tier changes (26 Nov 2026). */
+export const trustIndexHistory = sqliteTable("trust_index_history", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	mode: text("mode").notNull(),
+	high: text("high", { mode: "json" }).$type<string[]>().notNull(),
+	low: text("low", { mode: "json" }).$type<string[]>().notNull(),
+	/** per sign: code, trustIndex, accuracy, records, appRecords, tier */
+	signs: text("signs", { mode: "json" }).$type<Record<string, unknown>[]>().notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});

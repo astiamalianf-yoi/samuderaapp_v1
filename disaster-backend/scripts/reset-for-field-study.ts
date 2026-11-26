@@ -33,6 +33,7 @@ const dbPath = DATABASE_URL.replace(/^sqlite:\/\//, "");
 const TABLES = [
 	"report_followups",
 	"app_events",
+	"trust_index_history",
 	"fisherman_class_history",
 	"incidents",
 	"wa_held",

@@ -64,6 +64,13 @@
       "when": 1795660000000,
       "tag": "0008_app_events",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795670000000,
+      "tag": "0009_trust_index_history",
+      "breakpoints": true
     }
   ]
 }
