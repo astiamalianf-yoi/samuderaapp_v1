@@ -22,6 +22,7 @@
 import { and, gte, inArray } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 import { fishermanReports, incidents } from "../db/schema";
+import { sinceFieldStart } from "./field-start";
 
 export const W_ACC = 0.75;
 export const MIN_RECORDS = 20;
@@ -201,6 +202,7 @@ export function loadAppRecords(now = Date.now()): AppRecord[] {
 		.all()
 		.map((r) => ({ fishermanId: r.fishermanId, beach: r.beach, signs: r.signs ?? [], at: parseTime(r.createdAt) }))
 		.filter((r) => Number.isFinite(r.at));
+	// Practice before the field start (FIELD_START_AT) does not count.
 	const events: IncidentEvent[] = db
 		.select()
 		.from(incidents)
@@ -208,7 +210,7 @@ export function loadAppRecords(now = Date.now()): AppRecord[] {
 		.all()
 		.map((i) => ({ fishermanId: i.fishermanId, beach: i.beach, type: i.type, at: parseTime(i.createdAt) }))
 		.filter((e) => Number.isFinite(e.at));
-	return buildAppRecords(reports, events, now);
+	return buildAppRecords(sinceFieldStart(reports), sinceFieldStart(events), now);
 }
 
 let cache: { at: number; value: TrustIndexResult } | null = null;

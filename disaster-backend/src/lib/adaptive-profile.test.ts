@@ -100,3 +100,25 @@ describe("three-month windows", () => {
 		expect(act.reports_min_3m).toBe(4);
 	});
 });
+
+describe("field start (FIELD_START_AT, agreed 26 Nov 2026)", () => {
+	test("practice reports and incidents before the start do not count", () => {
+		sqlite.run(`INSERT INTO fishermen (id, phone_hash, phone_last4, home_beach, token_hash, consent_at) VALUES ('f3','h3','9012','pantai_lampuuk','t3','now')`);
+		sqlite.run(`INSERT INTO fisherman_reports (fisherman_id, beach, signs, channel, counted, created_at) VALUES ('f3','pantai_lampuuk','["Wn-1","Wn-2","Wn-3","Wn-4"]','PWA',1,'2026-12-03 03:00:00')`);
+		sqlite.run(`INSERT INTO fisherman_reports (fisherman_id, beach, signs, channel, counted, created_at) VALUES ('f3','pantai_lampuuk','["Wn-7"]','PWA',1,'2026-12-05 03:00:00')`);
+		sqlite.run(`INSERT INTO incidents (id, fisherman_id, beach, type, created_at) VALUES ('fs-i3','f3','pantai_lampuuk','angin_kencang','2026-12-03 04:00:00')`);
+		const now = new Date("2026-12-06T00:00:00Z");
+		process.env.FIELD_START_AT = "2026-12-04T00:00:00+07:00";
+		try {
+			const act = A.loadActivity("f3", now);
+			expect(act.signs_12m).toEqual(["Wn-7"]);
+			expect(act.reports_30d).toBe(1);
+			expect(act.incidents_total).toBe(0);
+		} finally {
+			delete process.env.FIELD_START_AT;
+		}
+		const all = A.loadActivity("f3", now);
+		expect(all.signs_12m).toEqual(["Wn-1", "Wn-2", "Wn-3", "Wn-4", "Wn-7"]);
+		expect(all.incidents_total).toBe(1);
+	});
+});

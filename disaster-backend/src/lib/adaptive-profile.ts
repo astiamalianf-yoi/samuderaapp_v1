@@ -1,6 +1,7 @@
 import { and, eq, gte } from "drizzle-orm";
 import { initDb as getDb } from "../db";
 import { fishermanReports, incidents } from "../db/schema";
+import { fieldStartMs } from "./field-start";
 import type { FishermanProfile } from "./personal-warning";
 
 /**
@@ -158,20 +159,25 @@ export function loadActivity(fishermanId: string, now = new Date()): Activity {
 		.from(fishermanReports)
 		.where(and(eq(fishermanReports.fishermanId, fishermanId), gte(fishermanReports.createdAt, since12m)))
 		.all();
-	const times = reports.map((r) => Date.parse(`${r.createdAt.replace(" ", "T")}Z`)).filter(Number.isFinite);
+	// Practice before the field start (FIELD_START_AT) does not count.
+	const start = fieldStartMs();
+	const at = (s: string | null | undefined) => (s ? Date.parse(`${s.replace(" ", "T")}Z`) : Number.NaN);
+	const counted = start ? reports.filter((r) => at(r.createdAt) >= start) : reports;
+	const times = counted.map((r) => at(r.createdAt)).filter(Number.isFinite);
 	const windowCount = (k: number) => {
 		const end = now.getTime() - k * 30 * DAY;
 		return spacedCount(times.filter((t) => t > end - 30 * DAY && t <= end));
 	};
 	const months = [windowCount(0), windowCount(1), windowCount(2)];
 	const signs = new Set<string>();
-	for (const r of reports) for (const s of r.signs ?? []) signs.add(String(s).replace(/^WN-/i, "Wn-"));
+	for (const r of counted) for (const s of r.signs ?? []) signs.add(String(s).replace(/^WN-/i, "Wn-"));
 
 	const inc = db
-		.select({ type: incidents.type, detected: incidents.detectedBySign })
+		.select({ type: incidents.type, detected: incidents.detectedBySign, createdAt: incidents.createdAt })
 		.from(incidents)
 		.where(eq(incidents.fishermanId, fishermanId))
-		.all();
+		.all()
+		.filter((i) => !start || at(i.createdAt) >= start);
 	const hazards = new Set<HazardKey>();
 	for (const i of inc) {
 		const h = i.detected ? toHazard(i.type) : null;
