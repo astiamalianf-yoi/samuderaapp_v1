@@ -4,12 +4,15 @@
  * Run on the server, in /root/samudra-com, after the UAT is signed off:
  *   docker compose exec backend bun run scripts/reset-for-field-study.ts          (dry run: shows what would go)
  *   docker compose exec backend bun run scripts/reset-for-field-study.ts --yes    (does it)
+ * On staging (/root/samudra-staging), where the BMKG test switch stays on, add --staging:
+ *   docker compose exec backend bun run scripts/reset-for-field-study.ts --staging [--yes]
  *
  * What it does:
- *  - refuses while the BMKG test switch is on (BMKG_SIM_ENABLED=true)
+ *  - refuses while the BMKG test switch is on (BMKG_SIM_ENABLED=true), unless --staging is given
  *  - saves a backup copy of the database first (data/backup-before-field-study-<time>.db)
- *  - empties every table filled by use: fishermen, their reports, incidents, held WhatsApp
- *    reports, class history, alerts and BMKG checks. The beach list is kept.
+ *  - empties every table filled by use: fishermen, their reports, the answers to the Beranda
+ *    questions, incidents, held WhatsApp reports, class history, alerts and BMKG checks.
+ *    The beach list is kept.
  *  - empties this stack's own Redis (samudra-redis): counts, active warnings, BMKG simulations,
  *    push subscriptions, queued WhatsApp messages. The .id app has its own Redis and is not touched.
  * The trust index then starts again from the Paper 2 survey baseline (Table 2), because it has no
@@ -21,12 +24,14 @@ import fs from "fs";
 import path from "path";
 
 const YES = process.argv.includes("--yes");
+const STAGING = process.argv.includes("--staging");
 const DATABASE_URL = process.env.DATABASE_URL ?? "sqlite://./data/disaster.db";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const dbPath = DATABASE_URL.replace(/^sqlite:\/\//, "");
 
 // Children first, so foreign keys never block a delete.
 const TABLES = [
+	"report_followups",
 	"fisherman_class_history",
 	"incidents",
 	"wa_held",
@@ -36,6 +41,7 @@ const TABLES = [
 	"shap_predictions",
 	"bmkg_snapshots",
 	"reports",
+	"xgboost_predictions",
 ];
 
 function fail(msg: string): never {
@@ -43,7 +49,7 @@ function fail(msg: string): never {
 	process.exit(1);
 }
 
-if (process.env.BMKG_SIM_ENABLED === "true") {
+if (process.env.BMKG_SIM_ENABLED === "true" && !STAGING) {
 	fail("The BMKG test switch is still on. Set BMKG_SIM_ENABLED=false in .env, run `docker compose up -d backend`, then run this again.");
 }
 if (process.env.TRUST_INDEX_MODE === "paper") {
@@ -62,7 +68,8 @@ const redis = createClient({ url: REDIS_URL });
 await redis.connect();
 const redisKeys = await redis.dbSize();
 
-console.log("\nTest data now in the database:");
+console.log(`\n${STAGING ? "STAGING" : "PRODUCTION"} — database ${dbPath}`);
+console.log("Test data now in the database:");
 for (const c of counts) console.log(`  ${c.table.padEnd(26)} ${c.rows}`);
 console.log(`Redis keys (${REDIS_URL}): ${redisKeys}`);
 
@@ -73,7 +80,7 @@ if (!YES) {
 }
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-const backup = path.join(path.dirname(dbPath), `backup-before-field-study-${stamp}.db`);
+const backup = path.join(path.dirname(dbPath), `backup-before-${STAGING ? "staging-reset" : "field-study"}-${stamp}.db`);
 db.run(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
 console.log(`\nBackup saved: ${backup}`);
 
