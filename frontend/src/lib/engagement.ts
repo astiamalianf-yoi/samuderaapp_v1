@@ -4,8 +4,8 @@ import { loadRegistration } from "./registration"
 
 /**
  * Usage log for the field study (Paper 4, RQ4; 26 Nov 2026): a registered fisherman's app opens,
- * warnings seen, "Mengapa ada peringatan ini?" opened and notifications tapped. Nothing is sent for
- * people who are not registered, and no contents are sent. Each event is sent once per WIB day
+ * warnings seen, "Mengapa ada peringatan ini?" opened and notifications tapped. People who are not
+ * registered are logged only under a random id of the phone; no contents are sent. Each event is sent once per WIB day
  * (and per warning); if the phone is offline it is tried again the next time.
  */
 export type UsageEvent = "app_open" | "warning_seen" | "why_open" | "push_click"
@@ -23,16 +23,33 @@ function sentList(): string[] {
   }
 }
 
+const ANON_KEY = "samudra.usage.anon"
+
+/** A random id kept on this phone for people who are not registered (no number, no name). */
+export function anonDeviceId(): string | null {
+  try {
+    let id = localStorage.getItem(ANON_KEY)
+    if (!id) {
+      id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`
+      localStorage.setItem(ANON_KEY, id)
+    }
+    return id
+  } catch {
+    return null
+  }
+}
+
 export function trackEvent(event: UsageEvent, ref = "", beach?: string): void {
   const reg = loadRegistration()
-  if (!reg) return
-  const key = `${wibDay()}|${event}|${ref}`
+  const anon = reg ? null : anonDeviceId()
+  if (!reg && !anon) return
+  const key = `${wibDay()}|${reg ? "r" : "a"}|${event}|${ref}`
   if (sentList().includes(key)) return
-  void fetch(`${API_BASE_URL}/api/fishermen/me/events`, {
+  void fetch(`${API_BASE_URL}/api/${reg ? "fishermen/me/events" : "events/anon"}`, {
     method: "POST",
     keepalive: true,
-    headers: { "Content-Type": "application/json", "X-Fisherman-Token": reg.token },
-    body: JSON.stringify({ event, ref, ...(beach ? { beach } : {}) }),
+    headers: { "Content-Type": "application/json", ...(reg ? { "X-Fisherman-Token": reg.token } : {}) },
+    body: JSON.stringify({ event, ref, ...(beach ? { beach } : {}), ...(anon ? { deviceId: anon } : {}) }),
   }).then((res) => {
     if (!res.ok) return
     const today = wibDay()

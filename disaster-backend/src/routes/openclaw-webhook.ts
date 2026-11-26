@@ -17,7 +17,7 @@ import {
 } from "../lib/whatsapp-commands";
 import { INTERNAL_REQUEST_SECRET, OPENCLAW_HOOK_TOKEN } from "../config";
 import { findFishermanByPhone, normalizePhone, phoneHash } from "../lib/fishermen";
-import { recordEvent } from "../lib/app-events";
+import { anonWaId, recordEvent } from "../lib/app-events";
 import { saveIncident } from "../lib/incident-store";
 import { holdForRegistration } from "../lib/wa-sync";
 import { recordClass } from "../lib/class-history";
@@ -416,10 +416,14 @@ route.post("/openclaw/webhook", async (c) => {
 
 			if (isCommand) {
 				console.log(`[openclaw-webhook] Intercepted command: ${lowerText.substring(0, 50)}`);
-				// Usage log (field study): a registered fisherman used the bot today.
+				// Usage log (field study): who used the bot today, in a beach group or a private chat.
+				// Not registered: only the keyed hash of his number (never the number).
 				try {
 					const user = findFishermanByPhone(sender);
-					if (user) recordEvent({ fishermanId: user.id, event: "wa_command", ref: command ?? "", beach: user.homeBeach, channel: "WHATSAPP" });
+					const digits = normalizePhone(sender);
+					const inGroup = String(from).endsWith("@g.us");
+					const who = user ? user.id : digits ? anonWaId(phoneHash(digits)) : null;
+					if (who) recordEvent({ fishermanId: who, event: "wa_command", ref: command ?? "", beach: user?.homeBeach ?? (inGroup ? beachForGroup(from) : null), channel: inGroup ? "WA_GROUP" : "WA_PRIVATE" });
 				} catch (err) {
 					console.warn("[openclaw-webhook] usage log failed:", err);
 				}

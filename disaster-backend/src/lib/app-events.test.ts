@@ -30,13 +30,13 @@ describe("usage log (field study, 26 Nov 2026)", () => {
 		E.recordEvent({ fishermanId: "f2", event: "warning_seen", ref: "pantai_lampuuk:SIAGA:1", channel: "APP", at });
 		E.recordEvent({ fishermanId: "f2", event: "warning_seen", ref: "pantai_lampuuk:SIAGA:1", channel: "APP", at });
 		E.recordEvent({ fishermanId: "f2", event: "warning_seen", ref: "pantai_lampuuk:EKSTREM:2", channel: "APP", at });
-		E.recordEvent({ fishermanId: "f2", event: "wa_command", ref: "peringatan", channel: "WHATSAPP", at });
-		E.recordEvent({ fishermanId: "f2", event: "wa_command", ref: "lapor", channel: "WHATSAPP", at });
+		E.recordEvent({ fishermanId: "f2", event: "wa_command", ref: "peringatan", channel: "WA_GROUP", at });
+		E.recordEvent({ fishermanId: "f2", event: "wa_command", ref: "lapor", channel: "WA_GROUP", at });
 		const f2 = rows().filter((r) => r.fisherman_id === "f2");
 		expect(f2.map((r) => `${r.event}:${r.ref}`)).toEqual([
 			"warning_seen:pantai_lampuuk:SIAGA:1", "warning_seen:pantai_lampuuk:EKSTREM:2", "wa_command:peringatan", "wa_command:lapor",
 		]);
-		expect(f2.find((r) => r.event === "wa_command")!.channel).toBe("WHATSAPP");
+		expect(f2.find((r) => r.event === "wa_command")!.channel).toBe("WA_GROUP");
 	});
 	test("push_sent (server) and push_click (app) share the ref, so opened % of delivered can be counted; the app cannot post push_sent", () => {
 		const at = Date.parse("2026-12-07T05:00:00+07:00");

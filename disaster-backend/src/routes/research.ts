@@ -73,8 +73,31 @@ route.get("/research/fisherman-reports.csv", () =>
 /** His answers after his own sign report: response (codebook No. 29) and hazard (came / not_came). */
 route.get("/research/report-followups.csv", () =>
 	sendCsv("report-followups.csv", getDb().select().from(reportFollowups).all() as unknown as Record<string, unknown>[]));
-route.get("/research/app-events.csv", () =>
-	sendCsv("app-events.csv", getDb().select().from(appEvents).all() as unknown as Record<string, unknown>[]));
+/**
+ * Usage log with who it was: kind = registered / unregistered_app / unregistered_wa; for a
+ * registered fisherman his behavioural class and probability at that time (last class-history
+ * row before the event); for an unregistered WhatsApp user, the fisherman id if he registered later.
+ */
+route.get("/research/app-events.csv", () => {
+	const db = getDb();
+	const hist = new Map<string, { at: string; cls: number | null; p: number | null }[]>();
+	for (const h of db.select().from(fishermanClassHistory).all()) {
+		const list = hist.get(h.fishermanId) ?? []; list.push({ at: h.createdAt, cls: h.behaviouralClass ?? null, p: h.meanProbability ?? null }); hist.set(h.fishermanId, list);
+	}
+	for (const l of hist.values()) l.sort((x, y) => x.at.localeCompare(y.at));
+	const byHash = new Map(db.select({ id: fishermen.id, hash: fishermen.phoneHash }).from(fishermen).all().map((f) => [f.hash, f.id]));
+	const rows = db.select().from(appEvents).all().map((e) => {
+		const anonWa = e.fishermanId.startsWith("anon-wa:"), anonApp = e.fishermanId.startsWith("anon-app:");
+		const kind = anonWa ? "unregistered_wa" : anonApp ? "unregistered_app" : "registered";
+		const h = kind === "registered" ? (hist.get(e.fishermanId) ?? []).filter((x) => x.at <= e.createdAt).at(-1) : undefined;
+		return {
+			...e, kind,
+			class_at_event: h?.cls ?? "", probability_at_event: h?.p ?? "",
+			registered_later_as: anonWa ? (byHash.get(e.fishermanId.slice(8)) ?? "") : "",
+		};
+	});
+	return sendCsv("app-events.csv", rows as unknown as Record<string, unknown>[]);
+});
 /**
  * Every warning event of the stream (Paper 4, RQ4 context and the LIK vs BMKG comparison):
  * one row per alert, with its beach, source (LIK = fishermen's reports, BMKG = official) and level.

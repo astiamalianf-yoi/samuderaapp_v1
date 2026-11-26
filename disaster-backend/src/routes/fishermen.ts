@@ -8,7 +8,10 @@ import { classIsStale, profileView, profileViewEnabled } from "../lib/profile-vi
 import { recordClass } from "../lib/class-history";
 import { saveIncident } from "../lib/incident-store";
 import { answerCrossCheck, answerFollowup, crossCheckFor, pendingFollowup } from "../lib/report-followup";
-import { APP_EVENTS, recordEvent } from "../lib/app-events";
+import { ANON_DEVICE_ID, APP_EVENTS, anonAppId, recordEvent, wibDay } from "../lib/app-events";
+import { getClientIp } from "../lib/rate-limit";
+import { redis } from "../lib/redis";
+import { ALLOWED_BEACH_LOCATIONS } from "../types";
 
 const route = new Hono();
 
@@ -140,6 +143,25 @@ route.post("/fishermen/me/events", async (c) => {
 		fishermanId: f.id, event: event as (typeof APP_EVENTS)[number], channel: "APP",
 		ref: typeof body?.ref === "string" ? body.ref : "", beach: typeof body?.beach === "string" ? body.beach : f.homeBeach,
 	});
+	return c.json({ ok: true, recorded });
+});
+
+/**
+ * POST /api/events/anon { deviceId, event, ref?, beach? }: the same usage log for people who use
+ * the app without registering, under a random id kept on the phone (no number, no name).
+ * At most 300 rows per IP and day, so the log cannot be flooded.
+ */
+route.post("/events/anon", async (c) => {
+	const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+	const deviceId = body?.deviceId, event = body?.event;
+	if (typeof deviceId !== "string" || !ANON_DEVICE_ID.test(deviceId)) return c.json({ ok: false, error: "invalid_device" }, 400);
+	if (typeof event !== "string" || !(APP_EVENTS as readonly string[]).includes(event)) return c.json({ ok: false, error: "invalid_event" }, 400);
+	const key = `anon-events:${getClientIp(c.req.header("x-forwarded-for"))}:${wibDay()}`;
+	const n = await redis.incr(key).catch(() => 0);
+	if (n === 1) await redis.expire(key, 2 * 24 * 3600).catch(() => undefined);
+	if (n > 300) return c.json({ ok: false, error: "too_many" }, 429);
+	const beach = typeof body?.beach === "string" && (ALLOWED_BEACH_LOCATIONS as readonly string[]).includes(body.beach) ? body.beach : null;
+	const recorded = recordEvent({ fishermanId: anonAppId(deviceId), event: event as (typeof APP_EVENTS)[number], channel: "APP", ref: typeof body?.ref === "string" ? body.ref : "", beach });
 	return c.json({ ok: true, recorded });
 });
 

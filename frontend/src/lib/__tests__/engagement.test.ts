@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { trackEvent, wibDay } from "../engagement"
 import { REGISTRATION_KEY } from "../registration"
 
-// Usage log for the field study (26 Nov 2026): registered fishermen only, once per WIB day and warning.
+// Usage log for the field study (26 Nov 2026): once per WIB day and warning; registered by token, others by a random phone id.
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
 describe("usage log", () => {
@@ -14,10 +14,17 @@ describe("usage log", () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it("sends nothing for someone who is not registered", async () => {
-    trackEvent("app_open")
-    await flush()
-    expect(fetchMock).not.toHaveBeenCalled()
+  it("someone who is not registered is logged under a random id of the phone, without a token", async () => {
+    trackEvent("app_open"); await flush()
+    trackEvent("app_open"); await flush()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toMatch(/\/api\/events\/anon$/)
+    expect((init as RequestInit).headers).not.toHaveProperty("X-Fisherman-Token")
+    const body = JSON.parse(String((init as RequestInit).body))
+    expect(body.event).toBe("app_open")
+    expect(body.deviceId).toMatch(/^[a-z0-9-]{8,40}$/i)
+    expect(localStorage.getItem("samudra.usage.anon")).toBe(body.deviceId)
   })
 
   it("sends app_open once per day, and each warning once", async () => {
