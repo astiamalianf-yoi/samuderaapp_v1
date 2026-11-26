@@ -40,6 +40,13 @@ const CHAT_ID = extractGroupIdFromSessionKey(SESSION_KEY);
 const REPORT_MARKER_REGEX = /\[REPORT:({[\s\S]*?})\]/g;
 
 const OUTBOUND_STREAM = "openclaw:outbound";
+// Where the relay stopped, kept in Redis so a restart (redeploy, reboot, moving the bot) neither sends the
+// whole queue again nor skips a message queued during the restart. With no saved position (first start)
+// it starts after the newest entry, so old messages are never replayed.
+const OUTBOUND_LAST_KEY = "openclaw:outbound:lastId";
+// A message older than this is not sent any more (e.g. queued while the bot was offline): a late warning
+// would be wrong, and the warning cards in the app are always current. Default 15 minutes.
+const OUTBOUND_MAX_AGE_MS = Number(process.env.OUTBOUND_MAX_AGE_MS || 15 * 60 * 1000);
 
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -279,9 +286,15 @@ async function pollOutbound() {
           )
         : rawFields;
       outboundLastId = id;
+      await redis.set(OUTBOUND_LAST_KEY, id);
       const text = fields.text || "";
       const target = fields.target || "";
       const type = fields.type || "reply";
+      const queuedAt = Number(fields.timestamp) || Number(String(id).split("-")[0]) || Date.now();
+      if (Date.now() - queuedAt > OUTBOUND_MAX_AGE_MS) {
+        log(`outbound skip: queued ${Math.round((Date.now() - queuedAt) / 60000)} min ago, too old to send (id=${id})`);
+        continue;
+      }
 
       if (!text || !target) {
         log(`outbound skip: missing text or target (id=${id})`);
@@ -338,12 +351,26 @@ async function poll() {
   }
 }
 
+async function initOutboundPosition() {
+  const saved = await redis.get(OUTBOUND_LAST_KEY);
+  if (saved) {
+    outboundLastId = saved;
+    log(`outbound resumes after ${saved}`);
+    return;
+  }
+  const newest = await redis.xrevrange(OUTBOUND_STREAM, "+", "-", "COUNT", 1);
+  outboundLastId = newest?.[0]?.[0] || "0";
+  await redis.set(OUTBOUND_LAST_KEY, outboundLastId);
+  log(`outbound starts after the newest entry (${outboundLastId}); older entries are not sent`);
+}
+
 async function main() {
   log(`openclaw-bridge starting (outbound relay only, inbound via gateway hook)`);
   log(`gateway: ${GATEWAY_HTTP_URL}`);
   log(`session: ${SESSION_KEY}`);
   log(`chatId: ${CHAT_ID}`);
   log(`redis: ${REDIS_URL}`);
+  await initOutboundPosition();
 
   while (true) {
     await pollOutbound();
