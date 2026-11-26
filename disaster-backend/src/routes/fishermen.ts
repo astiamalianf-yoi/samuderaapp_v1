@@ -8,6 +8,7 @@ import { classIsStale, profileView, profileViewEnabled } from "../lib/profile-vi
 import { recordClass } from "../lib/class-history";
 import { saveIncident } from "../lib/incident-store";
 import { answerCrossCheck, answerFollowup, crossCheckFor, pendingFollowup } from "../lib/report-followup";
+import { APP_EVENTS, recordEvent } from "../lib/app-events";
 
 const route = new Hono();
 
@@ -123,6 +124,23 @@ route.post("/fishermen/me/followup", async (c) => {
 	});
 	if (!res.ok) return c.json(res, res.error === "invalid_value" ? 400 : 409);
 	return c.json({ ...res, crosscheck: crossCheckFor(f.id, f.homeBeach) });
+});
+
+/**
+ * POST /api/fishermen/me/events { event: app_open | warning_seen | why_open | push_click, ref?, beach? }
+ * (X-Fisherman-Token): the usage log of the field study. Repeats on the same WIB day are one row.
+ */
+route.post("/fishermen/me/events", async (c) => {
+	const f = findFishermanByToken(c.req.header("X-Fisherman-Token"));
+	if (!f) return c.json({ ok: false, error: "registration_required" }, 401);
+	const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+	const event = body?.event;
+	if (typeof event !== "string" || !(APP_EVENTS as readonly string[]).includes(event)) return c.json({ ok: false, error: "invalid_event" }, 400);
+	const recorded = recordEvent({
+		fishermanId: f.id, event: event as (typeof APP_EVENTS)[number], channel: "APP",
+		ref: typeof body?.ref === "string" ? body.ref : "", beach: typeof body?.beach === "string" ? body.beach : f.homeBeach,
+	});
+	return c.json({ ok: true, recorded });
 });
 
 /** PUT /api/fishermen/me { homeBeach?, profile? } (X-Fisherman-Token) */

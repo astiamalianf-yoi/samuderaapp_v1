@@ -5,7 +5,7 @@ import { BEACH_AREA, capAppliesToBeach, parseCap, triggerNowcastCheck } from "..
 import { addSimWarning, clearSims, getSimWeather, listSimWarnings, setSimWeather, SIM_ENABLED, simWarningCap } from "../lib/bmkg-sim";
 import { desc } from "drizzle-orm";
 import { initDb as getDb } from "../db";
-import { fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
+import { appEvents, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
 import { answersOf, effectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { isDeleted } from "../lib/fishermen";
 
@@ -71,6 +71,8 @@ route.get("/research/fisherman-reports.csv", () =>
 /** His answers after his own sign report: response (codebook No. 29) and hazard (came / not_came). */
 route.get("/research/report-followups.csv", () =>
 	sendCsv("report-followups.csv", getDb().select().from(reportFollowups).all() as unknown as Record<string, unknown>[]));
+route.get("/research/app-events.csv", () =>
+	sendCsv("app-events.csv", getDb().select().from(appEvents).all() as unknown as Record<string, unknown>[]));
 route.get("/research/incidents.csv", () =>
 	sendCsv("incidents.csv", getDb().select().from(incidents).all() as unknown as Record<string, unknown>[]));
 

@@ -32,6 +32,7 @@ const dbPath = DATABASE_URL.replace(/^sqlite:\/\//, "");
 // Children first, so foreign keys never block a delete.
 const TABLES = [
 	"report_followups",
+	"app_events",
 	"fisherman_class_history",
 	"incidents",
 	"wa_held",

@@ -1,3 +1,4 @@
+import { useUsageLog } from "./lib/engagement"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { HomePage } from "./pages/HomePage"
 import { ForecastPage } from "./pages/ForecastPage"
@@ -36,9 +37,15 @@ function Home() {
   return needsOnboarding() ? <Navigate to="/mulai" replace /> : <HomePage />
 }
 
+function UsageLog() {
+  useUsageLog()
+  return null
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <UsageLog />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/mulai" element={<OnboardingPage />} />

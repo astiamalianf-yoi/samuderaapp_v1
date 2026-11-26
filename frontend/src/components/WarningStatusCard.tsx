@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { WarningSeen, trackEvent } from "../lib/engagement"
 import { Link } from "react-router-dom"
 import { ChevronDown, RefreshCw, UserRound } from "lucide-react"
 import type { BeachLocation } from "../types/api"
@@ -150,10 +151,13 @@ export function WarningStatusCard({ beach, bmkg = null, weatherAlerts = [] }: {
         </div>
       ))}
       {pending}
+      {level !== "NORMAL" && (
+        <WarningSeen beach={beach} refKey={`${beach}:${level}:${(active && distributed ? active.alertId : null) ?? official?.expiresAt ?? bmkg?.periodStart ?? ""}`} />
+      )}
 
       {active && distributed && event && (
         <div className="mt-4">
-          <button onClick={() => setOpen(!open)} aria-expanded={open}
+          <button onClick={() => { if (!open) trackEvent("why_open", active.alertId ?? "", beach); setOpen(!open) }} aria-expanded={open}
             className="w-full min-h-12 flex items-center justify-between rounded-xl bg-white/60 text-gray-950 px-4 font-bold">
             Mengapa ada peringatan ini?
             <ChevronDown className={`w-5 h-5 transition-transform ${open ? "rotate-180" : ""}`} />

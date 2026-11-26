@@ -150,3 +150,20 @@ export const fishermanClassHistory = sqliteTable("fisherman_class_history", {
 	explanation: text("explanation", { mode: "json" }).$type<Record<string, unknown>>(),
 	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 });
+
+/**
+ * Usage log for the field study (26 Nov 2026): registered fishermen only, no message contents.
+ * One row per fisherman, event, WIB day and ref (e.g. the warning seen), so "active days per week"
+ * can be counted from it. Events: app_open, warning_seen, why_open, push_click (app) and
+ * wa_command (WhatsApp; ref = the command, e.g. "peringatan").
+ */
+export const appEvents = sqliteTable("app_events", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	fishermanId: text("fisherman_id").notNull(),
+	event: text("event").notNull(),
+	ref: text("ref").notNull().default(""),
+	beach: text("beach"),
+	channel: text("channel").notNull(),
+	day: text("day").notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});

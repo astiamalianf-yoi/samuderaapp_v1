@@ -373,17 +373,21 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()
   const targetUrl = (event.notification.data as { url?: string } | undefined)?.url ?? "/"
+  // Usage log (field study): the app records that the notification was tapped.
+  const ref = event.notification.tag || ""
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
         if (client.url.includes(targetUrl) && "focus" in client) {
+          client.postMessage({ type: "push-click", ref })
           return client.focus()
         }
       }
 
       if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl)
+        const sep = targetUrl.includes("?") ? "&" : "?"
+        return self.clients.openWindow(`${targetUrl}${sep}from=push&ref=${encodeURIComponent(ref)}`)
       }
 
       return undefined

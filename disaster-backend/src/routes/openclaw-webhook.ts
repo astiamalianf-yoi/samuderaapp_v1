@@ -17,6 +17,7 @@ import {
 } from "../lib/whatsapp-commands";
 import { INTERNAL_REQUEST_SECRET, OPENCLAW_HOOK_TOKEN } from "../config";
 import { findFishermanByPhone, normalizePhone, phoneHash } from "../lib/fishermen";
+import { recordEvent } from "../lib/app-events";
 import { saveIncident } from "../lib/incident-store";
 import { holdForRegistration } from "../lib/wa-sync";
 import { recordClass } from "../lib/class-history";
@@ -415,6 +416,13 @@ route.post("/openclaw/webhook", async (c) => {
 
 			if (isCommand) {
 				console.log(`[openclaw-webhook] Intercepted command: ${lowerText.substring(0, 50)}`);
+				// Usage log (field study): a registered fisherman used the bot today.
+				try {
+					const user = findFishermanByPhone(sender);
+					if (user) recordEvent({ fishermanId: user.id, event: "wa_command", ref: command ?? "", beach: user.homeBeach, channel: "WHATSAPP" });
+				} catch (err) {
+					console.warn("[openclaw-webhook] usage log failed:", err);
+				}
 
 				let reply: string;
 				let target = replyTarget;
