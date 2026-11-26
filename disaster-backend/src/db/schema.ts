@@ -178,3 +178,23 @@ export const trustIndexHistory = sqliteTable("trust_index_history", {
 	signs: text("signs", { mode: "json" }).$type<Record<string, unknown>[]>().notNull(),
 	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 });
+
+/** Community warning level per field beach, one row each time it or one of its inputs changes (26 Nov 2026). */
+export const warningLevelHistory = sqliteTable("warning_level_history", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	beach: text("beach").notNull(),
+	level: text("level").notNull(),
+	prevLevel: text("prev_level"),
+	/** what changed, e.g. "lik_started reporters_up level_up" */
+	cause: text("cause").notNull(),
+	likLevel: text("lik_level"),
+	likCodes: text("lik_codes", { mode: "json" }).$type<string[]>(),
+	likReporters: integer("lik_reporters"),
+	likEndsAt: integer("lik_ends_at"),
+	bmkgLevel: text("bmkg_level").notNull(),
+	forecastLevel: text("forecast_level"),
+	official: text("official", { mode: "json" }).$type<string[]>(),
+	windKmh: real("wind_kmh"),
+	simulated: integer("simulated", { mode: "boolean" }).notNull().default(false),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});

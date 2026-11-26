@@ -5,7 +5,7 @@ import { BEACH_AREA, capAppliesToBeach, parseCap, triggerNowcastCheck } from "..
 import { addSimWarning, clearSims, getSimWeather, listSimWarnings, setSimWeather, SIM_ENABLED, simWarningCap } from "../lib/bmkg-sim";
 import { desc } from "drizzle-orm";
 import { initDb as getDb } from "../db";
-import { appEvents, bmkgSnapshots, trustIndexHistory, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
+import { appEvents, bmkgSnapshots, trustIndexHistory, warningLevelHistory, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
 import { answersOf, effectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { isDeleted } from "../lib/fishermen";
 import { redis } from "../lib/redis";
@@ -124,6 +124,11 @@ route.get("/research/trust-index-history.csv", () => {
 	}
 	return sendCsv("trust-index-history.csv", rows);
 });
+/** Warning level per field beach as it rises and falls, with what changed (warning-history.ts). */
+route.get("/research/warning-history.csv", () =>
+	sendCsv("warning-history.csv", getDb().select().from(warningLevelHistory).all().map((r) => ({
+		...r, likEndsAt: r.likEndsAt ? new Date(r.likEndsAt).toISOString() : "",
+	})) as unknown as Record<string, unknown>[]));
 route.get("/research/incidents.csv", () =>
 	sendCsv("incidents.csv", getDb().select().from(incidents).all() as unknown as Record<string, unknown>[]));
 

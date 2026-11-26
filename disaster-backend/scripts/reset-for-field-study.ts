@@ -34,6 +34,7 @@ const TABLES = [
 	"report_followups",
 	"app_events",
 	"trust_index_history",
+	"warning_level_history",
 	"fisherman_class_history",
 	"incidents",
 	"wa_held",
