@@ -8,6 +8,8 @@ import { initDb as getDb } from "../db";
 import { appEvents, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
 import { answersOf, effectiveProfile, loadActivity } from "../lib/adaptive-profile";
 import { isDeleted } from "../lib/fishermen";
+import { redis } from "../lib/redis";
+import { ALERTS_STREAM } from "../config";
 
 /**
  * Researcher-only data (the fisherman never sees his category). Enabled only when
@@ -73,6 +75,31 @@ route.get("/research/report-followups.csv", () =>
 	sendCsv("report-followups.csv", getDb().select().from(reportFollowups).all() as unknown as Record<string, unknown>[]));
 route.get("/research/app-events.csv", () =>
 	sendCsv("app-events.csv", getDb().select().from(appEvents).all() as unknown as Record<string, unknown>[]));
+/**
+ * Every warning event of the stream (Paper 4, RQ4 context and the LIK vs BMKG comparison):
+ * one row per alert, with its beach, source (LIK = fishermen's reports, BMKG = official) and level.
+ * Join with app-events.csv on ref = "alert-" + alertId (push_sent, push_click).
+ */
+route.get("/research/alerts.csv", async () => {
+	const events = await redis.xRange(ALERTS_STREAM, "-", "+");
+	const rows = (events ?? []).map((e) => {
+		const m = (e as unknown as { message: Record<string, string> }).message;
+		let a: Record<string, any> = {};
+		try { a = JSON.parse(m.json ?? "{}"); } catch { /* skip */ }
+		const ts = Number(a.serverTimestamp ?? 0) || Number(String((e as unknown as { id: string }).id).split("-")[0]);
+		return {
+			alert_id: a.alertId ?? "",
+			created_at: new Date(ts).toISOString(),
+			day_wib: new Date(ts + 7 * 3600_000).toISOString().slice(0, 10),
+			beach: a.beachLocation ?? a.input?.beach_location ?? "",
+			source: a.source ?? "LIK",
+			risk_level: a.riskLevel ?? a.decision?.community_characteristics ?? "",
+			reporter_count: a.reporterCount ?? "",
+			lik_codes: ((a.ml?.triggered_lik_codes ?? a.input?.lik_codes ?? []) as string[]).join(" "),
+		};
+	});
+	return sendCsv("alerts.csv", rows);
+});
 route.get("/research/incidents.csv", () =>
 	sendCsv("incidents.csv", getDb().select().from(incidents).all() as unknown as Record<string, unknown>[]));
 

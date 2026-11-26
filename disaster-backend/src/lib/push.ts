@@ -12,6 +12,7 @@ import {
 	VAPID_SUBJECT,
 } from "../config";
 import { redis } from "./redis";
+import { recordEvent } from "./app-events";
 import { computePersonalWarning, parseFishermanProfile, type FishermanProfile } from "./personal-warning";
 
 /** Optional per-subscriber data sent by the PWA: chosen beach and fisherman profile. */
@@ -201,6 +202,13 @@ export async function sendPushAlertToAll(alertJson: string) {
 				topic: typeof alertEvent.alertId === "string" ? alertEvent.alertId.replace(/-/g, "").slice(0, 32) : undefined,
 			});
 			sent += 1;
+			// Usage log (Paper 4, RQ4): the denominator of "push warnings opened, % of delivered";
+			// the tap is logged by the app as push_click with the same ref (the notification tag).
+			if (metadata?.fisherman_id && alertEvent.alertId) {
+				try {
+					recordEvent({ fishermanId: metadata.fisherman_id, event: "push_sent", ref: `alert-${alertEvent.alertId}`, beach: beach || null, channel: "APP" });
+				} catch { /* the log must never stop a warning */ }
+			}
 		} catch (err) {
 			const statusCode = (err as { statusCode?: number }).statusCode;
 			if (statusCode === 404 || statusCode === 410) {

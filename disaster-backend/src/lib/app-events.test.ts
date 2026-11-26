@@ -38,4 +38,11 @@ describe("usage log (field study, 26 Nov 2026)", () => {
 		]);
 		expect(f2.find((r) => r.event === "wa_command")!.channel).toBe("WHATSAPP");
 	});
+	test("push_sent (server) and push_click (app) share the ref, so opened % of delivered can be counted; the app cannot post push_sent", () => {
+		const at = Date.parse("2026-12-07T05:00:00+07:00");
+		expect(E.recordEvent({ fishermanId: "f3", event: "push_sent", ref: "alert-a1", channel: "APP", at })).toBe(true);
+		expect(E.recordEvent({ fishermanId: "f3", event: "push_click", ref: "alert-a1", channel: "APP", at: at + 60_000 })).toBe(true);
+		expect(rows().filter((r) => r.fisherman_id === "f3").map((r) => `${r.event}:${r.ref}`)).toEqual(["push_sent:alert-a1", "push_click:alert-a1"]);
+		expect((E.APP_EVENTS as readonly string[]).includes("push_sent")).toBe(false);
+	});
 });

@@ -7,7 +7,8 @@ import { appEvents } from "../db/schema";
  * WIB day and ref, so repeated opens on one day are one row.
  */
 export const APP_EVENTS = ["app_open", "warning_seen", "why_open", "push_click"] as const;
-export type AppEvent = (typeof APP_EVENTS)[number] | "wa_command";
+/** Logged by the server only: wa_command (bot), push_sent (a warning push accepted by the push service). */
+export type AppEvent = (typeof APP_EVENTS)[number] | "wa_command" | "push_sent";
 
 /** The WIB calendar day (UTC+7) of a moment, "YYYY-MM-DD". */
 export function wibDay(at = Date.now()): string {
