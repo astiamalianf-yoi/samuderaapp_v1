@@ -64,7 +64,7 @@ services:
       # Researcher endpoints (/api/research/*) are off unless this is set.
       RESEARCH_API_KEY: ${RESEARCH_API_KEY:-}
       # Daily WhatsApp morning message, WIB "HH:MM" (empty = off). Manual: GET /api/broadcast/morning + X-Research-Key.
-      MORNING_BROADCAST_TIME: ${MORNING_BROADCAST_TIME-05:30}
+      MORNING_BROADCAST_TIME: ${MORNING_BROADCAST_TIME-03:30}
       # UAT only: BMKG test switch (POST /api/research/uat/bmkg, needs X-Research-Key). Keep false in the field study.
       BMKG_SIM_ENABLED: ${BMKG_SIM_ENABLED:-false}
       # Trust Index: adaptive (survey + app reports) or paper (Table 2 fixed); confirmation window in hours

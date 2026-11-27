@@ -1,9 +1,8 @@
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
-import { ALERTS_STREAM } from "../config";
 import { beachesByGroup, sendOpenClawToGroups } from "../lib/openclaw";
-import { BEACH_DISPLAY_NAMES } from "./report";
-import { currentAlerts, formatAlertsResponse, riskLabelFor } from "../lib/whatsapp-commands";
+import { groupMessageFor } from "../lib/group-alert";
+import { beachStatus } from "../lib/map-status";
 
 const route = new Hono();
 
@@ -18,16 +17,6 @@ const BEACH_COORDS = [
 	{ slug: "pantai_bojongsalawe", name: "Pantai Bojongsalawe", lat: -7.7033, lon: 108.5275 },
 ];
 
-const WMO_WEATHER: Record<number, string> = {
-	0: "Cerah", 1: "Cerah", 2: "Cerah berawan", 3: "Mendung",
-	45: "Berkabut", 48: "Berkabut",
-	51: "Gerimis", 53: "Gerimis", 55: "Gerimis",
-	61: "Hujan", 63: "Hujan", 65: "Hujan",
-	71: "Salju", 73: "Salju", 75: "Salju",
-	80: "Hujan ringan", 81: "Hujan ringan", 82: "Hujan ringan",
-	95: "Badai petir", 96: "Badai petir", 99: "Badai petir",
-};
-
 const MOON_PHASE: Record<string, string> = {
 	"New Moon": "Bulan Baru",
 	"Waxing Crescent": "Bulan Sabit Meningkat",
@@ -38,146 +27,6 @@ const MOON_PHASE: Record<string, string> = {
 	"Last Quarter": "Bulan Separuh Akhir",
 	"Waning Crescent": "Bulan Sabit Menurun",
 };
-
-type AlertData = {
-	alertId: string;
-	beachLocation: string;
-	riskLevel: string;
-	reporterCount: number;
-	firstReportAt: number;
-	lastReportAt: number;
-	serverTimestamp: number;
-	actionRecommendation: string;
-	signDescription: string;
-	triggeredCodes: string[];
-	communityCharacteristics: string;
-	source?: string;
-	bmkg?: Record<string, unknown>;
-};
-
-function formatAlert(alert: AlertData): string {
-	// BMKG warnings have no reporters or natural signs: use the "!peringatan" BMKG format.
-	if (alert.source === "BMKG") return formatAlertsResponse([alert], alert.beachLocation);
-	const beachName = BEACH_DISPLAY_NAMES[alert.beachLocation] ?? alert.beachLocation;
-	const label = riskLabelFor(alert.riskLevel);
-
-	const dateStr = new Date(alert.serverTimestamp).toLocaleDateString("id-ID", {
-		timeZone: "Asia/Jakarta",
-		day: "numeric",
-		month: "long",
-		year: "numeric",
-	});
-
-	const startTime = new Date(alert.firstReportAt).toLocaleTimeString("id-ID", {
-		timeZone: "Asia/Jakarta",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-	const endTime = new Date(alert.lastReportAt).toLocaleTimeString("id-ID", {
-		timeZone: "Asia/Jakarta",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-
-	const signLines = alert.signDescription
-		.split(" | ")
-		.filter((s) => s.trim().length > 0)
-		.map((s) => `- ${s.trim()}`);
-
-	return [
-		`\u26A0\uFE0F PERINGATAN \u2014 ${label} di ${beachName}`,
-		dateStr,
-		"",
-		`\u{1F465} Dilaporkan oleh ${alert.reporterCount} nelayan`,
-		`\u{1F550} Mulai: ${startTime} WIB | Berakhir: ${endTime} WIB`,
-		"",
-		"Tanda Alam Terdeteksi:",
-		...signLines,
-		"",
-		"Rekomendasi Aksi:",
-		alert.actionRecommendation,
-	].join("\n");
-}
-
-async function fetchAlerts(): Promise<AlertData[]> {
-	try {
-		const events = await redis.xRange(ALERTS_STREAM, "-", "+", { COUNT: 20 });
-		if (!events || events.length === 0) return [];
-
-		const alerts = events.map((event) => {
-			const fields = (event as unknown as { id: string; message: Record<string, string> }).message;
-			const parsed = JSON.parse(fields.json ?? "{}") as Record<string, unknown>;
-			const ml = parsed.ml as Record<string, unknown> | undefined;
-			const decision = parsed.decision as Record<string, unknown> | undefined;
-			const input = parsed.input as Record<string, unknown> | undefined;
-
-			return {
-				alertId: (parsed.alertId as string) ?? "",
-				beachLocation: (input?.beach_location as string) ?? "",
-				riskLevel: (parsed.riskLevel as string) ?? (decision?.community_characteristics === "Actionable"
-					? ((decision.is_multisign as boolean) ? "unsafe-high" : "unsafe")
-					: "safe"),
-				reporterCount: (parsed.reporterCount as number) ?? 0,
-				firstReportAt: (parsed.firstReportAt as number) ?? 0,
-				lastReportAt: (parsed.lastReportAt as number) ?? 0,
-				serverTimestamp: (parsed.serverTimestamp as number) ?? 0,
-				actionRecommendation: (ml?.action_recommendation as string) ?? "",
-				signDescription: (ml?.sign_description as string) ?? "",
-				triggeredCodes: ((ml?.triggered_lik_codes as string[]) ?? (input?.lik_codes as string[]) ?? []),
-				communityCharacteristics: (decision?.community_characteristics as string) ?? "",
-				source: (parsed.source as string) ?? "LIK",
-				bmkg: parsed.bmkg as Record<string, unknown> | undefined,
-			};
-		});
-
-		// Newest first, one per alertId, no expired BMKG warning.
-		return currentAlerts(alerts.reverse()).slice(0, 20);
-	} catch (err) {
-		console.error("[broadcast-morning] Failed to fetch alerts:", err);
-		return [];
-	}
-}
-
-async function fetchWeather(): Promise<{ condition: string; windSpeed: number; waveHeight: number }[] | null> {
-	try {
-		const lats = BEACH_COORDS.map((b) => b.lat).join(",");
-		const lons = BEACH_COORDS.map((b) => b.lon).join(",");
-
-		const [forecastRes, marineRes] = await Promise.all([
-			fetch(
-				`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
-				`&current=weather_code,wind_speed_10m&timezone=Asia/Jakarta&forecast_days=1`,
-			),
-			fetch(
-				`https://api.open-meteo.com/v1/marine?latitude=${lats}&longitude=${lons}` +
-				`&current=wave_height&timezone=Asia/Jakarta&forecast_days=1`,
-			),
-		]);
-
-		if (!forecastRes.ok || !marineRes.ok) return null;
-
-		const forecast = (await forecastRes.json()) as Record<string, unknown>;
-		const marine = (await marineRes.json()) as Record<string, unknown>;
-
-		const current = forecast.current as Record<string, unknown> | undefined;
-		const marineCurrent = marine.current as Record<string, unknown> | undefined;
-
-		if (!current || !marineCurrent) return null;
-
-		const weatherCodes = current.weather_code as number[] | number;
-		const windSpeeds = current.wind_speed_10m as number[] | number;
-		const waveHeights = marineCurrent.wave_height as number[] | number;
-
-		return BEACH_COORDS.map((_, i) => ({
-			condition: WMO_WEATHER[(Array.isArray(weatherCodes) ? weatherCodes[i] : weatherCodes) as number] ?? "Tidak diketahui",
-			windSpeed: Math.round(Array.isArray(windSpeeds) ? windSpeeds[i] : windSpeeds),
-			waveHeight: Math.round((Array.isArray(waveHeights) ? waveHeights[i] : waveHeights) * 10) / 10,
-		}));
-	} catch (err) {
-		console.error("[broadcast-morning] Failed to fetch weather:", err);
-		return null;
-	}
-}
 
 async function fetchAstronomy(): Promise<{
 	sunrise: string;
@@ -240,43 +89,19 @@ async function fetchAstronomy(): Promise<{
 /** A warning level in either vocabulary (fusion: waspada/siaga/ekstrem; legacy: unsafe…). */
 export const isWarningLevel = (level: string) => /unsafe|waspada|siaga|ekstrem|awas/i.test(level);
 
-type Weather = { condition: string; windSpeed: number; waveHeight: number }[] | null;
 type Astronomy = { sunrise: string; sunset: string; moonPhase: string } | null;
 
-/** The morning message for the beaches of one group. */
-export function buildMorningMessage(beaches: string[], alerts: AlertData[], weather: Weather, astronomy: Astronomy): string {
-	const sections: string[] = [];
-	sections.push("\u{1F305} SELAMAT PAGI \u2014 Laporan Cuaca Laut");
-	sections.push("");
-
-	const unsafeAlerts = alerts.filter((a) => beaches.includes(a.beachLocation) && isWarningLevel(a.riskLevel));
-	if (unsafeAlerts.length > 0) {
-		sections.push(unsafeAlerts.map(formatAlert).join("\n\n---\n\n"));
-	} else {
-		const where = beaches.length === 1 ? `di ${BEACH_DISPLAY_NAMES[beaches[0]!] ?? beaches[0]}` : "di pantai Anda";
-		sections.push(`\u2705 Cuaca aman ${where} hari ini.`);
-		sections.push("Tetap waspada dan perhatikan tanda-tanda alam ya, Bang.");
-	}
-
-	sections.push("");
-	sections.push("\u{1F324}\uFE0F CUACA HARI INI");
-	if (weather) {
-		BEACH_COORDS.forEach((beach, i) => {
-			const w = weather[i];
-			if (w && beaches.includes(beach.slug)) {
-				const shortName = beach.name.replace("Pantai ", "");
-				sections.push(`\u{1F4CD} ${shortName}: ${w.condition}, angin ${w.windSpeed} km/h, ombak ${w.waveHeight}m`);
-			}
-		});
-	} else {
-		sections.push("Data cuaca belum tersedia.");
-	}
-
+/**
+ * The morning message before the fishermen go to sea (27 Nov 2026): for each group, the current
+ * final card of its beach exactly as the app shows it now, in the Warning Strategy Matrix wording
+ * (rows 1–19, the same text as the group warnings), with a greeting and sunrise / moon phase.
+ * It reports the status; it does not count as a sent warning (no AMAN message follows from it).
+ */
+export async function buildMorningFor(beaches: string[], astronomy: Astronomy): Promise<string> {
+	const cards = await Promise.all(beaches.map((b) => groupMessageFor(b, null, undefined, { mark: false })));
+	const sections = ["\u{1F305} *SELAMAT PAGI*", "", cards.join("\n\n---\n\n")];
 	if (astronomy) {
-		sections.push("");
-		sections.push("\u{1F319} INFO LAUT");
-		sections.push(`Sunrise: ${astronomy.sunrise} WIB | Sunset: ${astronomy.sunset} WIB`);
-		sections.push(`Fase bulan: ${astronomy.moonPhase}`);
+		sections.push("", "\u{1F319} *INFO LAUT*", `Matahari terbit ${astronomy.sunrise} WIB · terbenam ${astronomy.sunset} WIB`, `Fase bulan: ${astronomy.moonPhase}`);
 	}
 	return sections.join("\n");
 }
@@ -284,20 +109,18 @@ export function buildMorningMessage(beaches: string[], alerts: AlertData[], weat
 /** Sends the morning message to every WhatsApp group (each about its own beach). */
 export async function runMorningBroadcast(): Promise<{ sent: boolean; groups: number; alertsCount: number; weatherAvailable: boolean; astronomyAvailable: boolean }> {
 	console.log("[broadcast-morning] Starting morning broadcast...");
-	const [alerts, weather, astronomy] = await Promise.all([fetchAlerts(), fetchWeather(), fetchAstronomy()]);
-
-	// One message per WhatsApp group, about that group's own beach(es) only: a neighbouring
-	// beach's warning in the morning message would teach fishermen to ignore warnings.
+	const astronomy = await fetchAstronomy();
 	const groups = beachesByGroup(BEACH_COORDS.map((b) => b.slug));
 	console.log("[broadcast-morning] Sending broadcast to", groups.size, "group(s)");
-
 	let unsafeCount = 0;
 	for (const [group, beaches] of groups) {
-		const own = alerts.filter((a) => beaches.includes(a.beachLocation));
-		unsafeCount += own.filter((a) => isWarningLevel(a.riskLevel)).length;
-		await sendOpenClawToGroups([group], buildMorningMessage(beaches, own, weather, astronomy));
+		for (const b of beaches) {
+			const st = await beachStatus(b).catch(() => null);
+			if (st && st.level !== "NORMAL") unsafeCount += 1;
+		}
+		await sendOpenClawToGroups([group], await buildMorningFor(beaches, astronomy));
 	}
-	return { sent: groups.size > 0, groups: groups.size, alertsCount: unsafeCount, weatherAvailable: weather !== null, astronomyAvailable: astronomy !== null };
+	return { sent: groups.size > 0, groups: groups.size, alertsCount: unsafeCount, weatherAvailable: true, astronomyAvailable: astronomy !== null };
 }
 
 /** Only with the researcher key: otherwise anyone could make the bot message every group. */
@@ -330,7 +153,7 @@ export function morningDue(now: Date, time: string, lastSentDay: string | null):
 	return { due: minutes >= target && minutes < target + 60 && lastSentDay !== day, day };
 }
 
-export function startMorningSchedule(time = process.env.MORNING_BROADCAST_TIME ?? "05:30") {
+export function startMorningSchedule(time = process.env.MORNING_BROADCAST_TIME ?? "03:30") {
 	if (!time.trim()) {
 		console.log("[broadcast-morning] daily schedule off (MORNING_BROADCAST_TIME empty)");
 		return;

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 // @ts-expect-error -- the real file, not other tests' mocks of "../lib/openclaw"
 const O = (await import("./openclaw.ts?real-groups")) as typeof import("./openclaw");
 // @ts-expect-error -- the real file
-const { buildMorningMessage, isWarningLevel, morningDue, broadcastKeyOk } = (await import("../routes/broadcast-morning.ts?real-groups")) as typeof import("../routes/broadcast-morning");
+const { isWarningLevel, morningDue, broadcastKeyOk } = (await import("../routes/broadcast-morning.ts?real-groups")) as typeof import("../routes/broadcast-morning");
 // @ts-expect-error -- the real file
 const { formatNowcastWhatsApp } = (await import("./bmkg-nowcast.ts?real-groups")) as typeof import("./bmkg-nowcast");
 
@@ -43,22 +43,11 @@ describe("one WhatsApp group per beach", () => {
 	});
 });
 
-describe("morning message per group", () => {
-	const alert = (beach: string, level: string) => ({
-		alertId: "a", beachLocation: beach, riskLevel: level, reporterCount: 5, firstReportAt: 0, lastReportAt: 0,
-		serverTimestamp: 0, actionRecommendation: "Tunda melaut", signDescription: "Kilat", triggeredCodes: ["Wn-3"], communityCharacteristics: "",
-	});
-	test("Lhoknga's group does not see Lampuuk's warning", () => {
-		const msg = buildMorningMessage(["pantai_lhoknga"], [alert("pantai_lampuuk", "siaga")], null, null);
-		expect(msg).not.toContain("Lampuuk");
-		expect(msg).toContain("Cuaca aman di Pantai Lhoknga");
-	});
-	test("a SIAGA or WASPADA warning is shown (not only the old 'unsafe' names)", () => {
+describe("warning level names", () => {
+	test("a SIAGA or WASPADA warning counts (not only the old 'unsafe' names)", () => {
 		expect(isWarningLevel("siaga")).toBe(true);
 		expect(isWarningLevel("waspada")).toBe(true);
 		expect(isWarningLevel("aman")).toBe(false);
-		const msg = buildMorningMessage(["pantai_lhoknga"], [alert("pantai_lhoknga", "siaga")], null, null);
-		expect(msg).toContain("PERINGATAN");
 	});
 });
 

@@ -80,7 +80,13 @@ const forecastLevel = (wind?: number | null, weather?: string | null, unsafe?: b
  * alertEvent: the event that triggered it (LIK report); omitted for a BMKG warning.
  * Records the warning so the one-time AMAN message can follow when it ends.
  */
-export async function groupMessageFor(beachLocation: string, alertEvent: Record<string, any> | null = null, startedAt?: number): Promise<string> {
+export async function groupMessageFor(
+	beachLocation: string,
+	alertEvent: Record<string, any> | null = null,
+	startedAt?: number,
+	/** mark: false for the morning message, which reports the status and is not itself a warning. */
+	opts: { mark?: boolean } = {},
+): Promise<string> {
 	const { getActiveWarning } = await import("./crowdsource");
 	const { beachStatus } = await import("./map-status");
 	const { getBmkgData } = await import("./bmkg-fetch");
@@ -110,7 +116,7 @@ export async function groupMessageFor(beachLocation: string, alertEvent: Record<
 		startedAt: startedAt ?? aw?.triggeredAt ?? Date.now(),
 		endsAt: aw?.expiresAt ?? null,
 	});
-	await markWarned(beachLocation, norm(final)).catch(() => undefined);
+	if (opts.mark !== false) await markWarned(beachLocation, norm(final)).catch(() => undefined);
 	return text;
 }
 
