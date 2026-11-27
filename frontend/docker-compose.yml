@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: ghcr.io/adityajakap/samudra-fe:latest
+    container_name: samudra-frontend
+    restart: always
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      
+      # Konfigurasi Router (HTTP)
+      - "traefik.http.routers.samudra-frontend.rule=Host(`samudraapp.com`) || Host(`www.samudraapp.com`)"
+      - "traefik.http.routers.samudra-frontend.entrypoints=websecure" # Gunakan websecure jika Traefik melayani HTTPS
+      - "traefik.http.routers.samudra-frontend.tls.certresolver=myresolver" # Sesuaikan 'myresolver' dengan certresolver di traefik temannya
+      
+      # Konfigurasi Service
+      - "traefik.http.services.samudra-frontend.loadbalancer.server.port=80"
+
+networks:
+  traefik-public:
+    external: true

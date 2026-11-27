@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/bmkg/:match*",
+      "destination": "https://www.bmkg.go.id/:match*"
+    },
+    {
+      "source": "/bmkg-api/:match*",
+      "destination": "https://api.bmkg.go.id/:match*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

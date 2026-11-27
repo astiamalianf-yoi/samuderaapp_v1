@@ -1,0 +1,1 @@
+ALTER TABLE `incidents` ADD `detected_by_sign` integer DEFAULT false NOT NULL;

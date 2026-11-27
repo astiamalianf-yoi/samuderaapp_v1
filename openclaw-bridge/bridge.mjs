@@ -7,23 +7,24 @@ const GATEWAY_HTTP_URL =
     "wss://",
     "https://",
   ) ||
-  "http://openclaw-openclaw-gateway-1:18789";
+  "http://openclaw-gateway:18789";
 
 const BACKEND_WEBHOOK_URL =
   process.env.BACKEND_WEBHOOK_URL ||
-  "http://peringatan-backend:3000/api/openclaw/webhook";
+  "http://backend:3000/api/openclaw/webhook";
 
 const BACKEND_REPORT_URL =
-  process.env.BACKEND_REPORT_URL || "http://peringatan-backend:3000/api/report";
+  process.env.BACKEND_REPORT_URL || "http://backend:3000/api/report";
 
-const REDIS_URL = process.env.REDIS_URL || "redis://peringatan-redis:6379";
+const REDIS_URL = process.env.REDIS_URL || "redis://redis:6379";
 
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 3000);
 const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 10);
 const OUTBOUND_POLL_MS = Number(process.env.OUTBOUND_POLL_MS || 2000);
 
-const GATEWAY_TOKEN =
-  process.env.GATEWAY_TOKEN || "6c7aa1065d6bb7d3b4aa8d05613c79cd6d93eaceafa3c524";
+// Never a default here: the token is OpenClaw's password (set GATEWAY_TOKEN / OPENCLAW_GATEWAY_TOKEN).
+const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || "";
+if (!GATEWAY_TOKEN) console.warn("[openclaw-bridge] GATEWAY_TOKEN is not set");
 
 const SESSION_KEY =
   process.env.SESSION_KEY ||
@@ -39,6 +40,13 @@ const CHAT_ID = extractGroupIdFromSessionKey(SESSION_KEY);
 const REPORT_MARKER_REGEX = /\[REPORT:({[\s\S]*?})\]/g;
 
 const OUTBOUND_STREAM = "openclaw:outbound";
+// Where the relay stopped, kept in Redis so a restart (redeploy, reboot, moving the bot) neither sends the
+// whole queue again nor skips a message queued during the restart. With no saved position (first start)
+// it starts after the newest entry, so old messages are never replayed.
+const OUTBOUND_LAST_KEY = "openclaw:outbound:lastId";
+// A message older than this is not sent any more (e.g. queued while the bot was offline): a late warning
+// would be wrong, and the warning cards in the app are always current. Default 15 minutes.
+const OUTBOUND_MAX_AGE_MS = Number(process.env.OUTBOUND_MAX_AGE_MS || 15 * 60 * 1000);
 
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -192,7 +200,32 @@ async function forwardToBackend(msg) {
   }
 }
 
+// Sends the text as it is, through the Gateway's message tool (same as
+// `openclaw message send --channel whatsapp --target <group> --message ...`): no AI agent in
+// between, so a warning is never reworded and no AI provider key is needed.
+async function sendDirect(target, text) {
+  const result = await gatewayPost("/tools/invoke", {
+    tool: "message",
+    action: "send",
+    args: { action: "send", channel: "whatsapp", target, message: text },
+  }, { "x-openclaw-message-channel": "whatsapp" });
+  if (result && result.ok === false) throw new Error(JSON.stringify(result.error ?? result).slice(0, 200));
+  return result;
+}
+
+// Old route (asks the AI agent to repeat the text). Only used if direct sending fails and
+// OUTBOUND_AGENT_FALLBACK is not "false".
+const AGENT_FALLBACK = process.env.OUTBOUND_AGENT_FALLBACK !== "false";
+
 async function sendOutboundMessage(target, text) {
+  try {
+    await sendDirect(target, text);
+    log(`outbound sent directly to ${target}: "${(text || "").slice(0, 60)}"`);
+    return true;
+  } catch (err) {
+    log(`direct send failed for ${target}: ${err.message}${AGENT_FALLBACK ? " (trying the agent route)" : ""}`);
+    if (!AGENT_FALLBACK) return false;
+  }
   try {
     const result = await gatewayPost("/v1/chat/completions", {
       model: "openclaw",
@@ -210,8 +243,23 @@ async function sendOutboundMessage(target, text) {
 
     const reply = result.choices?.[0]?.message?.content || "";
     log(`outbound sent to ${target}: "${(text || "").slice(0, 60)}" -> "${reply.slice(0, 60)}"`);
+    return true;
   } catch (err) {
     log(`outbound send error for ${target}: ${err.message}`);
+    return false;
+  }
+}
+
+// Timing of each outbound message (queued by the backend -> accepted by WhatsApp through the
+// gateway), for the performance test (scripts/perf/wa-latency.ts). Capped, so it never grows.
+const SENDTIMES_STREAM = process.env.OUTBOUND_SENDTIMES_STREAM || "whatsapp:sendtimes";
+async function recordSendTime(fields, target, startedAt, ok) {
+  try {
+    await redis.xadd(SENDTIMES_STREAM, "MAXLEN", "~", "2000", "*",
+      "target", target, "queuedAt", String(fields.timestamp || ""), "startedAt", String(startedAt),
+      "sentAt", String(Date.now()), "ok", ok ? "1" : "0", "type", String(fields.type || ""), "perf", String(fields.perf || ""));
+  } catch (err) {
+    log(`sendtimes record failed: ${err.message}`);
   }
 }
 
@@ -238,9 +286,15 @@ async function pollOutbound() {
           )
         : rawFields;
       outboundLastId = id;
+      await redis.set(OUTBOUND_LAST_KEY, id);
       const text = fields.text || "";
       const target = fields.target || "";
       const type = fields.type || "reply";
+      const queuedAt = Number(fields.timestamp) || Number(String(id).split("-")[0]) || Date.now();
+      if (Date.now() - queuedAt > OUTBOUND_MAX_AGE_MS) {
+        log(`outbound skip: queued ${Math.round((Date.now() - queuedAt) / 60000)} min ago, too old to send (id=${id})`);
+        continue;
+      }
 
       if (!text || !target) {
         log(`outbound skip: missing text or target (id=${id})`);
@@ -249,7 +303,9 @@ async function pollOutbound() {
 
       const targets = target.split(",").filter(Boolean);
       for (const t of targets) {
-        await sendOutboundMessage(t.trim(), text);
+        const startedAt = Date.now();
+        const ok = await sendOutboundMessage(t.trim(), text);
+        await recordSendTime(fields, t.trim(), startedAt, ok);
       }
     }
   } catch (err) {
@@ -295,12 +351,26 @@ async function poll() {
   }
 }
 
+async function initOutboundPosition() {
+  const saved = await redis.get(OUTBOUND_LAST_KEY);
+  if (saved) {
+    outboundLastId = saved;
+    log(`outbound resumes after ${saved}`);
+    return;
+  }
+  const newest = await redis.xrevrange(OUTBOUND_STREAM, "+", "-", "COUNT", 1);
+  outboundLastId = newest?.[0]?.[0] || "0";
+  await redis.set(OUTBOUND_LAST_KEY, outboundLastId);
+  log(`outbound starts after the newest entry (${outboundLastId}); older entries are not sent`);
+}
+
 async function main() {
   log(`openclaw-bridge starting (outbound relay only, inbound via gateway hook)`);
   log(`gateway: ${GATEWAY_HTTP_URL}`);
   log(`session: ${SESSION_KEY}`);
   log(`chatId: ${CHAT_ID}`);
   log(`redis: ${REDIS_URL}`);
+  await initOutboundPosition();
 
   while (true) {
     await pollOutbound();

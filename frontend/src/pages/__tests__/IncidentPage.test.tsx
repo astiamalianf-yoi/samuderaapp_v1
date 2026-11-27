@@ -1,0 +1,122 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { MemoryRouter } from "react-router-dom"
+
+vi.mock("../../components/layout/AppShell", () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+import { IncidentPage } from "../IncidentPage"
+import { REGISTRATION_KEY } from "../../lib/registration"
+import { deriveProfile, validateAnswers, type ProfileAnswers } from "../../lib/profile"
+
+const register = () => localStorage.setItem(REGISTRATION_KEY, JSON.stringify({
+  token: "t".repeat(43), fishermanId: "f1", phoneLast4: "7890", homeBeach: "pantai_lampuuk", phone: "6281234567890",
+}))
+
+beforeEach(() => { localStorage.clear(); sessionStorage.clear() })
+afterEach(() => vi.restoreAllMocks())
+
+describe("answers by year", () => {
+  const a: ProfileAnswers = {
+    birth_year: 1981, fishing_start_year: 2001, lik_start_year: 2010, fishing_role: 1, head_of_community: 0,
+    fishing_duration: 1, hazards: ["angin_kencang", "badai"] as ProfileAnswers["hazards"], disaster_interaction: 3, lik_combination_count: 2,
+    usage_frequency_min: 2, usage_frequency_max: 4,
+  }
+  it("age and years are computed for the year", () => {
+    expect(deriveProfile(a, 2026)).toMatchObject({ age: 45, fishing_experience: 25, usage_duration: 16, disaster_experience_count: 2 })
+    expect(deriveProfile(a, 2030).age).toBe(49)
+  })
+  it("start years before birth are refused", () => {
+    expect(validateAnswers({ ...a, fishing_start_year: 1970 }, 2026)).toContain("fishing_start_year")
+  })
+})
+
+describe("Lapor kejadian / Minta bantuan", () => {
+  it("without registration: emergency call buttons and 'Daftar sekarang'", () => {
+    render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+    expect(screen.getByRole("link", { name: /115/ }).getAttribute("href")).toBe("tel:115")
+    expect(screen.getByRole("link", { name: /112/ }).getAttribute("href")).toBe("tel:112")
+    expect(screen.getByText("Daftar sekarang")).toBeTruthy()
+  })
+
+  it("help request sends type, beach, help flag and his number; shows call buttons after", async () => {
+    register()
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (ok: PositionCallback) => ok({ coords: { latitude: 5.49, longitude: 95.24 } } as GeolocationPosition) },
+    })
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, incidentId: "i1", helpSent: true, helpReason: null }), { status: 201 }))
+    render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+    fireEvent.click(screen.getByText("Angin kencang di laut"))
+    expect(screen.queryByRole("switch")).toBeNull() // always a call for help: no switch to turn on
+    expect(screen.getAllByRole("link", { name: /115/ }).length).toBeGreaterThan(0)
+    await waitFor(() => expect(screen.getByTestId("gps-status").textContent).toContain("Lokasi ditemukan"))
+    fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
+    await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
+    expect(body).toMatchObject({ type: "angin_kencang", needHelp: true, lat: 5.49, lon: 95.24, contactPhone: "6281234567890" })
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/incidents")
+  })
+
+  it("what happened must be chosen; a boat or gear problem is an option; the send button is last", async () => {
+    register()
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (ok: PositionCallback) => ok({ coords: { latitude: 5.49, longitude: 95.24, accuracy: 9 } } as GeolocationPosition) },
+    })
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, incidentId: "i9", helpSent: true, helpReason: null }), { status: 201 }))
+    const { container } = render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+    const buttons = [...container.querySelectorAll("button")]
+    expect(buttons[buttons.length - 1].textContent).toContain("Kirim permintaan bantuan")
+    fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
+    expect(screen.getByText("Pilih dulu apa yang terjadi.")).toBeTruthy()
+    expect(fetchMock).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText("Masalah kapal / alat tangkap"))
+    fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
+    await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({ type: "masalah_kapal", needHelp: true })
+  })
+})
+
+describe("codebook hazards (No. 12)", () => {
+  it("old saved keys become codebook codes; gempa is dropped", async () => {
+    const { loadAnswers, ANSWERS_KEY } = await import("../../lib/profile")
+    localStorage.setItem(ANSWERS_KEY, JSON.stringify({
+      birth_year: 1981, fishing_start_year: 2001, lik_start_year: 2010, fishing_role: 1, head_of_community: 0,
+      fishing_duration: 1, hazards: ["gelombang_tinggi", "banjir_rob", "gempa"], disaster_interaction: 3,
+      lik_combination_count: 2, usage_frequency_min: 2, usage_frequency_max: 4,
+    }))
+    expect(loadAnswers()!.hazards.sort()).toEqual(["gelombang_ekstrem", "pasang_tinggi"])
+  })
+
+  it("GPS starts when the page opens and shows the result before sending", async () => {
+    register()
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (ok: PositionCallback) => ok({ coords: { latitude: 5.49, longitude: 95.24, accuracy: 12 } } as GeolocationPosition) },
+    })
+    render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByTestId("gps-status").textContent).toContain("Lokasi ditemukan (± 12 m)"))
+  })
+
+  it("location permission denied: the message still goes, and says why there is no location", async () => {
+    register()
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (_ok: PositionCallback, err: PositionErrorCallback) => err({ code: 1 } as GeolocationPositionError) },
+    })
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, incidentId: "i3", helpSent: true, helpReason: null }), { status: 201 }))
+    render(<MemoryRouter><IncidentPage /></MemoryRouter>)
+    fireEvent.click(screen.getByText("Angin kencang di laut"))
+    await waitFor(() => expect(screen.getByTestId("gps-status").textContent).toContain("tidak mengizinkan lokasi"))
+    fireEvent.click(screen.getByText("Kirim permintaan bantuan"))
+    await waitFor(() => expect(screen.getByText("Permintaan bantuan terkirim")).toBeTruthy())
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
+    expect(body).toMatchObject({ needHelp: true, locationStatus: "denied" })
+    expect(body.lat).toBeUndefined()
+  })
+})

@@ -25,10 +25,24 @@ import docsRoute from "./routes/docs";
 import authRoute from "./routes/auth";
 import openclawWebhookRoute from "./routes/openclaw-webhook";
 import reportsActiveRoute from "./routes/reports-active";
+import warningPersonalRoute from "./routes/warning-personal";
+import fishermenRoute from "./routes/fishermen";
+import trustIndexRoute from "./routes/trust-index";
+import incidentsRoute from "./routes/incidents";
+import researchRoute from "./routes/research";
+import { startNowcastMonitor } from "./lib/bmkg-nowcast";
+import { startBmkgSnapshotLogger } from "./lib/bmkg-snapshot";
+import { startTrustIndexLogger } from "./lib/trust-history";
+import { startWarningHistoryLogger } from "./lib/warning-history";
+import { startAllClearMonitor } from "./lib/all-clear";
+import { startMorningSchedule } from "./routes/broadcast-morning";
+import { sendOpenClawToGroups } from "./lib/openclaw";
+import { publishIotAlertForEvent } from "./lib/iot-mqtt";
 import bmkgRoute from "./routes/bmkg";
 import alertsRoute from "./routes/alerts";
 import reportSubmitRoute from "./routes/report-submit";
 import broadcastMorningRoute from "./routes/broadcast-morning";
+import whatsappGroupsRoute from "./routes/whatsapp-groups";
 
 const app = new Hono();
 app.use(
@@ -56,6 +70,16 @@ app.onError((err, c) => {
 await initRedis();
 initDb();
 initWebPush();
+startMorningSchedule();
+startNowcastMonitor({ sendWhatsApp: (group, text) => sendOpenClawToGroups([group], text), publishIot: publishIotAlertForEvent });
+// One-time AMAN message to a beach group when its warning has ended (23 Nov 2026).
+startAllClearMonitor();
+// Hourly BMKG forecast per field beach, for the weather context of the field study (26 Nov 2026).
+startBmkgSnapshotLogger();
+// Trust Index history (a row when a score or a tier changes), checked hourly (26 Nov 2026).
+startTrustIndexLogger();
+// Warning level per field beach, a row when it or one of its inputs changes (26 Nov 2026).
+startWarningHistoryLogger();
 
 await sub.subscribe(ALERTS_CHANNEL, async (message) => {
 	console.log("[sub] received alert from Redis, SSE clients:", sseClients.size, "WS clients:", wsClients.size);
@@ -83,7 +107,10 @@ await sub.subscribe(ALERTS_CHANNEL, async (message) => {
 		}
 	}
 
-	if (ENABLE_PUSH_DELIVERY) {
+	let quiet = false;
+	try { quiet = (JSON.parse(message) as { decision?: { notify?: boolean } }).decision?.notify === false; } catch { /* not JSON */ }
+	if (ENABLE_PUSH_DELIVERY && quiet) console.log("[push] skipped: warning updated quietly (no new sign, level not higher)");
+	if (ENABLE_PUSH_DELIVERY && !quiet) {
 		console.log("[push] attempting push delivery");
 		const pushResult = await sendPushAlertToAll(message);
 		console.log("[push] result:", pushResult);
@@ -101,10 +128,16 @@ app.route("/api", docsRoute);
 app.route("/api", authRoute);
 app.route("/api", openclawWebhookRoute);
 app.route("/api", reportsActiveRoute);
+app.route("/api", warningPersonalRoute);
+app.route("/api", fishermenRoute);
+app.route("/api", incidentsRoute);
+app.route("/api", trustIndexRoute);
+app.route("/api", researchRoute);
 app.route("/api", bmkgRoute);
 app.route("/api", alertsRoute);
 app.route("/api", reportSubmitRoute);
 app.route("/api", broadcastMorningRoute);
+app.route("/api", whatsappGroupsRoute);
 app.route("/", webRoute);
 
 export default {

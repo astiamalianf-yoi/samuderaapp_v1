@@ -51,3 +51,150 @@ export const reassuranceResults = sqliteTable("reassurance_results", {
 	details: text("details").$type<Record<string, unknown>>(),
 	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
 });
+
+/**
+ * Registered fishermen (app). Identity = WhatsApp number; only a keyed hash of the number and its
+ * last 4 digits are stored, so the number itself is never kept in the database. The same hash is
+ * computed for WhatsApp senders, which links a fisherman's app and WhatsApp-group reports.
+ */
+export const fishermen = sqliteTable("fishermen", {
+	id: text("id").$defaultFn(() => crypto.randomUUID()).primaryKey(),
+	phoneHash: text("phone_hash").notNull().unique(),
+	phoneLast4: text("phone_last4").notNull(),
+	homeBeach: text("home_beach").notNull(),
+	/** Registration answers (years, hazards list, counts): see lib/adaptive-profile.ts. */
+	profile: text("profile", { mode: "json" }).$type<Record<string, unknown>>(),
+	tokenHash: text("token_hash").notNull(),
+	consentAt: text("consent_at").notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+	updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/**
+ * Every sign report by a registered fisherman (app or WhatsApp), counted or not. Used for his
+ * activity (reports per month, signs used) and as the per-fisherman log of the field study.
+ * (The reports table only holds reports that triggered a warning.)
+ */
+export const fishermanReports = sqliteTable("fisherman_reports", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	fishermanId: text("fisherman_id").notNull().references(() => fishermen.id),
+	beach: text("beach").notNull(),
+	signs: text("signs", { mode: "json" }).$type<string[]>().notNull(),
+	channel: text("channel").notNull(),
+	counted: integer("counted", { mode: "boolean" }).notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/**
+ * His answers after his own sign report (Beranda cards, or WhatsApp !tindakan / !angin), within
+ * 24 hours of the report. kind "response": what he did (codebook No. 29 options); kind "hazard":
+ * whether strong wind came ("came" with the incident he reported, or "not_came"); kind "crosscheck":
+ * the same question asked to the other fishermen of that beach (report_id = the latest report of
+ * another fisherman they answered about). Research only:
+ * the Trust Index accuracy still needs a different fisherman's incident.
+ */
+export const reportFollowups = sqliteTable("report_followups", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	reportId: integer("report_id").notNull().references(() => fishermanReports.id),
+	fishermanId: text("fisherman_id").notNull(),
+	kind: text("kind").notNull(),
+	value: text("value").notNull(),
+	incidentId: text("incident_id"),
+	channel: text("channel").notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/**
+ * WhatsApp reports and incidents from a number that is not registered yet, kept under the keyed
+ * hash of the number (never the number). When that number registers in the app, they move into
+ * his history with their original time, so app and WhatsApp give one history per fisherman.
+ */
+export const waHeld = sqliteTable("wa_held", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	phoneHash: text("phone_hash").notNull(),
+	kind: text("kind").notNull(), // "report" | "incident"
+	beach: text("beach").notNull(),
+	payload: text("payload", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/** "Lapor kejadian": a fisherman met dangerous weather at sea, optionally asking for help. */
+export const incidents = sqliteTable("incidents", {
+	id: text("id").$defaultFn(() => crypto.randomUUID()).primaryKey(),
+	fishermanId: text("fisherman_id").notNull().references(() => fishermen.id),
+	beach: text("beach").notNull(),
+	type: text("type").notNull(),
+	needHelp: integer("need_help", { mode: "boolean" }).notNull().default(false),
+	/** He reported a natural sign at this beach within the window before (codebook No. 12: "detected using LIK"); set by the server. */
+	detectedBySign: integer("detected_by_sign", { mode: "boolean" }).notNull().default(false),
+	latitude: real("latitude"),
+	longitude: real("longitude"),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/**
+ * Researcher log: the fisherman's effective profile and the Random Forest output each time it is
+ * recomputed (registration, report, incident). Not shown to the fisherman.
+ */
+export const fishermanClassHistory = sqliteTable("fisherman_class_history", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	fishermanId: text("fisherman_id").notNull().references(() => fishermen.id),
+	reason: text("reason").notNull(),
+	effectiveProfile: text("effective_profile", { mode: "json" }).$type<Record<string, number>>().notNull(),
+	activity: text("activity", { mode: "json" }).$type<Record<string, unknown>>(),
+	meanProbability: real("mean_probability"),
+	behaviouralClass: integer("behavioural_class"),
+	perSign: text("per_sign", { mode: "json" }).$type<Record<string, number | null>>(),
+	source: text("source"),
+	/** per-fisherman SHAP of his answers ({ base_value, contributions }) for "Profil Anda" */
+	explanation: text("explanation", { mode: "json" }).$type<Record<string, unknown>>(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/**
+ * Usage log for the field study (26 Nov 2026): registered fishermen only, no message contents.
+ * One row per fisherman, event, WIB day and ref (e.g. the warning seen), so "active days per week"
+ * can be counted from it. Events: app_open, warning_seen, why_open, push_click (app) and
+ * wa_command (WhatsApp; ref = the command, e.g. "peringatan").
+ */
+export const appEvents = sqliteTable("app_events", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	fishermanId: text("fisherman_id").notNull(),
+	event: text("event").notNull(),
+	ref: text("ref").notNull().default(""),
+	beach: text("beach"),
+	channel: text("channel").notNull(),
+	day: text("day").notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/** Trust Index of the strong-wind signs, one row each time a score or a tier changes (26 Nov 2026). */
+export const trustIndexHistory = sqliteTable("trust_index_history", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	mode: text("mode").notNull(),
+	high: text("high", { mode: "json" }).$type<string[]>().notNull(),
+	low: text("low", { mode: "json" }).$type<string[]>().notNull(),
+	/** per sign: code, trustIndex, accuracy, records, appRecords, tier */
+	signs: text("signs", { mode: "json" }).$type<Record<string, unknown>[]>().notNull(),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});
+
+/** Community warning level per field beach, one row each time it or one of its inputs changes (26 Nov 2026). */
+export const warningLevelHistory = sqliteTable("warning_level_history", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	beach: text("beach").notNull(),
+	level: text("level").notNull(),
+	prevLevel: text("prev_level"),
+	/** what changed, e.g. "lik_started reporters_up level_up" */
+	cause: text("cause").notNull(),
+	likLevel: text("lik_level"),
+	likCodes: text("lik_codes", { mode: "json" }).$type<string[]>(),
+	likReporters: integer("lik_reporters"),
+	likEndsAt: integer("lik_ends_at"),
+	bmkgLevel: text("bmkg_level").notNull(),
+	forecastLevel: text("forecast_level"),
+	official: text("official", { mode: "json" }).$type<string[]>(),
+	windKmh: real("wind_kmh"),
+	simulated: integer("simulated", { mode: "boolean" }).notNull().default(false),
+	createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+});

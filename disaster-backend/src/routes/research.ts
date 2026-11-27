@@ -1,0 +1,213 @@
+import { Hono } from "hono";
+import { ALLOWED_BEACH_LOCATIONS } from "../types";
+import { getBmkgData } from "../lib/bmkg-fetch";
+import { BEACH_AREA, capAppliesToBeach, parseCap, triggerNowcastCheck } from "../lib/bmkg-nowcast";
+import { addSimWarning, clearSims, getSimWeather, listSimWarnings, setSimWeather, SIM_ENABLED, simWarningCap } from "../lib/bmkg-sim";
+import { desc } from "drizzle-orm";
+import { initDb as getDb } from "../db";
+import { appEvents, bmkgSnapshots, trustIndexHistory, warningLevelHistory, fishermanClassHistory, fishermanReports, fishermen, incidents, reportFollowups } from "../db/schema";
+import { answersOf, effectiveProfile, loadActivity } from "../lib/adaptive-profile";
+import { isDeleted } from "../lib/fishermen";
+import { redis } from "../lib/redis";
+import { ALERTS_STREAM } from "../config";
+
+/**
+ * Researcher-only data (the fisherman never sees his category). Enabled only when
+ * RESEARCH_API_KEY is set; every call needs the header X-Research-Key.
+ */
+const route = new Hono();
+
+route.use("/research/*", async (c, next) => {
+	const key = process.env.RESEARCH_API_KEY;
+	if (!key) return c.json({ ok: false, error: "not_found" }, 404);
+	if (c.req.header("X-Research-Key") !== key) return c.json({ ok: false, error: "forbidden" }, 403);
+	await next();
+});
+
+const csv = (rows: Record<string, unknown>[]) => {
+	if (!rows.length) return "";
+	const cols = Object.keys(rows[0]!);
+	const cell = (v: unknown) => {
+		const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+		return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+	};
+	return [cols.join(","), ...rows.map((r) => cols.map((k) => cell(r[k])).join(","))].join("\n");
+};
+const sendCsv = (name: string, rows: Record<string, unknown>[]) =>
+	new Response(csv(rows), {
+		headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${name}"` },
+	});
+
+/** GET /api/research/fishermen: each fisherman, his adaptive profile now and his latest category. */
+route.get("/research/fishermen", (c) => {
+	const db = getDb();
+	const history = db.select().from(fishermanClassHistory).orderBy(desc(fishermanClassHistory.id)).all();
+	const latest = new Map<string, (typeof history)[number]>();
+	for (const h of history) if (!latest.has(h.fishermanId)) latest.set(h.fishermanId, h);
+	const rows = db.select().from(fishermen).all().map((f) => {
+		const answers = answersOf(f.profile);
+		const activity = loadActivity(f.id);
+		const last = latest.get(f.id);
+		return {
+			id: f.id,
+			phoneLast4: f.phoneLast4,
+			deleted: isDeleted(f), // identity deleted at his request; reports kept anonymously
+			homeBeach: f.homeBeach,
+			registeredAt: f.createdAt,
+			activity,
+			effectiveProfile: answers ? effectiveProfile(answers, activity) : null,
+			behaviouralClass: last?.behaviouralClass ?? null,
+			meanProbability: last?.meanProbability ?? null,
+			classSource: last?.source ?? null,
+			classUpdatedAt: last?.createdAt ?? null,
+			historyRows: history.filter((h) => h.fishermanId === f.id).length,
+		};
+	});
+	return c.json({ ok: true, fishermen: rows });
+});
+
+route.get("/research/class-history.csv", () =>
+	sendCsv("class-history.csv", getDb().select().from(fishermanClassHistory).all() as unknown as Record<string, unknown>[]));
+route.get("/research/fisherman-reports.csv", () =>
+	sendCsv("fisherman-reports.csv", getDb().select().from(fishermanReports).all() as unknown as Record<string, unknown>[]));
+/** His answers after his own sign report: response (codebook No. 29) and hazard (came / not_came). */
+route.get("/research/report-followups.csv", () =>
+	sendCsv("report-followups.csv", getDb().select().from(reportFollowups).all() as unknown as Record<string, unknown>[]));
+/**
+ * Usage log with who it was: kind = registered / unregistered_app / unregistered_wa; for a
+ * registered fisherman his behavioural class and probability at that time (last class-history
+ * row before the event); for an unregistered WhatsApp user, the fisherman id if he registered later.
+ */
+route.get("/research/app-events.csv", () => {
+	const db = getDb();
+	const hist = new Map<string, { at: string; cls: number | null; p: number | null }[]>();
+	for (const h of db.select().from(fishermanClassHistory).all()) {
+		const list = hist.get(h.fishermanId) ?? []; list.push({ at: h.createdAt, cls: h.behaviouralClass ?? null, p: h.meanProbability ?? null }); hist.set(h.fishermanId, list);
+	}
+	for (const l of hist.values()) l.sort((x, y) => x.at.localeCompare(y.at));
+	const byHash = new Map(db.select({ id: fishermen.id, hash: fishermen.phoneHash }).from(fishermen).all().map((f) => [f.hash, f.id]));
+	const rows = db.select().from(appEvents).all().map((e) => {
+		const anonWa = e.fishermanId.startsWith("anon-wa:"), anonApp = e.fishermanId.startsWith("anon-app:");
+		const kind = anonWa ? "unregistered_wa" : anonApp ? "unregistered_app" : "registered";
+		const h = kind === "registered" ? (hist.get(e.fishermanId) ?? []).filter((x) => x.at <= e.createdAt).at(-1) : undefined;
+		return {
+			...e, kind,
+			class_at_event: h?.cls ?? "", probability_at_event: h?.p ?? "",
+			registered_later_as: anonWa ? (byHash.get(e.fishermanId.slice(8)) ?? "") : "",
+		};
+	});
+	return sendCsv("app-events.csv", rows as unknown as Record<string, unknown>[]);
+});
+/**
+ * Every warning event of the stream (Paper 4, RQ4 context and the LIK vs BMKG comparison):
+ * one row per alert, with its beach, source (LIK = fishermen's reports, BMKG = official) and level.
+ * Join with app-events.csv on ref = "alert-" + alertId (push_sent, push_click).
+ */
+route.get("/research/alerts.csv", async () => {
+	const events = await redis.xRange(ALERTS_STREAM, "-", "+");
+	const rows = (events ?? []).map((e) => {
+		const m = (e as unknown as { message: Record<string, string> }).message;
+		let a: Record<string, any> = {};
+		try { a = JSON.parse(m.json ?? "{}"); } catch { /* skip */ }
+		const ts = Number(a.serverTimestamp ?? 0) || Number(String((e as unknown as { id: string }).id).split("-")[0]);
+		return {
+			alert_id: a.alertId ?? "",
+			created_at: new Date(ts).toISOString(),
+			day_wib: new Date(ts + 7 * 3600_000).toISOString().slice(0, 10),
+			beach: a.beachLocation ?? a.input?.beach_location ?? "",
+			source: a.source ?? "LIK",
+			risk_level: a.riskLevel ?? a.decision?.community_characteristics ?? "",
+			reporter_count: a.reporterCount ?? "",
+			lik_codes: ((a.ml?.triggered_lik_codes ?? a.input?.lik_codes ?? []) as string[]).join(" "),
+		};
+	});
+	return sendCsv("alerts.csv", rows);
+});
+/** Hourly BMKG forecast per field beach (bmkg-snapshot.ts): wind, weather code, safe or not, simulated or not. */
+route.get("/research/bmkg-snapshots.csv", () => {
+	const rows = getDb().select().from(bmkgSnapshots).all().map((r) => {
+		let w: Record<string, unknown> = {};
+		try { w = typeof r.weather === "string" ? JSON.parse(r.weather) : (r.weather ?? {}); } catch { /* skip */ }
+		const ts = Date.parse(String(r.fetchedAt).replace(" ", "T") + "Z");
+		return {
+			fetched_at: r.fetchedAt, day_wib: Number.isFinite(ts) ? new Date(ts + 7 * 3600_000).toISOString().slice(0, 10) : "",
+			beach: w.beach ?? "", available: w.available ?? "", wind_kmh: w.windSpeed ?? "", wind_dir: w.windDirection ?? "",
+			weather_code: w.weatherCode ?? "", weather: w.weather ?? "", is_safe: w.isSafe ?? "", simulated: w.simulated ?? "",
+		};
+	});
+	return sendCsv("bmkg-snapshots.csv", rows);
+});
+/** Trust Index history: one line per sign per change (trust-history.ts). */
+route.get("/research/trust-index-history.csv", () => {
+	const rows: Record<string, unknown>[] = [];
+	for (const h of getDb().select().from(trustIndexHistory).all()) {
+		for (const s of (h.signs ?? []) as Record<string, unknown>[]) {
+			rows.push({ snapshot_id: h.id, created_at: h.createdAt, mode: h.mode, sign: s.code, trust_index: s.trustIndex, accuracy: s.accuracy, records: s.records, app_records: s.appRecords, tier: s.tier });
+		}
+	}
+	return sendCsv("trust-index-history.csv", rows);
+});
+/** Warning level per field beach as it rises and falls, with what changed (warning-history.ts). */
+route.get("/research/warning-history.csv", () =>
+	sendCsv("warning-history.csv", getDb().select().from(warningLevelHistory).all().map((r) => ({
+		...r, likEndsAt: r.likEndsAt ? new Date(r.likEndsAt).toISOString() : "",
+	})) as unknown as Record<string, unknown>[]));
+route.get("/research/incidents.csv", () =>
+	sendCsv("incidents.csv", getDb().select().from(incidents).all() as unknown as Record<string, unknown>[]));
+
+/**
+ * UAT test switch (BMKG_SIM_ENABLED=true and X-Research-Key):
+ *   POST   /api/research/uat/bmkg          { beach, windSpeed?, forecast?: clear|cloudy|rain, unavailable?, minutes? }
+ *   POST   /api/research/uat/bmkg/warning  { areaDesc?, polygon?, event?, headline?, description?, minutes? }
+ *   GET    /api/research/uat/bmkg          what is simulated now
+ *   DELETE /api/research/uat/bmkg          end every simulation
+ * Everything expires after at most 60 minutes.
+ */
+route.use("/research/uat/*", async (c, next) => {
+	if (!SIM_ENABLED()) return c.json({ ok: false, error: "test switch off (BMKG_SIM_ENABLED is not true)" }, 404);
+	await next();
+});
+
+route.post("/research/uat/bmkg", async (c) => {
+	const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+	const beach = String(b.beach ?? "");
+	if (!(ALLOWED_BEACH_LOCATIONS as readonly string[]).includes(beach)) return c.json({ ok: false, error: "unknown beach" }, 400);
+	const forecast = ["clear", "cloudy", "rain"].includes(String(b.forecast)) ? (b.forecast as "clear" | "cloudy" | "rain") : undefined;
+	const windSpeed = b.windSpeed === undefined ? undefined : Number(b.windSpeed);
+	if (windSpeed !== undefined && !(windSpeed >= 0 && windSpeed < 300)) return c.json({ ok: false, error: "windSpeed must be 0-300 km/h" }, 400);
+	const sim = await setSimWeather(beach, { windSpeed, forecast, unavailable: b.unavailable === true }, Number(b.minutes) || undefined);
+	// As the monitor does every few minutes: an active fishermen's warning follows the new forecast window.
+	await triggerNowcastCheck().catch(() => null);
+	return c.json({ ok: true, beach, sim, bmkg: await getBmkgData(beach) });
+});
+
+route.post("/research/uat/bmkg/warning", async (c) => {
+	const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+	if (!b.areaDesc && !b.polygon) return c.json({ ok: false, error: "give areaDesc and/or polygon" }, 400);
+	const w = await addSimWarning({
+		areaDesc: b.areaDesc as string | undefined, polygon: b.polygon as string | undefined, event: b.event as string | undefined,
+		headline: b.headline as string | undefined, description: b.description as string | undefined, minutes: Number(b.minutes) || undefined,
+	});
+	const cap = parseCap(simWarningCap(w))!;
+	const beaches = Object.keys(BEACH_AREA).filter((beach) => capAppliesToBeach(beach, cap));
+	const sent = await triggerNowcastCheck();
+	return c.json({ ok: true, warning: w, coversBeaches: beaches, broadcast: sent });
+});
+
+route.get("/research/uat/bmkg", async (c) => {
+	const weather: Record<string, unknown> = {};
+	for (const beach of ALLOWED_BEACH_LOCATIONS) {
+		const s = await getSimWeather(beach);
+		if (s) weather[beach] = s;
+	}
+	return c.json({ ok: true, weather, warnings: await listSimWarnings() });
+});
+
+route.delete("/research/uat/bmkg", async (c) => {
+	await clearSims([...ALLOWED_BEACH_LOCATIONS]);
+	await triggerNowcastCheck();
+	return c.json({ ok: true, cleared: true });
+});
+
+export default route;
+

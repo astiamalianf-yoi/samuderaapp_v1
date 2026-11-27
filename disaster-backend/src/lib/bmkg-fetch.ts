@@ -1,4 +1,5 @@
 import { redis } from "../lib/redis";
+import { getSimWeather, simulatedBmkgData } from "./bmkg-sim";
 import { BMKG_CACHE_TTL_SECONDS } from "../config";
 
 export type BmkgData = {
@@ -13,6 +14,9 @@ export type BmkgData = {
 	description: string;
 	isSafe: boolean;
 	fetchedAt: number;
+	/** When the current slot is unsafe: the window of consecutive unsafe forecast slots (ms). */
+	periodStart?: number | null;
+	periodEnd?: number | null;
 };
 
 const WIND_UNSAFE_THRESHOLD = 30;
@@ -24,12 +28,16 @@ const BMKG_WEATHER_UNSAFE_CODES = new Set([
 	95, 96, 99,
 ]);
 
+// BMKG village (adm4) per beach; keep equal to frontend/src/constants/observationData.ts.
 const BEACH_ADM4_CODES: Record<string, string> = {
-	pantai_lampuuk: "11.06.02.2003",
+	pantai_lampuuk: "11.06.02.2023", // Meunasah Mesjid Lampuuk, Lhoknga (was Weuraya)
 	pantai_lhoknga: "11.06.02.2001",
 	pantai_ulee_lheue: "11.71.03.2002",
 	pantai_depok: "34.02.03.2002",
-	pantai_samas: "34.02.03.2003",
+	pantai_samas: "34.02.02.2003", // Srigading, Sanden (was a village in Kretek)
+	pantai_pangandaran: "32.18.09.2004", // Desa Pangandaran, Kec. Pangandaran
+	pantai_batu_karas: "32.18.02.2001", // Desa Batukaras, Kec. Cijulang
+	pantai_bojongsalawe: "32.18.01.2007", // Desa Karangjaladri, Kec. Parigi
 };
 
 const ALLOWED_BEACHES = Object.keys(BEACH_ADM4_CODES) as (keyof typeof BEACH_ADM4_CODES)[];
@@ -47,7 +55,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 	}
 }
 
-interface BmkgCuacaItem {
+export interface BmkgCuacaItem {
 	datetime: string;
 	t: number;
 	weather: number;
@@ -75,6 +83,29 @@ interface BmkgResponse {
 	}>;
 }
 
+const SLOT_MS = 3 * 3600_000;
+const slotUnsafe = (s: BmkgCuacaItem) => BMKG_WEATHER_UNSAFE_CODES.has(s.weather) || (s.ws ?? 0) >= WIND_UNSAFE_THRESHOLD;
+const slotTime = (s: BmkgCuacaItem) => {
+	const t = Date.parse(/Z$|[+-]\d\d:?\d\d$/.test(s.datetime) ? s.datetime : `${s.datetime.replace(" ", "T")}Z`);
+	return Number.isFinite(t) ? t : null;
+};
+
+/**
+ * The forecast window shown as "Prakiraan 08.00–15.00 WIB": from the current slot up to the end of the
+ * last consecutive unsafe slot (wind >= 30 km/jam or bad weather). Null when the current slot is safe.
+ */
+export function unsafeWindow(slots: BmkgCuacaItem[]): { start: number; end: number } | null {
+	const first = slots[0];
+	if (!first || !slotUnsafe(first)) return null;
+	const start = slotTime(first);
+	if (start == null) return null;
+	let i = 0;
+	while (slots[i + 1] && slotUnsafe(slots[i + 1]!)) i++;
+	const next = slots[i + 1] ? slotTime(slots[i + 1]!) : null;
+	const last = slotTime(slots[i]!) ?? start;
+	return { start, end: next ?? last + SLOT_MS };
+}
+
 function isBeachValid(beach: string): beach is keyof typeof BEACH_ADM4_CODES {
 	return beach in BEACH_ADM4_CODES;
 }
@@ -93,6 +124,7 @@ async function fetchFreshBmkgData(beach: string): Promise<BmkgData | null> {
 	if (!cuacaSlots.length) return null;
 
 	const current = cuacaSlots[0];
+	const period = unsafeWindow(cuacaSlots);
 
 	return {
 		beach,
@@ -106,11 +138,17 @@ async function fetchFreshBmkgData(beach: string): Promise<BmkgData | null> {
 		description: `${data.lokasi.kecamatan}, ${data.lokasi.kotkab}, ${data.lokasi.provinsi}`,
 		isSafe: !BMKG_WEATHER_UNSAFE_CODES.has(current.weather) && (current.ws ?? 0) < WIND_UNSAFE_THRESHOLD,
 		fetchedAt: Date.now(),
+		periodStart: period?.start ?? null,
+		periodEnd: period?.end ?? null,
 	};
 }
 
 export async function getBmkgData(beach: string): Promise<BmkgData | null> {
 	if (!isBeachValid(beach)) return null;
+
+	// UAT test switch: a simulated forecast replaces BMKG's for up to one hour.
+	const sim = await getSimWeather(beach);
+	if (sim) return sim.unavailable ? null : (simulatedBmkgData(beach, sim) as BmkgData);
 
 	const cacheKey = `bmkg:data:${beach}`;
 	const cached = await redis.get(cacheKey);
@@ -139,3 +177,41 @@ export async function getAllBmkgData(): Promise<BmkgData[]> {
 }
 
 export { ALLOWED_BEACHES, isBeachValid };
+
+/**
+ * BMKG's full forecast (every time slot) for a beach's village, for the "Per jam" page. The phone
+ * cannot call api.bmkg.go.id itself (no CORS for browsers), so it comes through the backend,
+ * cached like the current-slot data.
+ */
+export async function getBmkgForecastSlots(beach: string): Promise<unknown[][] | null> {
+	if (!isBeachValid(beach)) return null;
+	const cacheKey = `bmkg:forecast:${beach}`;
+	const cached = await redis.get(cacheKey).catch(() => null);
+	if (cached) {
+		try {
+			return JSON.parse(cached) as unknown[][];
+		} catch {
+			await redis.del(cacheKey).catch(() => undefined);
+		}
+	}
+	const json = await fetchJson<{ data?: { cuaca?: unknown[][] }[] }>(
+		`https://api.bmkg.go.id/publik/prakiraan-cuaca?adm4=${BEACH_ADM4_CODES[beach]}`,
+	);
+	const cuaca = json?.data?.[0]?.cuaca;
+	if (!Array.isArray(cuaca)) return null;
+	await redis.set(cacheKey, JSON.stringify(cuaca), { EX: BMKG_CACHE_TTL_SECONDS }).catch(() => undefined);
+	return cuaca;
+}
+
+/**
+ * End of the BMKG forecast window with fairly strong wind or bad weather (WASPADA or SIAGA by
+ * forecast: wind >= 30 km/h or an unsafe forecast), or 0 when the forecast is calm or unknown.
+ * A fishermen's warning lasts at least until then (Warning Strategy Matrix rows 6/9/11/14 and
+ * 16–19, agreed 24 Nov 2026).
+ */
+export async function forecastEndFor(beach: string, now = Date.now()): Promise<number> {
+	const fc = await getBmkgData(beach).catch(() => null);
+	if (!fc) return 0;
+	const raised = (fc.windSpeed ?? 0) >= 30 || fc.isSafe === false;
+	return raised && fc.periodEnd && fc.periodEnd > now ? fc.periodEnd : 0;
+}

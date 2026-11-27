@@ -81,3 +81,24 @@ def test_model_info(client):
     assert body["supported_beaches"] == SUPPORTED_BEACHES
     assert body["trusted_signs"] == TRUSTED_SIGNS
     assert body["trust_tiers"]["high"] == ["Wn-3", "Wn-8", "Wn-1", "Wn-2", "Wn-7"]
+
+
+def test_explain_profile_lists_his_answers(client):
+    r = client.post("/explain-profile", json={"fisherman_profile": SAFE_PROFILE, "beach_location": "pantai_lampuuk"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert set(body["contributions"]) == {
+        "age", "fishing_experience", "fishing_role", "head_of_community", "fishing_duration",
+        "disaster_experience_count", "disaster_interaction", "lik_combination_count", "usage_duration", "usage_frequency"}
+
+
+def test_explain_profile_many_signs_pushes_towards_inaction(client):
+    many = {**SAFE_PROFILE, "lik_combination_count": 6}
+    c = client.post("/explain-profile", json={"fisherman_profile": many}).json()["contributions"]
+    assert c["lik_combination_count"] < 0
+
+
+def test_explain_profile_not_given_for_beach_without_model(client):
+    r = client.post("/explain-profile", json={"fisherman_profile": SAFE_PROFILE, "beach_location": "pantai_pangandaran"})
+    assert r.json() == {"available": False, "reason": "no_location_model"}
