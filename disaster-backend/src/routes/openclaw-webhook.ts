@@ -2,13 +2,13 @@ import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { redis } from "../lib/redis";
 import { beachForGroup, groupsForBeach, sendOpenClawBeachAlert, sendOpenClawReply } from "../lib/openclaw";
+import { groupMessageFor } from "../lib/group-alert";
 import { formatHelpMessage } from "./incidents";
 import {
 	parseLaporCommand,
 	parsePeringatanCommand,
 	getMissingLocationMessage,
 	getMissingSignsMessage,
-	formatAlertsResponse,
 	riskLabelFor,
 	signLabel,
 	BEACH_DISPLAY,
@@ -313,22 +313,29 @@ export function handleAngin(text: string, sender?: string): string {
 		...(res.pending?.needResponse ? ["Apa yang Anda lakukan? Balas *!tindakan* dan nomornya (1–5)."] : [])].join("\n");
 }
 
-async function handlePeringatan(text: string, chatId: string, sender?: string): Promise<string> {
-	// "!peringatan" alone: the group's beach, or (private chat) the beach in his registration.
-	const beachFilter = parsePeringatanCommand(text) ?? defaultBeachFor(chatId, sender);
+/** The field beaches answered when a private, unregistered !peringatan names no beach. */
+export const PERINGATAN_ALL_BEACHES = ["pantai_lampuuk", "pantai_lhoknga", "pantai_ulee_lheue"];
 
+/**
+ * !peringatan (27 Nov 2026): the current final card of the beach exactly as the app shows it, in the
+ * Warning Strategy Matrix wording (rows 1–19) — the same text as the group warnings and the morning
+ * message, in a group and in a private chat. The beach: the one named, else the group's beach, else
+ * his registered beach; a private chat without any of them gets the card of each field beach.
+ * It reports the status; it is not a sent warning (no AMAN message follows from it).
+ */
+export async function handlePeringatan(
+	text: string,
+	chatId: string,
+	sender?: string,
+	cardFor: (beach: string) => Promise<string> = (b) => groupMessageFor(b, null, undefined, { mark: false }),
+): Promise<string> {
+	const beach = parsePeringatanCommand(text) ?? defaultBeachFor(chatId, sender);
 	try {
-		const params = beachFilter ? `?beach_location=${beachFilter}` : "";
-		const res = await fetch(`http://localhost:3000/api/alerts${params}`);
-		const data = (await res.json()) as any;
-
-		if (!res.ok || !data.ok) {
-			return `Gagal mengambil peringatan: ${data.error || res.statusText}. Coba lagi ya, Bang.`;
-		}
-
-		return formatAlertsResponse(data.data || [], beachFilter);
+		if (beach) return await cardFor(beach);
+		const cards = await Promise.all(PERINGATAN_ALL_BEACHES.map(cardFor));
+		return cards.join("\n\n---\n\n");
 	} catch (err) {
-		console.error("[openclaw-webhook] peringatan fetch error:", err);
+		console.error("[openclaw-webhook] peringatan error:", err);
 		return "Maaf Bang, gagal mengambil info peringatan. Coba lagi nanti ya.";
 	}
 }

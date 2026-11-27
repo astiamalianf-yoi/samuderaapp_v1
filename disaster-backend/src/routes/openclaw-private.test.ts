@@ -55,3 +55,17 @@ describe("call for help on WhatsApp", () => {
 		expect(m).toContain("0812-7700-0011");
 	});
 });
+
+describe("!peringatan = the current final card (27 Nov 2026)", () => {
+	const card = async (b: string) => `*STATUS LAUT HARI INI*\nLokasi: ${b}`;
+	test("a named beach gets that beach's card, in a group or in a private chat", async () => {
+		const { handlePeringatan } = await import("./openclaw-webhook");
+		expect(await handlePeringatan("!peringatan lhoknga", "6280000000099@s.whatsapp.net", undefined, card)).toBe("*STATUS LAUT HARI INI*\nLokasi: pantai_lhoknga");
+	});
+	test("private, not registered, no beach named: the card of each field beach", async () => {
+		const { handlePeringatan, PERINGATAN_ALL_BEACHES } = await import("./openclaw-webhook");
+		const t = await handlePeringatan("!peringatan", "6280000000099@s.whatsapp.net", undefined, card);
+		for (const b of PERINGATAN_ALL_BEACHES) expect(t).toContain(`Lokasi: ${b}`);
+		expect(t.split("---")).toHaveLength(3);
+	});
+});
