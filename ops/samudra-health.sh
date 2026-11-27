@@ -8,7 +8,7 @@ set -u
 STACK="${1:-samudra-com}"
 DIR="/root/samudra-backups/${STACK}"
 mkdir -p "$DIR"
-st() { docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${STACK}-$1" 2>/dev/null || echo missing; }
+st() { local s; s="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${STACK}-$1" 2>/dev/null | tr -d '\n')"; echo "${s:-missing}"; }
 line="$(TZ=Asia/Jakarta date '+%F %H:%M') backend=$(st backend) ml=$(st ml) redis=$(st redis) web=$(st web) bridge=$(st openclaw-bridge) gateway=$(st openclaw-gateway)"
 
 db="$(docker exec "${STACK}-backend" bun -e '
@@ -20,7 +20,7 @@ const ok=d.query("select count(*) n from (select weather from bmkg_snapshots ord
 const y=new Date(Date.now()+7*3600e3-864e5).toISOString().slice(0,10);
 const ev=d.query("select count(*) n from app_events where day=?").get(y);
 console.log(`forecast=${wib(last?.f)}(ok ${ok.n}/3) events_yday=${ev.n}`);
-' 2>/dev/null || echo 'db=unreadable')"
+' 2>/dev/null | tr -d '\n' || echo 'db=unreadable')"
 
 wa() { docker exec "${STACK}-redis" redis-cli --raw XREVRANGE "$1" + - COUNT 1 2>/dev/null | head -1 | cut -d- -f1; }
 hm() { [ -n "$1" ] && TZ=Asia/Jakarta date -d "@$(( $1 / 1000 ))" '+%m-%d %H:%M' || echo none; }
